@@ -12,13 +12,14 @@ import { flowExportLimits } from '../flow-export-options'
 import { applicationCapabilities } from '../application-inventory'
 import type { ApplicationRequest, ApplicationResult } from '../application'
 import type { BgpInspection } from '../bgp-neighbors'
+import type { RoutingEvidenceEnvelope, RoutingLimitation } from '../routing-evidence'
 
 export const contractVersion = 1 as const
 export const latestContractVersion = 2 as const
 export const supportedContractVersions = [contractVersion, latestContractVersion] as const
 export const platformModes = ['vwan', 'hub-spoke', 'full'] as const
 export const platformOperations = ['validate', 'simulate', 'evaluate', 'application'] as const
-export const engineVersion = '2026.11.20.1'
+export const engineVersion = '2026.11.24.1'
 export type PlatformMode = typeof platformModes[number]
 export type PlatformDocument =
   | { mode: 'vwan'; topology: Topology }
@@ -72,6 +73,7 @@ export type Assessment = {
   outcome: 'satisfied' | 'violated' | 'not assessed'
   evidence: unknown
   reasons: string[]
+  coverage?: RoutingEvidenceEnvelope
 }
 export type PlatformResult = {
   contractVersion: 1 | 2
@@ -84,6 +86,7 @@ export type PlatformResult = {
   assessments: Assessment[]
   errors: { code: string; message: string }[]
   limitations: string[]
+  routingLimitations?: RoutingLimitation[]
   packet?: PacketResult
   vpnPacket?: VpnNatPacketResult
   application?: ApplicationResult
@@ -111,6 +114,12 @@ export const capabilities = {
     routes: 'Logical relationship candidates and distinct-prefix counts, not measured per-instance advertisements/counters. Received post-policy, advertised candidates and peer-received post-policy scopes remain distinct.',
     supported: ['both documented ARS speakers per configured NVA', 'explicit standalone VPN active/active or single-active perspective', 'logical site relationships'],
     unknown: ['managed ER/VWAN and gateway/ARS internal endpoint/session mappings', 'unspecified legacy VPN speaker multiplicity', 'physical Azure instance IDs', 'actual BGP establishment/FSM/uptime/counters', 'per-instance route divergence and failures'],
+  },
+  routingEvidence: {
+    evidence: 'routingLimitations and assessments[].coverage', modes: ['hub-spoke', 'full'],
+    scope: 'Exact owned subnet/hub route assertions, original owner IDs, operation-specific limitations and admitted document revision.',
+    completeness: 'Unclassified warnings and nonconvergence fail closed. Qualified component scopes conservatively include configured relationships, including disabled ones. Complete evaluation means requested assertions were assessed, not that the whole topology or live Azure is certified.',
+    unchanged: ['native directional flow/packet completeness gates', 'Firewall ownership', 'prose/severity/acknowledgement do not authorize grading'],
   },
   rendering: {
     formats: ['gif', 'svg', 'png'], durationsMs: [1500, 2000], ...flowExportLimits,

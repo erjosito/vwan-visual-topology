@@ -15,6 +15,46 @@ local simulation contract. Windows cloud sign-in is configured separately under
 [cloud accounts](docs/cloud-accounts.md#configure-windows-cloud-sign-in).
 Verified awards and resource-deployment APIs remain outside this implementation.
 
+## Scoped routing evidence (#386)
+
+Mixed-provider exact-route assessments carry additive `coverage`: provider,
+engine version, admitted-document `revision`, original-request `requestRevision`,
+original subnet ID or hub/table IDs, completeness and blocking limitation IDs.
+Native route arrays remain the assessment evidence. These revision hashes bind
+transport snapshots, not cryptographic signatures or proof of Azure behavior.
+
+`routingLimitations` records retain a stable machine code, original owner/scope,
+affected operations, completeness and native evidence-reference paths. Paths
+start at the native simulation; a `document` prefix instead selects the admitted
+platform document. Severity, warning acknowledgement and localized explanations
+are not grading authority. Undescribed warnings remain document-wide unknowns.
+
+An exact table must exist and have complete modeled scope. Relevant unknown
+dependencies block assessment; an unrelated disconnected component can retain
+both satisfied and violated assertions. Dependency components intentionally
+include disabled relationships and conservatively connect all virtual hubs and
+ER locations. Existing native hub-table completeness remains mandatory. Community
+metadata uncertainty affects BGP inspection, not exact route presence; a modeled
+policy-filter notification is not an unknown. ARS-to-NVA gateway-summary export
+remains explicitly unqualified.
+
+For `evaluate`, a complete result means every **requested assertion** was
+assessed, not that the entire simulation or topology was complete. Relevant or
+global unknowns and nonconvergence remain unassessed; native directional flow and
+packet gates, independent forward/return Firewall owners and trace references
+are unchanged. Consumers validate revisions, original scope and outcome/coverage
+consistency; incomplete or stale results cannot earn practice credit.
+
+Future repair suggestions must identify an explicit candidate change set
+(original owners, fields and old/new values), base and candidate revisions, the
+same uniquely identified requirements, and separate before/after evaluations
+with their limitations and native witnesses. A definite failure may motivate a
+candidate, but unknown evidence cannot certify its repair. Suggestions never
+apply edits silently; importing/applying a reviewed candidate is a separate user
+action. No speculative repair engine is introduced.
+
+## Workspace compatibility
+
 Both websites and Windows start with an empty mixed-network topology when there
 is no saved workspace; explicit samples/imports and saved work still load normally.
 Damaged saved data remains available for recovery, not silently overwritten.

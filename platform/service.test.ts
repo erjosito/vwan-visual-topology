@@ -18,6 +18,7 @@ import { largeVwanCapture } from '../tests/large-vwan-fixture'
 import { importAzureCapture } from '../src/azure-import'
 import { bgpNeighborTopology, bgpNeighborVwanTopology } from '../tests/fixtures/bgp-neighbors'
 import { coexistenceTopology } from '../tests/fixtures/coexistence'
+import { routeCoverage } from '../src/platform/routing-coverage'
 
 const require = createRequire(import.meta.url)
 const compiled = require('../platform-dist/service.cjs') as { executePlatform: typeof executePlatform }
@@ -28,6 +29,81 @@ export const request = (): PlatformRequest => ({
 })
 
 describe('browser-free platform contract', () => {
+  it('retains a scoped unknown and independent definite route outcomes through the real worker', async () => {
+    const topology = coexistenceTopology()
+    topology.vnets[0].gateways[0].activeActive = false
+    topology.vnets.push({
+      id: 'isolated', name: 'Independent VNet', role: 'standalone', region: 'West Europe', prefixes: ['10.90.0.0/16'],
+      subnets: [{ id: 'isolated-subnet', name: 'Workload', prefix: '10.90.1.0/24' }], gateways: [], appliances: [],
+    })
+    const input: PlatformRequest = { contractVersion: 1, operation: 'evaluate', document: { mode: 'full', topology },
+      requirements: [
+        { id: 'independent', kind: 'route', table: 'isolated-subnet', prefix: '10.90.0.0/16', expectation: 'present' },
+        { id: 'definite-failure', kind: 'route', table: 'isolated-subnet', prefix: '203.0.113.0/24', expectation: 'present' },
+        { id: 'affected', kind: 'route', table: 'app', prefix: '10.0.0.0/16', expectation: 'present' },
+      ] }
+    const result = executePlatform(input)
+    expect(result.status).toBe('not assessed')
+    expect(result.assessments.map(assessment => assessment.outcome)).toEqual(['satisfied', 'violated', 'not assessed'])
+    expect(result.assessments[2].coverage).toMatchObject({ complete: false, scope: { kind: 'subnet-table', subnetId: 'app' } })
+    expect(result.routingLimitations).toContainEqual(expect.objectContaining({
+      code: 'ARS_GATEWAY_EXCHANGE_UNQUALIFIED', owner: { kind: 'gateway', id: 'vpn' },
+    }))
+    expect(compiled.executePlatform(input)).toEqual(result)
+    const jobs = new PlatformJobs(resolve('platform-dist', 'worker.cjs'))
+    try { expect(await jobs.run(input)).toEqual(result) } finally { jobs.close() }
+    const independent = executePlatform({ ...input, requirements: input.requirements!.slice(0, 1) })
+    expect(independent.status).toBe('complete')
+    expect((independent.simulation as ReturnType<typeof simulateAzNet>).controlPlaneComplete).toBe(false)
+    expect(validatePlatformResult(independent, { ...input, requirements: input.requirements!.slice(0, 1) })).toBe(independent)
+    const flags = { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: false }
+    topology.vnetPeerings.push({ id: 'configured-link', name: 'Disabled but retained relationship', vnetAId: 'hub', vnetBId: 'isolated',
+      enabled: false, aToB: flags, bToA: { ...flags } })
+    expect(executePlatform(input).assessments.map(assessment => assessment.outcome)).toEqual(['not assessed', 'not assessed', 'not assessed'])
+  })
+  it('does not confuse community metadata limitations with exact route presence, or prose acknowledgement with coverage', () => {
+    const topology = coexistenceTopology()
+    topology.vnets[0].bgpCommunities = { virtualNetworkCommunity: '12076:20001' }
+    const input: PlatformRequest = { contractVersion: 1, operation: 'evaluate', document: { mode: 'full', topology },
+      requirements: [{ id: 'route', kind: 'route', table: 'app', prefix: '10.0.0.0/16', expectation: 'present' }] }
+    const result = executePlatform(input)
+    expect(result.assessments[0]).toMatchObject({ outcome: 'satisfied', coverage: { complete: true, limitationIds: [] } })
+    expect(result.routingLimitations).toContainEqual(expect.objectContaining({ code: 'VNET_COMMUNITY_METADATA', operations: ['bgp'] }))
+    expect(executePlatform({ ...input, locale: 'ja' }).assessments).toEqual(result.assessments)
+    topology.warningAcknowledgements = ['warning:v1:aznet:00000000000000000000000000000000']
+    topology.vnets[0].gateways[0].activeActive = false
+    expect(executePlatform(input).assessments[0].outcome).toBe('not assessed')
+    expect(() => validatePlatformResult(result, input)).toThrow('coverage')
+    expect(() => validatePlatformResult({ ...result, revision: 'stale' }, input)).toThrow('revision')
+    const coverage = result.assessments[0].coverage!
+    expect(() => validatePlatformResult({ ...result, assessments: [{ ...result.assessments[0],
+      coverage: { ...coverage, revision: 'stale' } }] }, input)).toThrow('coverage')
+    expect(() => validatePlatformResult({ ...result, assessments: [{ ...result.assessments[0],
+      coverage: { ...coverage, complete: false } }] }, input)).toThrow('coverage')
+  })
+  it('keeps unclassified warnings, missing completeness and nonconvergence globally fail-closed', () => {
+    const topology = coexistenceTopology()
+    const simulation = simulateAzNet(topology)
+    const requirement = { id: 'route', kind: 'route' as const, table: 'app', prefix: '10.0.0.0/16', expectation: 'present' as const }
+    expect(routeCoverage(topology, { ...simulation, warnings: ['New unqualified behavior'], routingLimitations: [] }, requirement, 'revision').coverage.complete).toBe(false)
+    expect(routeCoverage(topology, { ...simulation, warnings: [], routingLimitations: [], controlPlaneComplete: false }, requirement, 'revision').coverage.complete).toBe(false)
+    expect(routeCoverage(topology, { ...simulation, warnings: [], routingLimitations: [], controlPlaneComplete: undefined }, requirement, 'revision').coverage.complete).toBe(false)
+    expect(routeCoverage(topology, { ...simulation, warnings: ['Nonconverged'], routingLimitations: [] }, requirement, 'revision').coverage.complete).toBe(false)
+  })
+  it('does not grade unqualified NVA gateway-summary exchange from an otherwise populated subnet table', () => {
+    const topology = coexistenceTopology()
+    topology.vnets[0].summarizedGatewayPrefixes = ['10.0.0.0/15']
+    topology.vnets[0].appliances = [{ id: 'nva', name: 'BGP NVA', kind: 'nva-vm', subnetId: 'app', privateIp: '10.0.1.4',
+      enableIpForwarding: true, staticRoutes: [], bgpEnabled: true, asn: 65002 }]
+    topology.vnets[0].routeServer!.peerApplianceIds = ['nva']
+    const result = executePlatform({ contractVersion: 1, operation: 'evaluate', document: { mode: 'full', topology },
+      requirements: [{ id: 'route', kind: 'route', table: 'app', prefix: '10.0.0.0/16', expectation: 'present' }] })
+    expect(result.assessments[0].outcome).toBe('not assessed')
+    expect(result.routingLimitations).toContainEqual(expect.objectContaining({
+      code: 'ARS_NVA_GATEWAY_SUMMARY_UNQUALIFIED',
+      evidenceReferences: [['nvaBgpPeers', 'nva', '0', 'gatewaySummaryAssessment']],
+    }))
+  })
   it('omits absent typed request options without sanitizing live topology or unknown contract inputs', async () => {
     const input = createPlatformRequest({ ...request(), locale: undefined, requirements: undefined,
       budget: { maxMillis: undefined, maxOutputBytes: 1000 } })

@@ -113,7 +113,7 @@ it('exposes original per-NVA received-route evidence through the freshly built s
     if (response.isError) throw new Error(JSON.stringify(response.content))
     return response.structuredContent as Record<string, any>
   }
-  const run = async (request: unknown) => {
+  const run = async (request: unknown, expectedStatus = 'complete') => {
     const { handle } = await call('start_simulation', { request })
     let state
     for (let attempt = 0; attempt < 100; attempt++) {
@@ -122,7 +122,7 @@ it('exposes original per-NVA received-route evidence through the freshly built s
       await new Promise((resolve) => setTimeout(resolve, 50))
     }
     expect(state?.status).toBe('finished')
-    expect(state?.resultStatus).toBe('complete')
+    expect(state?.resultStatus).toBe(expectedStatus)
     return handle
   }
   try {
@@ -136,7 +136,7 @@ it('exposes original per-NVA received-route evidence through the freshly built s
     const request = { ...base, operation: 'evaluate' as const, requirements: [
       { id: 'bgp-reception-does-not-inject-host-subnet', kind: 'route' as const, table: 'reader-subnet', prefix: '198.18.0.0/24', expectation: 'absent' as const },
     ] }
-    const handle = await run(request)
+    const handle = await run(request, 'not assessed')
     const neighborChunks: string[] = []
     for (let offset = 0; offset < 1_000_000;) {
       const chunk = await call('get_evidence', { handle, section: 'bgpNeighbors', offset, limit: 16000 })
@@ -170,7 +170,8 @@ it('exposes original per-NVA received-route evidence through the freshly built s
     })
     const assessments = await call('get_evidence', { handle, section: 'assessments', limit: 16000 })
     expect(assessments.complete).toBe(true)
-    expect(JSON.parse(assessments.jsonText)[0].outcome).toBe('satisfied')
+    expect(JSON.parse(assessments.jsonText)[0]).toMatchObject({ outcome: 'not assessed', coverage: { complete: false } })
+    expect(simulation.subnetTables['reader-subnet'].routes.filter((route: any) => route.prefix === '198.18.0.0/24' && route.active)).toHaveLength(0)
     topology.vnets[0].routeServer!.branchToBranchTraffic = false
     const offRequest = { ...base, operation: 'simulate' }
     const offHandle = await run(offRequest)

@@ -5,6 +5,7 @@ import type { PlatformDocument } from '../platform/contract'
 import type { AzNetTopology } from '../azure-net/model'
 import { exercises } from './exercises'
 import { emptyProgress, entryFor, outcomeFor, parseProgress, recordAttempt } from './progress'
+import { coexistenceTopology } from '../../tests/fixtures/coexistence'
 
 function peering(topology: AzNetTopology, a = 'a', b = 'b') {
   const flags = { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: false }
@@ -48,6 +49,26 @@ const evaluate = (index: number, document: PlatformDocument) => executePlatform(
 })
 
 describe('reviewed local practice rubrics', () => {
+  it('awards only complete requested routing scope and rejects stale or acknowledged incomplete evidence', () => {
+    const topology = coexistenceTopology()
+    topology.vnets[0].gateways[0].activeActive = false
+    topology.vnets.push({
+      id: 'isolated', name: 'Independent VNet', role: 'standalone', region: 'West Europe', prefixes: ['10.90.0.0/16'],
+      subnets: [{ id: 'isolated-subnet', name: 'Workload', prefix: '10.90.1.0/24' }], gateways: [], appliances: [],
+    })
+    const document: PlatformDocument = { mode: 'full', topology }
+    const requirements = [{ id: 'owned-route', kind: 'route' as const, table: 'isolated-subnet', prefix: '10.90.0.0/16', expectation: 'present' as const }]
+    const exercise = { ...exercises[1], starter: document, requirements }
+    const result = executePlatform({ contractVersion: 1, operation: 'evaluate', document, requirements })
+    expect(outcomeFor(exercise, result)).toBe('satisfied')
+    expect(outcomeFor(exercise, { ...result, revision: 'stale' })).toBe('not assessed')
+    expect(outcomeFor(exercise, { ...result, assessments: [{ ...result.assessments[0],
+      coverage: { ...result.assessments[0].coverage!, complete: false } }] })).toBe('not assessed')
+    requirements[0].table = 'app'
+    topology.warningAcknowledgements = ['warning:v1:aznet:00000000000000000000000000000000']
+    const affected = executePlatform({ contractVersion: 1, operation: 'evaluate', document, requirements })
+    expect(outcomeFor(exercise, affected)).toBe('not assessed')
+  })
   it.each([0, 1, 2])('starts exercise %i unmet and accepts materially different forwarding solutions', (index) => {
     const starter = evaluate(index, exercises[index].starter)
     expect(starter.errors).toEqual([])

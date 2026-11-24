@@ -43,6 +43,22 @@ const healthy = (request: PlatformRequest) => {
 }
 
 describe('bounded original packet configuration rubrics', () => {
+  it('retains metadata-only packet grading but never certifies unqualified ARS summary routing', () => {
+    const request = input()
+    healthy(request)
+    const network = topology(request).vnets[0]
+    network.bgpCommunities = { virtualNetworkCommunity: '12076:20001' }
+    expect(outcome(request)).toBe('satisfied')
+    network.subnets.push({ id: 'ars-subnet', name: 'RouteServerSubnet', prefix: '10.1.254.0/26' })
+    network.appliances.push({ id: 'nva', name: 'BGP NVA', kind: 'nva-vm', subnetId: 'app', privateIp: '10.1.1.20',
+      enableIpForwarding: true, staticRoutes: [], bgpEnabled: true, asn: 65002 })
+    network.routeServer = { id: 'ars', name: 'ARS', subnetId: 'ars-subnet', enabled: true,
+      branchToBranchTraffic: true, peerApplianceIds: ['nva'], hubRoutingPreference: 'ASPath' }
+    network.summarizedGatewayPrefixes = ['10.0.0.0/8']
+    expect(outcome(request)).toBe('not assessed')
+    goal(request).expectation = 'blocked'
+    expect(outcome(request)).toBe('not assessed')
+  })
   it('never grades unknown health as a configured service or verified isolation, then checks independent probe denial', () => {
     const request = input()
     expect(outcome(request)).toBe('not assessed')

@@ -13,6 +13,10 @@ import { traceVpnNatPacket, validateVpnNatPacketRequest } from '../vpn-nat-packe
 import { assessPacket } from './packet-assessment'
 import { evaluateApplication, validateApplicationRequest } from '../application'
 import { inspectAzBgp, inspectVwanBgp } from '../bgp-neighbors'
+import { routeCoverage } from './routing-coverage'
+import { unscopedRoutingLimitations } from '../routing-evidence'
+import { revisionOf } from './revision'
+export { revisionOf } from './revision'
 
 export function admitJson(input: unknown): string {
   let items = 0
@@ -40,13 +44,6 @@ export function admitJson(input: unknown): string {
   const text = JSON.stringify(input)
   if (new TextEncoder().encode(text).length > platformLimits.maxInputBytes) throw new Error('Input byte limit exceeded.')
   return text
-}
-
-export function revisionOf(value: unknown): string {
-  const text = JSON.stringify(value)
-  let hash = 2166136261
-  for (let index = 0; index < text.length; index++) hash = Math.imul(hash ^ text.charCodeAt(index), 16777619)
-  return `v1-${(hash >>> 0).toString(16)}`
 }
 
 export function validateRequest(input: unknown): PlatformRequest {
@@ -238,27 +235,31 @@ export function executePlatform(input: unknown): PlatformResult {
       if (request.packet) result.packet = tracePacket(document.topology, request.packet, simulation)
       result.limitations = simulation.warnings
       const endpoints = getAzNetEndpoints(document.topology).filter((endpoint) => ['workload', 'site'].includes(endpoint.group))
+      result.routingLimitations = unscopedRoutingLimitations(simulation.warnings, simulation.routingLimitations)
+      const requestRevision = revisionOf(request.document)
       for (const requirement of request.requirements ?? []) {
-        if (requirement.kind === 'packet') { result.assessments.push(assessPacket(document.topology, simulation, requirement)); continue }
+        if (requirement.kind === 'packet') {
+          result.assessments.push(result.routingLimitations.some(record => record.completeness === 'not-assessed' && record.operations.includes('packet'))
+            ? unknown(requirement, 'Unsupported packet routing coverage.', result.routingLimitations.filter(record => record.completeness === 'not-assessed' && record.operations.includes('packet')))
+            : assessPacket(document.topology, simulation, requirement))
+          continue
+        }
         if (requirement.kind === 'route') {
+          const { coverage, limitations } = routeCoverage(document.topology, simulation, requirement, result.revision, requestRevision)
+          if (!coverage.complete) {
+            result.assessments.push({ ...unknown(requirement, 'Missing or incomplete owned routing scope.',
+              limitations), coverage })
+            continue
+          }
           if (requirement.hubTableId !== undefined) {
-            const hub = document.topology.vwanHubs.find((hub) => hub.id === requirement.table)
-            const table = hub ? simulation.vwanHubTables[hub.id]?.[requirement.hubTableId] : undefined
-            const coverage = hub ? simulation.vwanHubTableCoverage[hub.id]?.[requirement.hubTableId] : undefined
-            if (!table || !coverage?.complete || simulation.warnings.length) {
-              result.assessments.push(unknown(requirement, 'An owned mixed hub table with complete modeled routing scope is required.'))
-            } else {
-              const routes = table.filter((route) => route.prefix === requirement.prefix && route.preferred)
-              result.assessments.push({ id: requirement.id, outcome: (!!routes.length === (requirement.expectation === 'present')) ? 'satisfied' : 'violated', evidence: routes, reasons: [] })
-            }
+            const table = simulation.vwanHubTables[requirement.table][requirement.hubTableId]
+            const routes = table.filter((route) => route.prefix === requirement.prefix && route.preferred)
+            result.assessments.push({ id: requirement.id, outcome: (!!routes.length === (requirement.expectation === 'present')) ? 'satisfied' : 'violated', evidence: routes, reasons: [], coverage })
             continue
           }
           const table = simulation.subnetTables[requirement.table]
-          if (!table || simulation.warnings.length) result.assessments.push(unknown(requirement, 'Missing table or model warnings prevent certification.'))
-          else {
-            const routes = table.routes.filter((route) => route.prefix === requirement.prefix && route.active)
-            result.assessments.push({ id: requirement.id, outcome: (!!routes.length === (requirement.expectation === 'present')) ? 'satisfied' : 'violated', evidence: routes, reasons: [] })
-          }
+          const routes = table.routes.filter((route) => route.prefix === requirement.prefix && route.active)
+          result.assessments.push({ id: requirement.id, outcome: (!!routes.length === (requirement.expectation === 'present')) ? 'satisfied' : 'violated', evidence: routes, reasons: [], coverage })
           continue
         }
         const source = requirement.source as AzEndpointRef, target = requirement.target as AzEndpointRef
@@ -266,7 +267,7 @@ export function executePlatform(input: unknown): PlatformResult {
         const sourceOwners = owners(requirement.sourceAddress), targetOwners = owners(requirement.destinationAddress)
         if (sourceOwners.length !== 1 || targetOwners.length !== 1
           || azEndpointKey(sourceOwners[0].ref) !== azEndpointKey(source) || azEndpointKey(targetOwners[0].ref) !== azEndpointKey(target)
-          || simulation.warnings.length) {
+          || result.routingLimitations.some(record => record.completeness === 'not-assessed' && record.operations.includes('flow'))) {
           result.assessments.push(unknown(requirement, 'Ambiguous/missing owned endpoint or unsupported model coverage.'))
           continue
         }
@@ -303,7 +304,8 @@ export function executePlatform(input: unknown): PlatformResult {
         result.assessments.push({ id: requirement.id, outcome: satisfied ? 'satisfied' : 'violated', evidence: pair, reasons: [] })
       }
     }
-    if (result.assessments.some((assessment) => assessment.outcome === 'not assessed')) result.status = 'not assessed'
+    if (request.operation === 'evaluate') result.status = result.assessments.some(assessment => assessment.outcome === 'not assessed') ? 'not assessed' : 'complete'
+    else if (result.assessments.some((assessment) => assessment.outcome === 'not assessed')) result.status = 'not assessed'
   } catch (error) {
     result.status = 'invalid'
     result.errors = [{ code: 'INVALID_REQUEST_OR_TOPOLOGY', message: error instanceof Error ? error.message : 'Invalid request.' }]

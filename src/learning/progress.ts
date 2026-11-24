@@ -1,5 +1,6 @@
 import { engineVersion } from '../platform/contract'
 import type { PlatformResult } from '../platform/contract'
+import { revisionOf } from '../platform/revision'
 import { exercises } from './exercises'
 import type { Exercise } from './exercises'
 export { guidedProgressKey, parseProgressLedger, recordCompletion, earnedAwards, beltProgress } from './progress-ledger'
@@ -53,9 +54,12 @@ export function outcomeFor(exercise: Exercise, result: PlatformResult): Attempt[
   const ids = exercise.requirements.map((requirement) => requirement.id)
   if (result.status !== 'complete' || result.contractVersion !== 1 || result.engineVersion !== engineVersion
     || result.errors.length || !result.document || result.document.mode !== exercise.starter.mode
+    || result.revision !== revisionOf(result.document)
     || result.assessments.length !== ids.length || new Set(result.assessments.map((item) => item.id)).size !== ids.length
     || ids.some((id) => !result.assessments.some((item) => item.id === id))
-    || result.assessments.some((item) => !['satisfied', 'violated'].includes(item.outcome))) return 'not assessed'
+    || result.assessments.some((item) => !['satisfied', 'violated'].includes(item.outcome)
+      || item.coverage && (!item.coverage.complete || item.coverage.revision !== result.revision
+        || item.coverage.engineVersion !== engineVersion || item.coverage.limitationIds.length))) return 'not assessed'
   return result.assessments.every((item) => item.outcome === 'satisfied') ? 'satisfied' : 'violated'
 }
 
