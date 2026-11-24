@@ -1,4 +1,4 @@
-import { downloadTopologyCopy, openWorkspaceActions } from './document-action-helpers'
+import { downloadTopologyCopy, openWorkspaceActions, togglePresentation } from './document-action-helpers'
 import { expect, test, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 import { createEmptyAzNetTopology, sampleHubSpokeFirewallUdr, type AzNetTopology } from '../src/azure-net/model'
@@ -32,11 +32,11 @@ for (const width of [1440, 390]) {
     let headerDisclosureActions = 0
     for (let i = 0; i < 2; i++) {
       if (!await tools.isVisible()) {
-        if (!await page.getByRole('button', { name: 'Workspace controls', exact: true }).isVisible()) {
+        if (!await page.getByTitle('Workspace controls', { exact: true }).isVisible()) {
           await page.getByRole('button', { name: 'Workspace actions', exact: true }).click()
           headerDisclosureActions++
         }
-        await page.getByRole('button', { name: 'Workspace controls', exact: true }).click()
+        await page.getByTitle('Workspace controls', { exact: true }).click()
         paletteOpenActions++
       }
       await tools.getByRole('searchbox').fill('+ VNet')
@@ -70,7 +70,7 @@ for (const width of [1440, 390]) {
       scriptedActions: { create: 'two palette searches plus two create clicks; palette openings counted separately',
         connect: 'context menu, Peer with VNet, target (three activations)',
         inspect: 'context menu, Inspect Effective Routes (two activations)',
-        check: 'Routing checks, Check routing (two activations)',
+        check: 'Checks, Check routing (two activations)',
         export: 'Save As shortcut, destination change, Save (three activations)' },
       observedRouteTable: routes, humanParticipants: 0, timing: 'No human discovery/completion time measured' }, null, 2), contentType: 'application/json' })
   })
@@ -97,7 +97,7 @@ for (const language of ['en', 'ja']) for (const theme of ['light', 'dark']) {
     const url = page.url()
     await openWorkspaceActions(page)
     const help = page.locator('.presentation-group').filter({
-      has: page.locator('summary', { hasText: language === 'ja' ? /^ヘルプとフィードバック$/ : /^Help & feedback$/ }),
+      has: page.locator('summary', { hasText: language === 'ja' ? /^ヘルプ$/ : /^Help$/ }),
     })
     await help.locator('summary').focus()
     await page.keyboard.press('Enter')
@@ -233,7 +233,7 @@ test.describe('subnet and gateway menu disclosure', () => {
       await policies.getByRole('menuitem', { name: 'Enable GWroutes Propagation on Route Table', exact: true }).tap()
       await expect.poll(async () => (await read()).udrTables[0].disableBgpRoutePropagation).toBe(false)
       await openWorkspaceActions(page)
-      await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
+      await page.getByRole('button', { name: /Undo|元に戻す/ }).click()
       expect(await read()).toEqual(before)
       await open()
       await root.getByRole('menuitem', { name: 'Route Table (Imported table)', exact: true }).click()
@@ -257,9 +257,9 @@ test.describe('subnet and gateway menu disclosure', () => {
       await detail.getByRole('menuitem', { name: 'Enable GWroutes Propagation on Route Table', exact: true }).click()
       await expect(detail).toHaveCount(0)
       await expect.poll(async () => (await read()).udrTables[0].disableBgpRoutePropagation).toBe(false)
-      await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
+      await page.getByRole('button', { name: /Undo|元に戻す/ }).click()
       expect(await read()).toEqual(before)
-      await page.getByTestId('ui-preview-toggle').click()
+      await togglePresentation(page)
       await open()
       await expect(page.getByRole('menuitem', { name: groupName, exact: true })).toHaveCount(0)
       await expect(page.getByRole('menuitem', { name: 'Enable GWroutes Propagation on Route Table', exact: true })).toBeVisible()
@@ -268,7 +268,7 @@ test.describe('subnet and gateway menu disclosure', () => {
       await info.attach('subnet-menu-root-counts', { body: JSON.stringify({ mode, language, previewCount, legacyCount }), contentType: 'application/json' })
       await info.attach('legacy-subnet-menu', { body: await page.screenshot({ path: info.outputPath('legacy-subnet-menu.png') }), contentType: 'image/png' })
       await page.keyboard.press('Escape')
-      await page.getByTestId('ui-preview-toggle').click()
+      await togglePresentation(page)
       await open()
       await page.getByRole('menuitem', { name: 'Configure Subnet (Name, Prefix, Route Table, PE Policies)...', exact: true }).click()
       const row = page.getByTestId('aznet-subnet-row-app')
@@ -280,7 +280,7 @@ test.describe('subnet and gateway menu disclosure', () => {
       await page.keyboard.press('Escape')
       // Visible Workspace controls still use the full, ungrouped source catalog.
       await subnet.click()
-      await page.getByRole('button', { name: language === 'ja' ? 'ワークスペースの操作' : 'Workspace controls', exact: true }).click()
+      await page.getByTitle(language === 'ja' ? 'ワークスペースの操作' : 'Workspace controls', { exact: true }).click()
       const tools = page.getByRole('complementary')
       await tools.getByRole('searchbox').fill('Enable GWroutes')
       await expect(tools.getByRole('button', { name: 'Enable GWroutes Propagation on Route Table', exact: true })).toBeVisible()
@@ -339,12 +339,12 @@ test.describe('subnet and gateway menu disclosure', () => {
       await expect(settings).toContainText(language === 'ja' ? 'モデル化しません' : 'does not model instance failure')
       await page.keyboard.press('Escape')
       await openWorkspaceActions(page)
-      await page.getByTestId('ui-preview-toggle').click()
+      await togglePresentation(page)
       await open()
       await expect(page.getByRole('menuitem', { name: detailLabel, exact: true })).toHaveCount(0)
       await expect(page.getByRole('menuitem', { name: 'Configure Gateway & Peerings', exact: true })).toBeVisible()
       await page.keyboard.press('Escape')
-      await page.getByTestId('ui-preview-toggle').click()
+      await togglePresentation(page)
       await page.getByTestId('aznet-vnet-hub').locator(':scope > .network-node').focus()
       await page.keyboard.press('Shift+F10')
       await page.getByRole('menuitem', { name: 'Simulate failure of Azure region West Europe', exact: true }).click()
@@ -421,7 +421,7 @@ for (const mode of ['hub-spoke', 'full']) {
       await peerings.locator(':scope > summary').click()
       await expect(enabled).not.toBeChecked()
       await openWorkspaceActions(page)
-      await page.getByRole('button', { name: /Undo/ }).click()
+      await page.getByRole('button', { name: /Undo|元に戻す/ }).click()
       await expect.poll(() => page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(before)
       expect((await new AxeBuilder({ page }).include('.presentation-inspector-section').analyze()).violations).toEqual([])
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
@@ -481,13 +481,13 @@ for (const mode of ['hub-spoke', 'full']) {
       await draft.press('Tab')
       await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology.vnets[0].summarizedGatewayPrefixes)).toEqual(['10.0.0.0/8'])
       await openWorkspaceActions(page)
-      await page.getByRole('button', { name: /Undo/ }).click()
+      await page.getByRole('button', { name: /Undo|元に戻す/ }).click()
       await expect.poll(() => page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(before)
       await devices.locator('summary').focus()
       await page.keyboard.press('Enter')
       await card.getByTestId('aznet-add-fw-hub').click()
       await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology.vnets[0].appliances.length)).toBe(1)
-      await page.getByRole('button', { name: /Undo/ }).click()
+      await page.getByRole('button', { name: /Undo|元に戻す/ }).click()
       await expect.poll(() => page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(before)
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     })
@@ -549,10 +549,10 @@ for (const mode of ['hub-spoke', 'full']) for (const language of ['en', 'ja']) {
         await expect(row.getByTestId('aznet-subnet-rt-select-app')).toHaveValue('existing')
         await expect(row.getByRole('status')).toContainText(language === 'ja' ? '評価されていません' : 'Internet access is not assessed')
         await openWorkspaceActions(page)
-        await page.getByTestId('ui-preview-toggle').click()
+        await togglePresentation(page)
         await expect(row.getByTestId('aznet-subnet-outbound-app')).toBeVisible()
         await expect(row.getByTestId('aznet-subnet-pe-policy-app')).toHaveValue('Enabled')
-        await page.getByTestId('ui-preview-toggle').click()
+        await togglePresentation(page)
       } else {
         await expect(section).not.toHaveAttribute('open')
         await expect(section.locator('summary')).toContainText(language === 'ja' ? '未指定' : 'Not specified')
@@ -570,17 +570,17 @@ for (const mode of ['hub-spoke', 'full']) for (const language of ['en', 'ja']) {
         await prefix.press('Tab')
         await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology.vnets[0].subnets[0].prefix)).toBe('10.0.2.0/24')
         await openWorkspaceActions(page)
-        await page.getByRole('button', { name: /Undo/ }).click()
+        await page.getByRole('button', { name: /Undo|元に戻す/ }).click()
         await expect.poll(() => page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(before)
         await section.locator('summary').focus()
         await page.keyboard.press('Enter')
         await row.getByTestId('aznet-subnet-pe-policy-app').selectOption('RouteTableEnabled')
         await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology.vnets[0].subnets[0].privateEndpointNetworkPolicies)).toBe('RouteTableEnabled')
-        await page.getByRole('button', { name: /Undo/ }).click()
+        await page.getByRole('button', { name: /Undo|元に戻す/ }).click()
         await row.getByTestId('aznet-subnet-add-pe-app').click()
         await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology.vnets[0].subnets[0].privateEndpoints.length)).toBe(1)
         expect((await new AxeBuilder({ page }).include('[data-testid="aznet-subnet-row-app"]').analyze()).violations).toEqual([])
-        await page.getByRole('button', { name: /Undo/ }).click()
+        await page.getByRole('button', { name: /Undo|元に戻す/ }).click()
       }
       await expect.poll(() => page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(before)
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
@@ -597,7 +597,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
       const status = page.getByTestId('learning-status')
       await expect(page.getByTestId('account-belt-status')).toContainText('Not signed in')
       await expect(page.getByTestId('account-belt-status')).toContainText('Sign-in unavailable')
-      await expect(status).toContainText('White belt')
+      await expect(status).toHaveAccessibleName(/White belt/)
       await expect(status).toHaveAttribute('aria-description', /Highest belt across tracks: White belt.*Tracks at this belt: 1/)
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
       const bounds = (await page.locator('.workspace-account-status').boundingBox())!
@@ -644,7 +644,7 @@ for (const mode of ['vwan', 'full'] as const) {
     const originalActions = await menu.getByRole('menuitem').allTextContents()
     await page.keyboard.press('Escape')
     const toggle = page.getByTestId('ui-preview-toggle')
-    await toggle.click()
+    await togglePresentation(page)
     await expect(toggle).toHaveAttribute('aria-pressed', 'true')
     expect(await node.getAttribute('aria-pressed')).toBe(selected)
     expect(await page.getByRole('button', { name: /Undo/ }).isEnabled()).toBe(history)
@@ -672,9 +672,9 @@ for (const mode of ['vwan', 'full'] as const) {
     await search.fill(mode === 'vwan' ? 'Edit configuration' : 'Configure VNet & Elements')
     await tools.getByRole('button', { name: mode === 'vwan' ? 'Edit configuration' : 'Configure VNet & Elements', exact: true }).click()
     await expect(page.getByRole('dialog')).toBeVisible()
-    await toggle.click()
+    await togglePresentation(page)
     await expect(page.getByRole('dialog')).toBeVisible()
-    await toggle.click()
+    await togglePresentation(page)
     await expect(page.getByRole('dialog')).toBeVisible()
     await page.getByRole('dialog').getByRole('button', { name: /Close/ }).first().click()
     await page.keyboard.press('Escape')
@@ -687,12 +687,12 @@ for (const mode of ['vwan', 'full'] as const) {
     await expect(file.locator('summary')).toBeFocused()
     expect(await page.evaluate((key) => localStorage.getItem(key), key)).toBe(original)
     if (mode === 'full') {
-      const checks = page.locator('.presentation-group').filter({ has: page.locator('summary', { hasText: /^Routing checks$/ }) })
+      const checks = page.locator('.presentation-group').filter({ has: page.locator('summary', { hasText: /^Checks$/ }) })
       await checks.locator('summary').click()
       await expect(checks.getByRole('button', { name: /Advanced checks/ })).toBeVisible()
       await page.keyboard.press('Escape')
     } else await expect(page.getByRole('button', { name: 'Open model notes and warnings' })).toBeVisible()
-    await toggle.click()
+    await togglePresentation(page)
     await expect(toggle).toHaveAttribute('aria-pressed', 'false')
     expect(await node.getAttribute('aria-pressed')).toBe(selected)
     expect(await page.evaluate((key) => localStorage.getItem(key), key)).toBe(original)
@@ -700,7 +700,7 @@ for (const mode of ['vwan', 'full'] as const) {
     await node.press('Alt+ArrowRight')
     await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), key)).not.toBe(original)
     const moved = await page.evaluate((key) => localStorage.getItem(key), key)
-    await toggle.click()
+    await togglePresentation(page)
     await page.getByRole('button', { name: /Undo/ }).click()
     await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), key)).toBe(original)
     await page.getByRole('button', { name: /Redo/ }).click()
@@ -769,10 +769,10 @@ test('Japanese preview and unavailable preference storage remain usable in-sessi
   await page.goto('/?mode=full')
   const toggle = page.getByTestId('ui-preview-toggle')
   await expect(toggle).toHaveText('従来の UI を使用')
-  await toggle.click()
+  await togglePresentation(page)
   await expect(toggle).toHaveAttribute('aria-pressed', 'false')
   await expect(toggle).toHaveText('新しい UI を使用')
-  await toggle.click()
+  await togglePresentation(page)
   await expect(toggle).toHaveAttribute('aria-pressed', 'true')
   await expect(page.locator('.presentation-group > summary').filter({ hasText: 'ファイル' })).toBeVisible()
 })
@@ -799,13 +799,16 @@ test('default UI can switch to legacy with keyboard and persist across reload', 
   await openWorkspaceActions(page)
   const toggle = page.getByTestId('ui-preview-toggle')
   await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+  await page.locator('.presentation-group:has([data-language-selector]) > summary').click()
   await toggle.focus()
   await page.keyboard.press('Enter')
   await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+  await expect(toggle).toBeFocused()
   await page.reload()
   await expect(toggle).toHaveAttribute('aria-pressed', 'false')
-  await toggle.click()
+  await togglePresentation(page)
   await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.locator('.workspace-header-toggle')).toBeFocused()
   await page.reload()
   await openWorkspaceActions(page)
   await expect(toggle).toHaveAttribute('aria-pressed', 'true')
@@ -825,7 +828,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
         has: page.locator('summary', { hasText: language === 'ja' ? /^設定$/ : /^Settings$/ }),
       })
       const help = page.locator('.presentation-group').filter({
-        has: page.locator('summary', { hasText: language === 'ja' ? /^ヘルプとフィードバック$/ : /^Help & feedback$/ }),
+        has: page.locator('summary', { hasText: language === 'ja' ? /^ヘルプ$/ : /^Help$/ }),
       })
       const key = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
       await expect.poll(() => page.evaluate(key => {
@@ -871,7 +874,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
       await expect(page.getByRole('dialog')).toBeVisible()
       await page.keyboard.press('Escape')
       expect(await page.evaluate(key => localStorage.getItem(key), key)).toBe(before)
-      await page.getByTestId('ui-preview-toggle').click()
+      await togglePresentation(page)
       await expect(page.getByTestId('app-version')).toHaveText(`AzNetSim ${version}`)
       await expect(page.getByRole('combobox', { name: language === 'ja' ? 'キャンバスのスタイル' : 'Canvas style', exact: true })).toHaveValue('dots')
       await expect(page.getByRole('combobox', { name: language === 'ja' ? '接続線のスタイル' : 'Connection style', exact: true })).toHaveValue('straight')
@@ -884,7 +887,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
       await page.goto(`/?mode=${mode}&sample=${sample}`)
       await openWorkspaceActions(page)
       const checks = page.locator('.presentation-group').filter({
-        has: page.locator('summary', { hasText: language === 'ja' ? /^ルーティングの確認$/ : /^Routing checks$/ }),
+        has: page.locator('summary', { hasText: language === 'ja' ? /^確認$/ : /^Checks$/ }),
       })
       const summary = checks.locator('summary')
       await summary.focus()

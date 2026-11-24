@@ -19,7 +19,7 @@ for (const mode of ['hub-spoke', 'full']) {
       await page.getByRole('menuitem', { name: 'Configure Gateway & Peerings', exact: true }).click()
     }
     const inspect = async () => {
-      await page.locator('summary').filter({ hasText: /^Routing checks$/ }).click()
+      await page.locator('summary').filter({ hasText: /^Checks$/ }).click()
       await page.getByTestId('aznet-run-diagnostics-btn').click()
     }
     await configure('vpn')
@@ -42,9 +42,9 @@ for (const mode of ['hub-spoke', 'full']) {
     await erSku.selectOption('ErGw1AZ')
     await inspect()
     await expect(erFinding).toHaveCount(0)
-    await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
+    await page.getByRole('button', { name: 'Undo', exact: true }).click()
     await expect(erFinding).toContainText('SKU is unknown')
-    await page.getByRole('button', { name: '↷ Redo', exact: true }).click()
+    await page.getByRole('button', { name: 'Redo', exact: true }).click()
     await expect(erFinding).toHaveCount(0)
     await page.reload()
     const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)

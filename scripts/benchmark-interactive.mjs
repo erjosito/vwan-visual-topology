@@ -100,7 +100,7 @@ async function measureWorkload(browser, origin, mode, tier, topology, iterations
     const node = mode === 'vwan' ? original.spokes[0] : original.vnets.find(vnet => vnet.id === 'bench-vnet-0')
     assert.ok(node, 'Missing benchmark edit endpoint')
     const undo = page.getByRole('button', { name: /Undo$/, exact: false })
-    if (!await undo.isVisible()) await page.getByRole('button', { name: 'Workspace controls', exact: true }).click()
+    if (!await undo.isVisible()) await page.getByTitle('Workspace controls', { exact: true }).click()
     for (let iteration = 0; iteration <= iterations; iteration++) {
       const record = (operation, sample) => {
         if (iteration) result.samples.push({ iteration, operation, ...sample })

@@ -162,7 +162,8 @@ export function WorkspaceTools<Selection>({ creationActions, resourceActions = [
   </section>)
   return <>
     <button type="button" ref={opener} aria-expanded={open} aria-controls={id}
-      onClick={() => changeOpen(!open)}>{t('Workspace controls')}</button>
+      aria-label={t(preview ? 'Tools' : 'Workspace controls')} title={t('Workspace controls')}
+      onClick={() => changeOpen(!open)}>{t(preview ? 'Tools' : 'Workspace controls')}</button>
     {open && <>
       <button type="button" className="workspace-tools-backdrop" aria-label={t('Close workspace controls')}
         onClick={() => changeOpen(false, true)} />

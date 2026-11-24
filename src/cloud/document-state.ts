@@ -14,6 +14,19 @@ export interface DocumentSaveSnapshot {
   cloud?: CloudDocumentSource & { state: 'checking' | 'matches' | 'modified' | 'changed' | 'missing' | 'unavailable' | 'unknown' }
 }
 
+export function cloudDocumentStatusMessage(state: DocumentSaveSnapshot, accountId?: string) {
+  const linked = state.cloud?.accountId === accountId ? state.cloud : undefined
+  return state.operation === 'saving' ? 'Uploading a snapshot…'
+    : linked?.state === 'changed' ? 'Cloud save changed: review first'
+      : linked?.state === 'missing' ? 'Linked cloud save unavailable'
+        : state.operation === 'failed' || linked?.state === 'unavailable' ? 'Cloud operation not confirmed'
+          : linked?.state === 'matches' ? 'Matches last confirmed cloud save'
+            : linked?.state === 'modified' ? 'Local changes not saved to cloud'
+              : linked?.state === 'checking' ? 'Checking saved revision…'
+                : linked?.state === 'unknown' ? 'Cloud saved; comparison unavailable'
+                  : 'No cloud save linked in this tab'
+}
+
 export async function fingerprint(value: unknown) {
   const raw = JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item)
     ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item)

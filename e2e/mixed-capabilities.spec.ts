@@ -87,7 +87,7 @@ for (const narrow of [false, true]) {
     await expect(policy).toHaveCount(0)
     const tools = page.getByRole('complementary', { name: 'Workspace controls', exact: true })
     const openTools = async () => {
-      if (!await tools.isVisible()) await page.getByRole('button', { name: 'Workspace controls', exact: true }).click()
+      if (!await tools.isVisible()) await page.getByTitle('Workspace controls', { exact: true }).click()
     }
     await openTools()
     await tools.getByRole('searchbox').fill('branch-link')
@@ -134,7 +134,7 @@ test('all native providers expose searchable capability boundaries without mutat
     await expect(page.getByTestId(mode === 'vwan' ? 'vwan-app' : 'aznet-app')).toBeVisible()
     const original = await page.evaluate(() => [localStorage.getItem('vwan-visual-topology:v1'), localStorage.getItem('aznet-visual-topology:v1')])
     const tools = page.getByRole('complementary', { name: 'Workspace controls', exact: true })
-    if (!await tools.isVisible()) await page.getByRole('button', { name: 'Workspace controls', exact: true }).click()
+    if (!await tools.isVisible()) await page.getByTitle('Workspace controls', { exact: true }).click()
     await tools.getByRole('searchbox').fill('spoke NVA')
     const matrix = tools.getByTestId('workspace-capabilities')
     await expect(matrix.getByRole('rowheader', { name: 'Integrated SD-WAN and spoke NVA BGP peering', exact: true })).toBeVisible()

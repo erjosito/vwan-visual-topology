@@ -7,6 +7,16 @@ export async function openWorkspaceActions(page: Page) {
   if (await overflow.isVisible() && await overflow.getAttribute('aria-expanded') === 'false') await overflow.click()
 }
 
+export async function togglePresentation(page: Page) {
+  const toggle = page.getByTestId('ui-preview-toggle')
+  if (!await toggle.isVisible()) {
+    await openWorkspaceActions(page)
+    const settings = toggle.locator('xpath=ancestor::details[1]')
+    if (!await toggle.isVisible()) await settings.locator('summary').click()
+  }
+  await toggle.click()
+}
+
 export async function downloadTopologyCopy(page: Page) {
   const japanese = await page.locator('html').getAttribute('lang') === 'ja'
   const button = page.getByRole('button', { name: japanese ? '名前を付けて保存' : 'Save As', exact: true, includeHidden: true })

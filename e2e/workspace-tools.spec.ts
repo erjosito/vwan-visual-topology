@@ -16,7 +16,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full'] as const) {
     await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), key)).not.toBeNull()
     const original = await page.evaluate((key) => localStorage.getItem(key), key)
     const tools = page.getByRole('complementary', { name: 'Workspace controls', exact: true })
-    const opener = page.getByRole('button', { name: 'Workspace controls', exact: true })
+    const opener = page.getByTitle('Workspace controls', { exact: true })
     await expect(tools).toBeVisible()
     const canvas = page.locator(mode === 'vwan' ? '.canvas-stage' : '.aznet-canvas-shell')
     const toolsBounds = (await tools.boundingBox())!
@@ -61,7 +61,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full'] as const) {
     const original = await page.evaluate((key) => localStorage.getItem(key), key)
     const tools = page.getByRole('complementary', { name: 'Workspace controls', exact: true })
     await expect(tools).toHaveCount(0)
-    await page.getByRole('button', { name: 'Workspace controls', exact: true }).click()
+    await page.getByTitle('Workspace controls', { exact: true }).click()
     const search = tools.getByRole('searchbox', { name: 'Search workspace controls', exact: true })
     await expect(search).toBeFocused()
     const bounds = (await tools.boundingBox())!
@@ -72,7 +72,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full'] as const) {
     await page.keyboard.press('Escape')
     await expect(tools).toHaveCount(0)
     expect(await page.evaluate((key) => localStorage.getItem(key), key)).toBe(original)
-    await page.getByRole('button', { name: 'Workspace controls', exact: true }).click()
+    await page.getByTitle('Workspace controls', { exact: true }).click()
     await search.fill('VNet')
     await tools.getByRole('button', { name: '+ VNet', exact: true }).click()
     await expect(tools).toHaveCount(0)
@@ -81,7 +81,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full'] as const) {
       expect(await page.evaluate((key) => localStorage.getItem(key), key)).toBe(original)
     } else {
       await expect.poll(async () => JSON.parse((await page.evaluate((key) => localStorage.getItem(key), key))!).topology.vnets.length).toBe(1)
-      await expect(page.getByRole('button', { name: 'Workspace controls', exact: true })).toBeFocused()
+      await expect(page.getByTitle('Workspace controls', { exact: true })).toBeFocused()
     }
   })
 }
@@ -187,7 +187,7 @@ test.describe('VNet structure cloning', () => {
       const controlsName = ja ? 'ワークスペースの操作' : 'Workspace controls'
       const cloneAction = ja ? 'VNet を複製...' : 'Clone VNet...'
       const tools = page.getByRole('complementary', { name: controlsName, exact: true })
-      const opener = page.getByRole('button', { name: controlsName, exact: true })
+      const opener = page.getByTitle(controlsName, { exact: true })
       const node = mode === 'vwan' ? page.locator('[data-node-id="hub"]')
         : page.getByTestId('aznet-vnet-hub').getByRole('button', { name: /^VNet / })
       await node.focus()
@@ -250,9 +250,9 @@ test.describe('VNet structure cloning', () => {
           defaultOutboundAccess: false, privateEndpointNetworkPolicies: 'Enabled' })
       }
       expect({ ...after, [mode === 'vwan' ? 'spokes' : 'vnets']: vnets.slice(0, 1) }).toEqual(before)
-      await page.getByRole('button', { name: ja && mode === 'vwan' ? /元に戻す/ : /Undo/ }).click()
+      await page.getByRole('button', { name: ja ? /元に戻す/ : /Undo/ }).click()
       await expect.poll(read).toEqual(before)
-      await page.getByRole('button', { name: ja && mode === 'vwan' ? /やり直す/ : /Redo/ }).click()
+      await page.getByRole('button', { name: ja ? /やり直す/ : /Redo/ }).click()
       await expect.poll(read).toEqual(after)
       await page.reload()
       await expect(page.getByTestId(mode === 'vwan' ? 'vwan-app' : 'aznet-app')).toBeVisible()

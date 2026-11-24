@@ -32,11 +32,12 @@ export function LearningTools(props: {
   }, [view.open, ready])
   return <>
     <button ref={trigger} type="button" data-testid="learning-open"
+      aria-label={t('Learn & practice')} title={t('Learn & practice')}
       aria-haspopup="dialog" aria-expanded={session?.learningDetailsOpen ?? view.open}
       aria-controls={session?.learningDetailsOpen ? 'local-learning-status' : undefined}
       onClick={() => session?.setLearningDetailsOpen
         ? session.setLearningDetailsOpen(!session.learningDetailsOpen)
-        : setView({ ...view, open: !view.open })}>{t('Learn & practice')}</button>
+        : setView({ ...view, open: !view.open })}>{t(session?.presentationPreview ? 'Learn' : 'Learn & practice')}</button>
     {view.open && Panel && <Panel document={props.document} onGuide={props.onGuide}
       onPause={() => { setView({ ...view, open: false }); trigger.current?.focus({ preventScroll: true }) }} />}
     {loading && <span role="status">{t('Loading learning status...')}</span>}

@@ -2682,24 +2682,26 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
 
           <button
             type="button"
-            className="aznet-btn"
             onClick={handleUndo}
             disabled={!history.length}
-            title="Undo"
+            title={t('Undo')}
+            aria-label={workspaceSession?.presentationPreview ? t('Undo') : '↶ Undo'}
+            className="aznet-btn workspace-history-action"
           >
-            ↶ Undo
+            <span aria-hidden="true">↶</span><span className="workspace-history-label"> {workspaceSession?.presentationPreview ? t('Undo') : 'Undo'}</span>
           </button>
           <button
             type="button"
-            className="aznet-btn"
             onClick={handleRedo}
             disabled={!future.length}
-            title="Redo"
+            title={t('Redo')}
+            aria-label={workspaceSession?.presentationPreview ? t('Redo') : '↷ Redo'}
+            className="aznet-btn workspace-history-action"
           >
-            ↷ Redo
+            <span aria-hidden="true">↷</span><span className="workspace-history-label"> {workspaceSession?.presentationPreview ? t('Redo') : 'Redo'}</span>
           </button>
 
-          <PresentationGroup label={t('Routing checks')}>
+          <PresentationGroup label={t('Checks')} title={t('Routing checks')}>
           <button
             type="button"
             className={`aznet-btn${workspaceSession?.presentationPreview ? '' : ' aznet-btn-primary'}`}
@@ -2749,7 +2751,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           <button type="button" className="aznet-btn" data-testid="aznet-clear-topology-btn"
             onClick={() => setClearRequested(true)} title={t('Clear canvas to an empty topology')}>{t('Clear')}</button>
           </PresentationGroup>
-          <PresentationToggle />
+          {!workspaceSession?.presentationPreview && <PresentationToggle />}
           <input
             data-desktop-import
             ref={fileInputRef}

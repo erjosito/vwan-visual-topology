@@ -22,6 +22,7 @@ const application = await electron.launch({
 const results = []
 try {
   const page = await application.firstWindow(), errors = []
+  await page.setViewportSize({ width: 1200, height: 900 })
   page.on('pageerror', (error) => errors.push(error.message))
   for (const mode of ['vwan', 'hub-spoke', 'full']) {
     await page.goto(`app://simulator/?mode=${mode}`)
@@ -69,6 +70,8 @@ try {
     await detail.screenshot({ path: join(artifacts, `${mode}.png`) })
     await page.keyboard.press('Escape')
     await expect(node).toBeFocused()
+    const workspaceActions = page.getByRole('button', { name: 'Workspace actions', exact: true })
+    if (await workspaceActions.isVisible() && await workspaceActions.getAttribute('aria-expanded') === 'false') await workspaceActions.click()
     await page.getByRole('button', { name: /^(↶ )?Undo$/ }).click()
     expect(await read()).toEqual(before)
     await page.getByRole('button', { name: /^(↷ )?Redo$/ }).click()

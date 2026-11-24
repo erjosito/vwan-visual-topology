@@ -8,7 +8,17 @@ export function PresentationToggle() {
   const session = useWorkspaceSession()
   return <button type="button" data-testid="ui-preview-toggle" aria-pressed={!!session?.presentationPreview}
     title={t('Switch interfaces. Your design and settings stay unchanged.')}
-    onClick={() => session?.setPresentationPreview?.(!session.presentationPreview)}>{t(session?.presentationPreview ? 'Use legacy UI' : 'Use new UI')}</button>
+    onClick={event => {
+      const restoreFocus = document.activeElement === event.currentTarget
+      session?.setPresentationPreview?.(!session.presentationPreview)
+      if (restoreFocus) requestAnimationFrame(() => {
+        const target = document.querySelector<HTMLElement>(
+          '.presentation-group:has([data-testid="ui-preview-toggle"]) > summary, [data-testid="ui-preview-toggle"]',
+        )
+        if (target?.checkVisibility({ checkVisibilityCSS: true })) target.focus()
+        else document.querySelector<HTMLButtonElement>('.workspace-header-toggle')?.focus()
+      })
+    }}>{t(session?.presentationPreview ? 'Use legacy UI' : 'Use new UI')}</button>
 }
 
 export function InspectorSection({ title, summary, initialOpen, children }: {
@@ -23,7 +33,7 @@ export function InspectorSection({ title, summary, initialOpen, children }: {
   </details>
 }
 
-export function PresentationGroup({ label, children }: { label: string; children: ReactNode }) {
+export function PresentationGroup({ label, title, children }: { label: string; title?: string; children: ReactNode }) {
   const preview = useWorkspaceSession()?.presentationPreview
   const details = useRef<HTMLDetailsElement>(null)
   useEffect(() => {
@@ -44,10 +54,10 @@ export function PresentationGroup({ label, children }: { label: string; children
         details.current.querySelector('summary')?.focus()
       }
     }}>
-    <summary>{label}</summary>
+    <summary title={title}>{label}</summary>
     <div className="presentation-group-content" onClick={(event) => {
       if ((event.target as Element).closest('dialog')) return
-      if ((event.target as Element).closest('button') && details.current) {
+      if ((event.target as Element).closest('button') && details.current?.open) {
         details.current.open = false
         details.current.querySelector('summary')?.focus()
       }

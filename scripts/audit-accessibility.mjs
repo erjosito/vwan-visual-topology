@@ -64,9 +64,7 @@ export async function auditAccessibility({ baseURL, artifacts }) {
           await page.getByLabel('Theme', { exact: true }).selectOption(sample.viewport.theme)
           await page.keyboard.press('Escape')
           if (sample.state !== 'command-palette' && sample.state !== 'original-inspector') await headerActions(page, false)
-          const controls = page.getByRole('button', {
-            name: sample.language === 'ja' ? 'ワークスペースの操作' : 'Workspace controls', exact: true,
-          })
+          const controls = page.getByTitle(sample.language === 'ja' ? 'ワークスペースの操作' : 'Workspace controls', { exact: true })
           if (sample.state === 'command-palette' || sample.state === 'original-inspector') {
             await controls.click()
             const palette = page.locator('.workspace-tools-panel')
