@@ -277,3 +277,55 @@ ARS-to-NVA boundary.
 control-plane projection. Native Azure captures, execution ledgers and exact
 restoration evidence remain private; this document contains only sanitized
 conclusions.
+
+## Next bounded receiver qualification (#233; not executed)
+
+The 2026-11-24 documentation review retains the same evidence boundary. The
+[current Route Server FAQ](https://learn.microsoft.com/en-us/azure/route-server/route-server-faq#can-i-use-route-maps-with-virtual-network-address-prefix-summarization)
+describes `summarizedGatewayPrefixes` on ER/VPN connections and per-connection
+route-map precedence. Its
+[spoke-NVA guidance](https://learn.microsoft.com/en-us/azure/route-server/route-server-faq#can-an-nva-in-a-spoke-virtual-network-peer-with-azure-route-server-in-the-hub-virtual-network)
+permits BGP peering across a peered VNet; neither statement establishes gateway
+summary receipt by that NVA. This review is not a new Azure observation.
+
+The next useful slice is **sole-VPN, directly peered NVA receipt**, with the
+already qualified local-NVA and actual VPN receiver behavior retained as
+contemporaneous controls. ER-only attribution, a gatewayless ARS and one NVA
+peering with multiple ARS resources remain outside this bounded slice.
+
+Use a newly created, ownership-tracked lab: supported active/active RouteBased
+VPN gateway with ASN 65515, one ARS, local and directly peered BGP NVAs, an
+independent IPsec/BGP receiver, and covered/uncovered gateway-transit prefixes.
+Keep covering and independent AGPs distinct from all original prefixes and
+outside every BGP endpoint/receiver loopback. Record native gateway SKU, subnet
+configuration, original peer placement and both peering directions.
+
+Compare no-AGP baseline, AGP set with branch-to-branch off, AGP set/edited with
+branch-to-branch on, and cleared/restored baseline. Capture both actual neighbors
+of each local NVA, directly peered NVA and VPN receiver, independently:
+established state, complete retained pre-import received tables and supported
+wire attributes. Retain native ARS advertisements and gateway learned/advertised
+routes as separate corroborating evidence. An ARS RIB or subnet effective table
+is not a substitute for actual receiver receipt.
+
+A positive or negative summary observation requires two complete current
+receipt frames per neighbor, independent origin withdrawal/restoration freshness
+controls, and simultaneous healthy ordinary-prefix controls. For B2B-on windows,
+actual VPN aggregate/replacement behavior supplies the gateway positive control.
+Compare covered originals, uncovered routes, independent AGPs and withdrawn old
+summaries; do not score a negative from an empty, partial, stale or down session.
+Contradictory native internal health keeps the original strict matrix unknown;
+do not silently convert it to a receiver-only pass.
+
+**No route maps or ARS virtual-network connection objects are created.** If basic
+cross-VNet BGP requires a software upgrade or such a creation, stop and retain
+the case as unknown. #298's first-map experiment remains separately authorized
+and must record persistent upgrade history and concurrent VNet-property drift;
+map deletion does not prove rollback.
+
+Execution is pending a separately approved resource/cost plan and capacity
+preflight. No resources were created by this review, and the user's ER-only
+environment for #259 is not repurposed. After execution, publish only sanitized
+per-case conclusions, record exact restoration, and delete only creation-proven
+task resources. Do not manufacture simulator summaries or close #233 before
+the observed scope supports those conclusions.
