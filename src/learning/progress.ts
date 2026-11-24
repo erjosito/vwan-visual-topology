@@ -1,5 +1,6 @@
 import { engineVersion } from '../platform/contract'
 import type { PlatformResult } from '../platform/contract'
+import { revisionOf } from '../platform/revision'
 import { exercises } from './exercises'
 import type { Exercise } from './exercises'
 export { guidedProgressKey, parseProgressLedger, recordCompletion, earnedAwards, beltProgress } from './progress-ledger'
@@ -53,9 +54,18 @@ export function outcomeFor(exercise: Exercise, result: PlatformResult): Attempt[
   const ids = exercise.requirements.map((requirement) => requirement.id)
   if (result.status !== 'complete' || result.contractVersion !== 1 || result.engineVersion !== engineVersion
     || result.errors.length || !result.document || result.document.mode !== exercise.starter.mode
+    || result.revision !== revisionOf(result.document)
     || result.assessments.length !== ids.length || new Set(result.assessments.map((item) => item.id)).size !== ids.length
     || ids.some((id) => !result.assessments.some((item) => item.id === id))
-    || result.assessments.some((item) => !['satisfied', 'violated'].includes(item.outcome))) return 'not assessed'
+    || result.assessments.some((item) => {
+      const coverage = item.coverage, requirement = exercise.requirements.find(requirement => requirement.id === item.id)
+      return !['satisfied', 'violated'].includes(item.outcome) || coverage && (!coverage.complete
+        || coverage.provider !== 'azure-net' || result.document?.mode === 'vwan' || coverage.revision !== result.revision
+        || coverage.engineVersion !== engineVersion || coverage.limitationIds.length || requirement?.kind !== 'route'
+        || (requirement.hubTableId !== undefined
+          ? coverage.scope.kind !== 'hub-table' || coverage.scope.hubId !== requirement.table || coverage.scope.tableId !== requirement.hubTableId
+          : coverage.scope.kind !== 'subnet-table' || coverage.scope.subnetId !== requirement.table))
+    })) return 'not assessed'
   return result.assessments.every((item) => item.outcome === 'satisfied') ? 'satisfied' : 'violated'
 }
 

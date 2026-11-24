@@ -1,5 +1,6 @@
 import { cidr, contains, ipv4 } from '../validation'
 import { vnetCommunityHelp, vnetCommunityValues } from '../vnet-communities'
+import { routingLimitation, unscopedRoutingLimitations, type RoutingLimitation } from '../routing-evidence'
 import { mappedVpnAddress, translateVpnRoutes, validateVpnNat } from '../vpn-nat'
 import { loadBalancerOutboundCandidates, namedEndpoints, natGatewayForSubnet } from '../inventory'
 import { resolveHaPortsNextHop, type HaPortsAssessment } from '../ha-ports'
@@ -146,6 +147,7 @@ export interface AzNvaBgpPeer {
 }
 
 export interface AzSimulationResult {
+  routingLimitations?: RoutingLimitation[]
   vpnUnderlays?: Record<string, VpnErAssessment>
   controlPlaneComplete?: boolean
   subnetTables: Record<string, AzSubnetRouteTableResult>
@@ -419,11 +421,12 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
   const vpnUnderlays = Object.fromEntries(overlays.map((connection) => [connection.id, assessVpnEr(topology, connection, underlay)]))
   const result = simulateAzNetSettled({ ...topology, vpnConnections: topology.vpnConnections.filter((connection) =>
     (!connection.underlay && !connection.useLocalAzureIpAddress) || vpnUnderlays[connection.id].state === 'available') })
+  const warnings = [...result.warnings, ...overlays.filter(connection => vpnUnderlays[connection.id].state === 'not-assessed').map(connection =>
+    `VPN over ER "${connection.name}": not assessed. ${vpnUnderlays[connection.id].reason}`)]
   return {
     ...result, vpnUnderlays,
     controlPlaneComplete: result.controlPlaneComplete !== false && !Object.values(vpnUnderlays).some((assessment) => assessment.state === 'not-assessed'),
-    warnings: [...result.warnings, ...overlays.filter((connection) => vpnUnderlays[connection.id].state === 'not-assessed').map((connection) =>
-      `VPN over ER "${connection.name}": not assessed. ${vpnUnderlays[connection.id].reason}`)],
+    warnings, routingLimitations: unscopedRoutingLimitations(warnings, result.routingLimitations),
   }
 }
 
@@ -449,22 +452,45 @@ function simulateAzNetSettled(topology: AzNetTopology): AzSimulationResult {
     coverage.complete = false
     coverage.limitations = [...coverage.limitations, reason]
   }
-  return { ...result, controlPlaneComplete: false, warnings: [...result.warnings, reason] }
+  return { ...result, controlPlaneComplete: false, warnings: [...result.warnings, reason],
+    routingLimitations: [...(result.routingLimitations ?? []), routingLimitation(reason, {
+      code: 'CONTROL_PLANE_NOT_CONVERGED', owner: { kind: 'document', id: 'azure-net' },
+      scope: { kind: 'document' }, operations: ['route', 'flow', 'packet', 'bgp'],
+      completeness: 'not-assessed', evidenceReferences: [['controlPlaneComplete']],
+    })] }
 }
 
 function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResult): AzSimulationResult {
   const peeringLimitations = [...validateSubnetPeeringScopes(topology), ...subnetPeeringLimitations(topology)]
+  const routingLimitations: RoutingLimitation[] = []
   const gatewayLimitations = topology.vnets.flatMap((vnet) =>
     vnet.routeServer?.enabled && vnet.routeServer.branchToBranchTraffic
       ? vnet.gateways.filter((gateway) => gateway.enabled && !gatewayArsExchange(gateway)).map((gateway) =>
-        `ARS gateway exchange for "${gateway.name}" in "${vnet.name}" is not assessed: VPN integration requires explicit active/active, ASN 65515 and a supported RouteBased non-Basic gateway. VPN BGP enablement is not required.`)
+        {
+          const message = `ARS gateway exchange for "${gateway.name}" in "${vnet.name}" is not assessed: VPN integration requires explicit active/active, ASN 65515 and a supported RouteBased non-Basic gateway. VPN BGP enablement is not required.`
+          routingLimitations.push(routingLimitation(message, {
+            code: 'ARS_GATEWAY_EXCHANGE_UNQUALIFIED', owner: { kind: 'gateway', id: gateway.id },
+            scope: { kind: 'component', vnetId: vnet.id }, operations: ['route', 'flow', 'packet', 'bgp'],
+            completeness: 'not-assessed', evidenceReferences: [['gatewayRibs', gateway.id]],
+          }))
+          return message
+        })
       : [])
   const regionLimitations = udrAssociationFindings(topology).map((finding) => finding.summary)
   const warnings: string[] = [...peeringLimitations, ...gatewayLimitations, ...regionLimitations]
   if (topology.vnets.some((vnet) => vnet.bgpCommunities)) {
     warnings.push(vnetCommunityHelp)
+    for (const vnet of topology.vnets.filter(vnet => vnet.bgpCommunities)) routingLimitations.push(routingLimitation(vnetCommunityHelp, {
+      code: 'VNET_COMMUNITY_METADATA', owner: { kind: 'vnet', id: vnet.id }, scope: { kind: 'component', vnetId: vnet.id },
+      operations: ['bgp'], completeness: 'not-assessed', evidenceReferences: [['erLocationRibs']],
+    }))
     if (topology.vnets.some((vnet) => vnet.summarizedGatewayPrefixes?.length)) {
-      warnings.push('VNet community tagging of gateway summaries is not assessed; only original VNet address-space advertisements receive VNet community metadata.')
+      const message = 'VNet community tagging of gateway summaries is not assessed; only original VNet address-space advertisements receive VNet community metadata.'
+      warnings.push(message)
+      routingLimitations.push(routingLimitation(message, {
+        code: 'GATEWAY_SUMMARY_COMMUNITY_UNQUALIFIED', owner: { kind: 'document', id: 'azure-net' },
+        scope: { kind: 'document' }, operations: ['bgp'], completeness: 'not-assessed', evidenceReferences: [['erLocationRibs']],
+      }))
     }
   }
   const siteRibs: Record<string, AzBgpRibEntry[]> = {}
@@ -486,6 +512,13 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
       const name = topology.sites.find((site) => site.id === siteId)?.name ?? siteId
       const warning = `Site route map (${direction}) at ${name} on ${connectionId} filtered: ${[...new Set(filtered.map((route) => route.prefix))].join(', ')}.`
       if (!warnings.includes(warning)) warnings.push(warning)
+      routingLimitations.push(routingLimitation(warning, {
+        code: 'SITE_ROUTE_MAP_FILTERED', owner: { kind: 'site', id: siteId }, scope: { kind: 'document' },
+        operations: ['route', 'flow', 'packet', 'bgp'], completeness: 'complete',
+        evidenceReferences: [['siteRibs', siteId], ...topology.sites.flatMap((site, siteIndex) => site.id === siteId
+          ? (site.routeMapAssignments ?? []).flatMap((assignment, assignmentIndex) => assignment.connectionId === connectionId
+            ? [['document', 'topology', 'sites', String(siteIndex), 'routeMapAssignments', String(assignmentIndex), `${direction}MapId`]] : []) : [])],
+      }))
     }
     return result
   }
@@ -958,6 +991,14 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
         } } : {}),
       }
       ;(nvaBgpPeers[id] ??= []).push(view)
+      if (view.state === 'available' && view.gatewaySummaryAssessment) {
+        routingLimitations.push(routingLimitation('Automatic ARS-to-NVA gateway summary export is not assessed.', {
+          code: 'ARS_NVA_GATEWAY_SUMMARY_UNQUALIFIED', owner: { kind: 'vnet', id: vnet.id },
+          scope: { kind: 'component', vnetId: vnet.id }, operations: ['route', 'flow', 'packet', 'bgp'],
+          completeness: 'not-assessed',
+          evidenceReferences: [['nvaBgpPeers', id, String(nvaBgpPeers[id].length - 1), 'gatewaySummaryAssessment']],
+        }))
+      }
       peerViews.push(view)
     }
     if (!ars.enabled) continue
@@ -1250,7 +1291,15 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
         coverage.complete = false
         coverage.limitations = ['Remote table forwarding does not have a unique stable origin decision.']
       }
-      if (!coverage.complete) warnings.push(`Virtual hub ${hubId} table ${tableId}: ${coverage.limitations.join(' ')}`)
+      if (!coverage.complete) {
+        const message = `Virtual hub ${hubId} table ${tableId}: ${coverage.limitations.join(' ')}`
+        warnings.push(message)
+        routingLimitations.push(routingLimitation(message, {
+          code: 'HUB_TABLE_INCOMPLETE', owner: { kind: 'vwan-hub', id: hubId },
+          scope: { kind: 'hub-table', hubId, tableId }, operations: ['route', 'flow', 'packet', 'bgp'],
+          completeness: 'not-assessed', evidenceReferences: [['vwanHubTableCoverage', hubId, tableId]],
+        }))
+      }
     }
   }
 
@@ -1379,6 +1428,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
   }
 
   return {
+    routingLimitations: unscopedRoutingLimitations(warnings, routingLimitations),
     controlPlaneComplete: peeringLimitations.length === 0 && gatewayLimitations.length === 0 && regionLimitations.length === 0,
     subnetTables,
     gatewayRibs,
