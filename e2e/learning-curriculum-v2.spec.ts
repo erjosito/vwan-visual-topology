@@ -167,12 +167,12 @@ for (const language of ['en', 'ja'] as const) for (const firstChapterOnly of [tr
     await openLearning(page)
     const sidebar = learningSidebar(page)
     await loadLearningNetwork(page, language)
-    await expect(page.getByTestId('learning-status')).toContainText(language === 'en' ? '0 points' : '0 ポイント')
+    await expect(page.getByTestId('learning-status')).toHaveAccessibleName(new RegExp(language === 'en' ? '0 points' : '0 ポイント'))
     await expect(sidebar.getByTestId('learning-debrief')).toHaveCount(0)
     const hint = sidebar.getByTestId('learning-hint-1')
     await hint.locator('summary').click()
     await expect(hint.locator('p')).toHaveText(curriculumV2Bundle.lessons[0].tasks[0].hints[0][language])
-    await expect(page.getByTestId('learning-status')).toContainText(language === 'en' ? '0 points' : '0 ポイント')
+    await expect(page.getByTestId('learning-status')).toHaveAccessibleName(new RegExp(language === 'en' ? '0 points' : '0 ポイント'))
     await expect(sidebar.getByTestId('learning-debrief')).toHaveCount(0)
     await hint.locator('summary').click()
     let points = 0
@@ -193,7 +193,7 @@ for (const language of ['en', 'ja'] as const) for (const firstChapterOnly of [tr
             if (cue.action !== 'routes.open') throw new Error('Subnet route guidance required')
             await expect(learningAnchor(page, 'effective-table', cue.params.vnetId, cue.params.subnetId)).toBeVisible()
             await expect(sidebar.getByTestId('learning-debrief')).toHaveCount(0)
-            await expect(page.getByTestId('learning-status')).toContainText(language === 'en' ? `${points} points` : `${points} ポイント`)
+            await expect(page.getByTestId('learning-status')).toHaveAccessibleName(new RegExp(language === 'en' ? `${points} points` : `${points} ポイント`))
           }
           const choice = check.params.choices.find((choice) => choice.id === check.params.correctChoiceId)!
           await sidebar.getByRole('radio', { name: choice.text[language], exact: true }).check()
@@ -214,7 +214,7 @@ for (const language of ['en', 'ja'] as const) for (const firstChapterOnly of [tr
         await expect(sidebar.getByTestId('learning-debrief'), task.id).toBeVisible({ timeout: 15_000 })
         await expect(sidebar.getByTestId('learning-task-instruction')).toHaveText(task.instruction[language])
         points += task.points
-        await expect(page.getByTestId('learning-status')).toContainText(language === 'en' ? `${points} points` : `${points} ポイント`)
+        await expect(page.getByTestId('learning-status')).toHaveAccessibleName(new RegExp(language === 'en' ? `${points} points` : `${points} ポイント`))
         await expect(sidebar.locator('pre')).toHaveCount(0)
         const belt = curriculumV2Bundle.course.belts[chapterIndex + 1]
         if (task.id === lesson.taskOrder.at(-1)) {
@@ -234,10 +234,10 @@ for (const language of ['en', 'ja'] as const) for (const firstChapterOnly of [tr
     expect(record.completions).toHaveLength(firstChapterOnly ? 5 : 72)
     expect(record.completions.every((entry: { courseId: string }) => entry.courseId === curriculumV2Bundle.course.id)).toBe(true)
     expect(points).toBe(firstChapterOnly ? 80 : 1345)
-    await expect(page.getByTestId('learning-status')).toContainText(language === 'en' ? `${points} points` : `${points} ポイント`)
+    await expect(page.getByTestId('learning-status')).toHaveAccessibleName(new RegExp(language === 'en' ? `${points} points` : `${points} ポイント`))
     expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(normal)
     await page.reload()
-    await expect(page.getByTestId('learning-status')).toContainText(curriculumV2Bundle.course.belts[firstChapterOnly ? 1 : curriculumV2Bundle.course.belts.length - 1].name[language])
+    await expect(page.getByTestId('learning-status')).toHaveAccessibleName(new RegExp(curriculumV2Bundle.course.belts[firstChapterOnly ? 1 : curriculumV2Bundle.course.belts.length - 1].name[language]))
     await expect(page.getByTestId('learning-belt-dialog')).toHaveCount(0)
   })
 }

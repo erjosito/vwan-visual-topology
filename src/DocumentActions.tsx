@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom'
 import { t, useLanguage } from './i18n'
 import { documentSaveLabel, useDocumentSaveState, useWorkspaceSession } from './workspace-context'
 import { DocumentSaveStatus } from './cloud/DocumentSaveStatus'
+import { cloudDocumentStatusMessage } from './cloud/document-state'
+import { useCloudSession } from './cloud/useCloudSession'
 import './document-actions.css'
 
 const CloudPanel = lazy(() => import('./cloud/CloudPanel').then(module => ({ default: module.CloudPanel })))
@@ -35,6 +37,7 @@ export class DocumentDialogBoundary extends Component<{
 
 export function DocumentArtifactStatus() {
   const commands = useWorkspaceSession()?.artifactCommands, language = useLanguage()
+  const cloud = useCloudSession()
   const saveState = useDocumentSaveState()
   const text = (en: string, ja: string) => language === 'ja' ? ja : en
   const state = useSyncExternalStore(commands?.subscribe ?? noSubscribe, commands?.getSnapshot ?? noSnapshot)
@@ -44,9 +47,10 @@ export function DocumentArtifactStatus() {
       : state.revision === 'matches' ? text('Saved', '保存済み') : text('Unsaved changes', '未保存の変更')
   const destination = state.destination?.kind === 'file' ? state.destination.location : state.destination?.name
   const label = t(documentSaveLabel(saveState, state))
-  const tooltip = `${detailLabel}${destination ? ` · ${destination}` : ''}${state.notice?.kind === 'downloaded' ? ` · ${text('Download unconfirmed', 'ダウンロード未確認')}` : ''}${state.error ? ` · ${state.error}` : ''}${saveState?.local === 'unavailable' ? ` · ${t('Profile recovery unavailable. Confirmed file and cloud saves are unaffected.')}` : ''}`
+  const cloudStatus = cloud?.configured && saveState ? t(cloudDocumentStatusMessage(saveState, cloud.account?.id)) : undefined
+  const tooltip = `${detailLabel}${destination ? ` · ${destination}` : ''}${state.notice?.kind === 'downloaded' ? ` · ${text('Download unconfirmed', 'ダウンロード未確認')}` : ''}${state.error ? ` · ${state.error}` : ''}${saveState?.local === 'unavailable' ? ` · ${t('Profile recovery unavailable. Confirmed file and cloud saves are unaffected.')}` : ''}${cloudStatus ? ` · ${cloudStatus}` : ''}`
   return <details className="presentation-group document-artifact-details">
-    <summary title={tooltip} aria-label={`${text('Document save status', 'ドキュメントの保存状態')}: ${label}`}>
+    <summary title={tooltip} aria-label={`${text('Document save status', 'ドキュメントの保存状態')}: ${label}`} aria-description={cloudStatus}>
       <span className="document-artifact-status" aria-live="polite">{label}</span></summary>
     <div className="presentation-group-content">
       <DocumentSaveStatus detail />

@@ -2688,7 +2688,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             aria-label={workspaceSession?.presentationPreview ? t('Undo') : '↶ Undo'}
             className="aznet-btn workspace-history-action"
           >
-            <span aria-hidden="true">↶</span><span className="workspace-history-label"> {t('Undo')}</span>
+            <span aria-hidden="true">↶</span><span className="workspace-history-label"> {workspaceSession?.presentationPreview ? t('Undo') : 'Undo'}</span>
           </button>
           <button
             type="button"
@@ -2698,7 +2698,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             aria-label={workspaceSession?.presentationPreview ? t('Redo') : '↷ Redo'}
             className="aznet-btn workspace-history-action"
           >
-            <span aria-hidden="true">↷</span><span className="workspace-history-label"> {t('Redo')}</span>
+            <span aria-hidden="true">↷</span><span className="workspace-history-label"> {workspaceSession?.presentationPreview ? t('Redo') : 'Redo'}</span>
           </button>
 
           <PresentationGroup label={t('Checks')} title={t('Routing checks')}>

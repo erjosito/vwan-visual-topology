@@ -250,9 +250,9 @@ test.describe('VNet structure cloning', () => {
           defaultOutboundAccess: false, privateEndpointNetworkPolicies: 'Enabled' })
       }
       expect({ ...after, [mode === 'vwan' ? 'spokes' : 'vnets']: vnets.slice(0, 1) }).toEqual(before)
-      await page.getByRole('button', { name: ja && mode === 'vwan' ? /元に戻す/ : /Undo/ }).click()
+      await page.getByRole('button', { name: ja ? /元に戻す/ : /Undo/ }).click()
       await expect.poll(read).toEqual(before)
-      await page.getByRole('button', { name: ja && mode === 'vwan' ? /やり直す/ : /Redo/ }).click()
+      await page.getByRole('button', { name: ja ? /やり直す/ : /Redo/ }).click()
       await expect.poll(read).toEqual(after)
       await page.reload()
       await expect(page.getByTestId(mode === 'vwan' ? 'vwan-app' : 'aznet-app')).toBeVisible()

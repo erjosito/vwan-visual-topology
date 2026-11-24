@@ -53,7 +53,7 @@ test('preview native context actions edit the original appliance, release modal 
   await dialog.getByRole('menuitem', { name: 'Disable NIC IP Forwarding', exact: true }).click()
   await expect(dialog).toHaveCount(0)
   await expect.poll(async () => (await read()).vnets[0].appliances[0].enableIpForwarding).toBe(false)
-  await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
+  await page.getByRole('button', { name: 'Undo', exact: true }).click()
   expect(await read()).toEqual(before)
   await opener.click()
   await dialog.getByRole('button', { name: 'NVA: Original NVA', exact: true }).click({ button: 'right' })

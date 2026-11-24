@@ -53,6 +53,8 @@ try {
   })
   await page.reload()
   await page.getByTestId('aznet-app').waitFor()
+  const workspaceActions = page.getByRole('button', { name: 'Workspace actions', exact: true })
+  if (await workspaceActions.isVisible() && await workspaceActions.getAttribute('aria-expanded') === 'false') await workspaceActions.click()
   const emptyToolsOpener = page.getByRole('button', { name: 'Workspace controls', exact: true })
   if (await emptyToolsOpener.getAttribute('aria-expanded') !== 'true') await emptyToolsOpener.click()
   await expect(page.getByTestId('aznet-add-vwan-hub-btn')).toBeEnabled()

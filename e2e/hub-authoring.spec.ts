@@ -10,6 +10,7 @@ import '../src/route-map-messages-ja'
 import { vpnNatFixture } from '../tests/fixtures/vpn-nat'
 import { ALL_KNOWN_AZURE_REGIONS } from '../src/er-locations-catalog'
 import { projectAzFailures, projectVwanFailures } from '../src/failures'
+import { openWorkspaceActions } from './document-action-helpers'
 
 async function openRegionEditor(page: Page, mode: string, text: (value: string) => string) {
   const node = mode === 'vwan' ? page.locator('[data-node-id="hub-local"]') : page.getByTestId('aznet-vwanhub-hub-local')
@@ -77,8 +78,8 @@ for (const mode of ['vwan', 'full'] as const) for (const language of ['en', 'ja'
     expect(project(changed, [fault]).affected['hub-local']).toBeUndefined()
     expect(project(changed, [fault]).affected['other-hub']).toEqual([fault])
     const history = async (name: string) => {
-      const action = mode === 'vwan' ? page.getByRole('button', { name: text(name), exact: true }) : page.getByTitle(name, { exact: true })
-      if (!await action.isVisible()) await page.getByRole('button', { name: text('Workspace menu'), exact: true }).click()
+      const action = mode === 'vwan' ? page.getByRole('button', { name: text(name), exact: true }) : page.getByTitle(text(name), { exact: true })
+      if (!await action.isVisible()) await openWorkspaceActions(page)
       await action.click()
     }
     await history('Undo')
@@ -229,10 +230,8 @@ for (const profile of [
     await expect(nat.getByLabel(text('VPN NAT rule name'), { exact: true })).toHaveValue('')
     await connection.selectOption('vpn')
     const history = async (name: string) => {
-      const action = page.getByTitle(name, { exact: true })
-      if (!await action.isVisible()) await page.getByRole('button', {
-        name: profile.language === 'ja' ? 'ワークスペース メニュー' : 'Workspace menu', exact: true,
-      }).click()
+      const action = page.getByTitle(text(name), { exact: true })
+      if (!await action.isVisible()) await openWorkspaceActions(page)
       await action.click()
     }
     await history('Undo')

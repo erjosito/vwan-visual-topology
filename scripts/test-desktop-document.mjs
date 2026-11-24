@@ -58,6 +58,8 @@ try {
   expect(await save({ documentId, content: content('Released overwrite'), destinationToken: updated.value.token }))
     .toMatchObject({ ok: false, code: 'revoked' })
   const fileMenu = page.locator('.presentation-group').filter({ has: page.locator('summary', { hasText: /^File$/ }) })
+  const workspaceActions = page.getByRole('button', { name: 'Workspace actions', exact: true })
+  if (await workspaceActions.isVisible() && await workspaceActions.getAttribute('aria-expanded') === 'false') await workspaceActions.click()
   await fileMenu.locator('summary').click()
   await page.getByRole('button', { name: 'Load', exact: true }).click()
   await page.getByRole('dialog', { name: 'Load topology', exact: true }).getByRole('button', { name: 'Load file', exact: true }).click()
