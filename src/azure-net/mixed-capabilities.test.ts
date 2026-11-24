@@ -34,6 +34,23 @@ function mixedTopology() {
   return topology
 }
 
+function sharedCircuitTopology() {
+  const topology = mixedTopology()
+  topology.erLocations[0].globalReachEnabled = false
+  topology.vwanHubs.push({ ...topology.vwanHubs[0], id: 'remote', name: 'Remote' })
+  topology.vnets.push({
+    ...topology.vnets[1], id: 'remote-vnet', name: 'Remote VNet', prefixes: ['10.2.0.0/16'],
+    subnets: [{ id: 'remote-work', name: 'Work', prefix: '10.2.1.0/24' }],
+    vwanHubAttachment: { hubId: 'remote', enabled: true },
+  })
+  topology.sites.push({ id: 'er-customer', name: 'ER customer', asn: 64498, prefixes: ['172.18.0.0/24'] })
+  topology.erLinks.push(
+    { ...topology.erLinks[1], id: 'remote-er', name: 'Remote ER', targetId: 'remote' },
+    { id: 'customer-er', name: 'Customer ER', locationId: 'msee', targetKind: 'site', targetId: 'er-customer', enabled: true },
+  )
+  return topology
+}
+
 const rule = (values: Partial<RouteMapRule> = {}): RouteMapRule => ({
   id: 'rule', prefixes: [], match: 'equals', action: 'permit', summaryPrefixes: [], prepend: [], nextStep: 'terminate', ...values,
 })
@@ -271,6 +288,71 @@ describe('Mixed native capability bridge', () => {
     expect(reply.status).toBe('delivered')
     expect(forward.hops.filter((hop) => hop.nodeKind === 'vwan-hub').map((hop) => hop.nodeId)).toEqual(expect.arrayContaining(['wan', 'remote']))
     expect(forward.hops.filter((hop) => hop.hubTableId).every((hop) => hop.hubTableId === 'defaultRouteTable')).toBe(true)
+  })
+
+  it.each([false, true].flatMap((privatePolicy) => ([
+    ['ExpressRoute', 'ExpressRoute'], ['ExpressRoute', 'ASPath'],
+    ['ASPath', 'ExpressRoute'], ['ASPath', 'ASPath'],
+  ] as const).map(([localPreference, remotePreference]) => ({ privatePolicy, localPreference, remotePreference }))))(
+    'selects shared-circuit VNet paths using the receiving hub HRP: %j',
+    ({ privatePolicy, localPreference, remotePreference }) => {
+      const topology = sharedCircuitTopology()
+      topology.vwanHubs[0].preference = localPreference
+      topology.vwanHubs[1].preference = remotePreference
+      for (const hub of topology.vwanHubs) hub.routingIntent = { private: privatePolicy, internet: privatePolicy }
+      const simulation = simulateAzNet(topology)
+      expect(simulation.controlPlaneComplete).toBe(true)
+      for (const [hubId, prefix, source, destination, preference] of [
+        ['wan', '10.2.0.0/16', { kind: 'subnet', vnetId: 'spoke', subnetId: 'wan-work' }, '10.2.1.4', localPreference],
+        ['remote', '10.1.0.0/16', { kind: 'subnet', vnetId: 'remote-vnet', subnetId: 'remote-work' }, '10.1.1.4', remotePreference],
+      ] as const) {
+        const routes = simulation.vwanHubRibs[hubId].filter((route) => route.prefix === prefix)
+        const asPath = preference === 'ASPath' ? [12076, 12076, 12076] : [12076, 12076]
+        expect(routes.filter((route) => route.originProtocol === 'ExpressRoute')).toEqual([
+          expect.objectContaining({ asPath, preferred: preference !== 'ASPath' }),
+        ])
+        expect(routes.filter((route) => route.originProtocol === 'InterHub')).toEqual([
+          expect.objectContaining({ asPath: [65520, 65520], preferred: preference === 'ASPath' }),
+        ])
+        const flow = traceAzNetFlow(topology, simulation, source, destination)
+        expect(flow.status, flow.summaryReason).toBe('delivered')
+        expect(flow.hops.some((hop) => hop.nodeKind === 'er-location')).toBe(preference !== 'ASPath')
+        expect(flow.traversedEdgeIds.includes('wan-er')).toBe(preference !== 'ASPath')
+        expect(flow.traversedEdgeIds.includes('remote-er')).toBe(preference !== 'ASPath')
+        expect(simulation.vwanHubRibs[hubId]).toEqual(expect.arrayContaining([
+          expect.objectContaining({ prefix: '10.0.0.0/16', originProtocol: 'ExpressRoute', asPath: [12076], preferred: true }),
+          expect.objectContaining({ prefix: '172.18.0.0/24', originProtocol: 'ExpressRoute', asPath: [12076, 64498], preferred: true }),
+        ]))
+      }
+      expect(simulation.erLocationRibs.msee.filter((route) => route.preferred && ['10.1.0.0/16', '10.2.0.0/16'].includes(route.prefix)))
+        .toEqual(expect.arrayContaining([
+          expect.objectContaining({ prefix: '10.1.0.0/16', asPath: [12076] }),
+          expect.objectContaining({ prefix: '10.2.0.0/16', asPath: [12076] }),
+        ]))
+    },
+  )
+
+  it('preserves ER export policy and receiving link prepends around reflected VNet provider hops', () => {
+    const topology = sharedCircuitTopology()
+    topology.vwanHubs[0].preference = 'ASPath'
+    topology.erLinks[1].prepend = [64497]
+    topology.routeMaps = [
+      { id: 'remote-er-export', name: 'Remote ER export', hubId: 'remote',
+        rules: [rule({ prefixes: ['10.2.0.0/16'], action: 'prepend', prepend: [64496] })] },
+      { id: 'no-reflection-export', name: 'Keep original ER advertisement', hubId: 'wan',
+        rules: [rule({ prefixes: ['10.2.0.0/16'], action: 'drop' })] },
+    ]
+    topology.vwanHubs[0].routeMapAssignments = [{ connectionId: 'wan-er', outboundMapId: 'no-reflection-export' }]
+    topology.vwanHubs[1].routeMapAssignments = [{ connectionId: 'remote-er', outboundMapId: 'remote-er-export' }]
+    const simulation = simulateAzNet(topology)
+    expect(simulation.controlPlaneComplete).toBe(true)
+    expect(simulation.vwanHubRibs.wan).toContainEqual(expect.objectContaining({
+      prefix: '10.2.0.0/16', originProtocol: 'ExpressRoute',
+      asPath: [64497, 12076, 12076, 12076, 64496], preferred: false,
+    }))
+    expect(simulation.vwanHubRibs.wan).toContainEqual(expect.objectContaining({
+      prefix: '10.2.0.0/16', originProtocol: 'InterHub', asPath: [65520, 65520], preferred: true,
+    }))
   })
 
   it('advertises an Internet-intent default only on opt-in connections and respects outbound policy', () => {

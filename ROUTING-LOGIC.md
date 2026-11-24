@@ -5,6 +5,30 @@ scoped comparisons and conservative unknown coverage are described in
 [hub route-table contexts](docs/hub-route-table-contexts.md). Historical
 Default-only scope statements below describe their reviewed revision.
 
+**November 24 shared-circuit calibration:** Full Hybrid routing models
+VNet-origin routes reflected from one VWAN hub through a shared ExpressRoute
+attachment into another with two provider ASNs (`12076-12076`) for non-ASPath
+HRP and three (`12076-12076-12076`) for ASPath HRP. The receiving hub's HRP
+controls this learned-hub representation, before its inbound route map.
+Configured public-AS prepends are preserved. MSEE and customer-facing paths,
+classic VNet gateway imports, and VPN/NVA/customer-origin routes retain their
+existing processing. This is not a change to the standalone VWAN provider,
+whose independent-circuit abstraction does not simulate shared-circuit reflection.
+
+The three-hop reflected VNet path is an explicitly adopted **hypothesis**, not
+a claim about Azure's internal BGP implementation. Controlled tests on two
+secured hubs, changing one HRP at a time through all four ExpressRoute/ASPath
+combinations and restoring ASPath, found remote VNets selected through ER under
+ExpressRoute HRP and through the inter-hub link under ASPath. ER-only remote hub
+infrastructure prefixes consistently reported two provider ASNs under
+ExpressRoute and three under ASPath, while both MSEE Azure-prefix tables stayed
+unchanged. The losing ER VNet candidates were not exposed: connection-level
+inbound/outbound APIs returned empty arrays. Their three-hop representation is
+inferred from those controls; actual wire-path rewriting, hidden communities
+and local preference remain unproven. VPN HRP uses the non-ASPath representation
+without a separate live-Azure qualification. No unconditional VNet preference
+or invented BGP attribute is added.
+
 **November 14 live calibration:** the
 [controlled Azure/Megaport report](https://github.com/erjosito/vwan-hrp-custom-tables-lab-20261114)
 records actual source withdrawal/restoration, native hub RIBs, internal VPN
