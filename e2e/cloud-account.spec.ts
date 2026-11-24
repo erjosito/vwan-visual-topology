@@ -519,7 +519,7 @@ for (const [mode, topology] of [['vwan', example], ['hub-spoke', sampleHubSpokeF
       await expect(statusDetails).toHaveAttribute('title', new RegExp(matchesDetail))
       if (mode === 'vwan') await page.locator('.topology-name').fill('Edited design')
       else {
-        await page.getByRole('button', { name: text('Workspace controls', 'ワークスペースの操作'), exact: true }).click()
+        await page.getByTitle(text('Workspace controls', 'ワークスペースの操作'), { exact: true }).click()
         await page.getByRole('complementary').getByRole('searchbox').fill('VNet')
         await page.getByTestId('aznet-add-vnet-btn').click()
         await page.keyboard.press('Escape')
@@ -599,7 +599,7 @@ test('an acknowledged upload keeps later edits dirty and imports open independen
     await expect.poll(() => [...service.data.keys()].filter(key => key.includes('/topologies/')).length).toBe(1)
     const [, uploaded] = [...service.data].find(([key]) => key.includes('/topologies/'))!
     await page.getByRole('dialog', { name: 'Cloud account', exact: true }).getByRole('button', { name: 'Close', exact: true }).click()
-    await page.getByRole('button', { name: 'Workspace controls', exact: true }).click()
+    await page.getByTitle('Workspace controls', { exact: true }).click()
     await page.getByRole('complementary').getByRole('searchbox').fill('VNet')
     await page.getByTestId('aznet-add-vnet-btn').click()
     await page.keyboard.press('Escape')

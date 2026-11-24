@@ -34,7 +34,7 @@ for (const mode of ['hub-spoke', 'full']) {
       const read = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
       const open = async () => {
         await openWorkspaceActions(page)
-        await page.getByRole('button', { name: text('Workspace controls'), exact: true }).click()
+        await page.getByTitle(text('Workspace controls'), { exact: true }).click()
         await page.getByTestId('aznet-route-table-library-btn').click()
       }
       const manager = page.getByTestId('udr-table-manager')
@@ -102,7 +102,7 @@ for (const mode of ['hub-spoke', 'full']) {
       localStorage.setItem('aznet-workspace-tools:v1', 'closed')
     })
     await page.goto(`/?mode=${mode}`)
-    await page.getByRole('button', { name: 'Workspace controls', exact: true }).click()
+    await page.getByTitle('Workspace controls', { exact: true }).click()
     await page.getByTestId('aznet-add-rt-topbar-btn').click()
     const manager = page.getByTestId('udr-table-manager'), form = manager.getByTestId('udr-create-form')
     await expect(manager).toContainText('Unsaved configuration changes.')

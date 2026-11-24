@@ -178,7 +178,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     const canvas = page.locator(mode === 'vwan' ? '.canvas-stage' : '.aznet-canvas-shell')
     const toolsBounds = (await tools.boundingBox())!
     expect((await canvas.boundingBox())!.x).toBeGreaterThanOrEqual(toolsBounds.x + toolsBounds.width)
-    const toolsOpener = page.getByRole('button', { name: 'Workspace controls', exact: true })
+    const toolsOpener = page.getByTitle('Workspace controls', { exact: true })
     await toolsOpener.click()
     await expect(tools).toHaveCount(0)
     await toolsOpener.click()

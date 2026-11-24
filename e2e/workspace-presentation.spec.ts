@@ -32,11 +32,11 @@ for (const width of [1440, 390]) {
     let headerDisclosureActions = 0
     for (let i = 0; i < 2; i++) {
       if (!await tools.isVisible()) {
-        if (!await page.getByRole('button', { name: 'Workspace controls', exact: true }).isVisible()) {
+        if (!await page.getByTitle('Workspace controls', { exact: true }).isVisible()) {
           await page.getByRole('button', { name: 'Workspace actions', exact: true }).click()
           headerDisclosureActions++
         }
-        await page.getByRole('button', { name: 'Workspace controls', exact: true }).click()
+        await page.getByTitle('Workspace controls', { exact: true }).click()
         paletteOpenActions++
       }
       await tools.getByRole('searchbox').fill('+ VNet')
@@ -280,7 +280,7 @@ test.describe('subnet and gateway menu disclosure', () => {
       await page.keyboard.press('Escape')
       // Visible Workspace controls still use the full, ungrouped source catalog.
       await subnet.click()
-      await page.getByRole('button', { name: language === 'ja' ? 'ワークスペースの操作' : 'Workspace controls', exact: true }).click()
+      await page.getByTitle(language === 'ja' ? 'ワークスペースの操作' : 'Workspace controls', { exact: true }).click()
       const tools = page.getByRole('complementary')
       await tools.getByRole('searchbox').fill('Enable GWroutes')
       await expect(tools.getByRole('button', { name: 'Enable GWroutes Propagation on Route Table', exact: true })).toBeVisible()

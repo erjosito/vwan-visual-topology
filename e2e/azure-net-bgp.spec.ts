@@ -535,7 +535,7 @@ for (const mode of ['hub-spoke', 'full']) {
     await expect(table.getByTestId('aznet-route-row-172.16.0.0/24-User').locator('.as-path')).toHaveText('—')
     await expect(table.getByTestId('aznet-route-row-10.0.0.0/16-System').locator('.as-path')).toHaveText('—')
     const dialog = page.getByRole('dialog', { name: 'Effective routes', exact: true })
-    await page.getByRole('button', { name: 'Workspace controls', exact: true }).click()
+    await page.getByTitle('Workspace controls', { exact: true }).click()
     expect((await dialog.boundingBox())!.width).toBeGreaterThan(1000)
     const scroller = table.locator('..')
     expect(await scroller.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)

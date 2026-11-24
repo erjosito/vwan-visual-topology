@@ -67,7 +67,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full'] as const) {
     const original = (await page.evaluate((key) => localStorage.getItem(key), key))!
     const saved = JSON.parse(original)
     const node = mode === 'vwan' ? (saved.topology ?? saved).hubs[0] : saved.topology.vnets[0]
-    const opener = page.getByRole('button', { name: toolsName, exact: true })
+    const opener = page.getByTitle(toolsName, { exact: true })
     await opener.click()
     const tools = page.getByRole('complementary', { name: toolsName, exact: true })
     await tools.getByRole('searchbox').fill(node.id)
