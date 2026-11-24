@@ -57,9 +57,15 @@ export function outcomeFor(exercise: Exercise, result: PlatformResult): Attempt[
     || result.revision !== revisionOf(result.document)
     || result.assessments.length !== ids.length || new Set(result.assessments.map((item) => item.id)).size !== ids.length
     || ids.some((id) => !result.assessments.some((item) => item.id === id))
-    || result.assessments.some((item) => !['satisfied', 'violated'].includes(item.outcome)
-      || item.coverage && (!item.coverage.complete || item.coverage.revision !== result.revision
-        || item.coverage.engineVersion !== engineVersion || item.coverage.limitationIds.length))) return 'not assessed'
+    || result.assessments.some((item) => {
+      const coverage = item.coverage, requirement = exercise.requirements.find(requirement => requirement.id === item.id)
+      return !['satisfied', 'violated'].includes(item.outcome) || coverage && (!coverage.complete
+        || coverage.provider !== 'azure-net' || result.document?.mode === 'vwan' || coverage.revision !== result.revision
+        || coverage.engineVersion !== engineVersion || coverage.limitationIds.length || requirement?.kind !== 'route'
+        || (requirement.hubTableId !== undefined
+          ? coverage.scope.kind !== 'hub-table' || coverage.scope.hubId !== requirement.table || coverage.scope.tableId !== requirement.hubTableId
+          : coverage.scope.kind !== 'subnet-table' || coverage.scope.subnetId !== requirement.table))
+    })) return 'not assessed'
   return result.assessments.every((item) => item.outcome === 'satisfied') ? 'satisfied' : 'violated'
 }
 

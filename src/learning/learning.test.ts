@@ -64,6 +64,8 @@ describe('reviewed local practice rubrics', () => {
     expect(outcomeFor(exercise, { ...result, revision: 'stale' })).toBe('not assessed')
     expect(outcomeFor(exercise, { ...result, assessments: [{ ...result.assessments[0],
       coverage: { ...result.assessments[0].coverage!, complete: false } }] })).toBe('not assessed')
+    expect(outcomeFor(exercise, { ...result, assessments: [{ ...result.assessments[0],
+      coverage: { ...result.assessments[0].coverage!, scope: { kind: 'subnet-table', subnetId: 'app' } } }] })).toBe('not assessed')
     requirements[0].table = 'app'
     topology.warningAcknowledgements = ['warning:v1:aznet:00000000000000000000000000000000']
     const affected = executePlatform({ contractVersion: 1, operation: 'evaluate', document, requirements })
