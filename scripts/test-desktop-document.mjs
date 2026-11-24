@@ -14,6 +14,7 @@ try {
     args: [resolve('platform-dist', 'electron', 'main.cjs'), `--user-data-dir=${join(directory, 'profile')}`],
   })
   const page = await application.firstWindow()
+  await application.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0].setSize(1200, 900) })
   await page.getByTestId('aznet-app').waitFor()
   await application.evaluate(({ dialog }, { source, copy }) => {
     globalThis.documentDialogPicks = 0
@@ -59,8 +60,11 @@ try {
     .toMatchObject({ ok: false, code: 'revoked' })
   const fileMenu = page.locator('.presentation-group').filter({ has: page.locator('summary', { hasText: /^File$/ }) })
   const workspaceActions = page.getByRole('button', { name: 'Workspace actions', exact: true })
-  if (await workspaceActions.isVisible() && await workspaceActions.getAttribute('aria-expanded') === 'false') await workspaceActions.click()
-  await fileMenu.locator('summary').click()
+  const openFileMenu = async () => {
+    if (await workspaceActions.isVisible() && await workspaceActions.getAttribute('aria-expanded') === 'false') await workspaceActions.click()
+    await fileMenu.locator('summary').click()
+  }
+  await openFileMenu()
   await page.getByRole('button', { name: 'Load', exact: true }).click()
   await page.getByRole('dialog', { name: 'Load topology', exact: true }).getByRole('button', { name: 'Load file', exact: true }).click()
   await expect(page.getByLabel('Topology name', { exact: true })).toHaveValue('Saved')
@@ -85,13 +89,15 @@ try {
   await application.evaluate(({ dialog }, third) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [third] })
   }, third)
-  await fileMenu.locator('summary').click()
+  await openFileMenu()
   await page.getByRole('button', { name: 'Load', exact: true }).click()
   await page.getByRole('dialog', { name: 'Load topology', exact: true }).getByRole('button', { name: 'Load file', exact: true }).click()
   await expect(page.getByRole('tab')).toHaveCount(3)
   await expect(page.getByRole('tab', { name: 'UI saved after reload', exact: true })).toHaveCount(2)
   const closes = page.locator('.workspace-tab-close')
   await expect(closes).toHaveCount(3)
+  const tools = page.getByRole('complementary', { name: 'Workspace controls', exact: true })
+  if (await tools.isVisible()) await tools.getByRole('button', { name: 'Close workspace controls', exact: true }).click()
   await application.evaluate(({ BrowserWindow }) => {
     const window = BrowserWindow.getAllWindows()[0]
     window.setSize(900, 900)
