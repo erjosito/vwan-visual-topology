@@ -4,7 +4,7 @@
 
 One formative maintainer review identified browser scrolling in the main app:
 the top menu and bottom zoom controls should be visible together. #450 handles
-viewport containment and fit-aware manual zoom separately from this research.
+viewport containment and fit-aware manual zoom in #451, separately from this research.
 Saved-coordinate diagrams remain the default; the dense-view review currently
 prefers lanes as an opt-in follow-up and rejects matrix/regional replacements.
 Focus scope now explains its effect and is disabled in inapplicable alternatives.

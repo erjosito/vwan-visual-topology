@@ -361,6 +361,13 @@ The review also found that Focus scope did nothing in other alternatives.
 It is now disabled outside `focus`, with an explanation; in focus, status names
 the scope and the chain changes stroke dashing/opacity without moving nodes.
 Manual zoom's 65% floor versus Fit view's roughly 31%, and browser scrolling
-in the main app, are tracked in #450 and fixed separately in production.
+in the main app, are tracked in #450 and fixed separately in production by #451.
 The maintainer explicitly deprioritized comparison-page scrolling; its layout
 is not changed by this feedback update.
+
+The review integration passes 14 source browser cases with one worker and zero
+retries: native graph/focus preservation, the new scope regression, historical
+geometry, semantic inspection and both current-UI audits. Application/research
+type checks, lint, configured build, four static-artifact checks and all three
+startup/optional-panel/first-switch cases pass with unchanged byte ceilings.
+These checks do not replace the human study still required above.
