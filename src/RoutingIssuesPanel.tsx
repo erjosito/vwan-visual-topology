@@ -9,8 +9,10 @@ import type { ObjectSelection, RouterSelection, Topology } from './model'
 import { topologyObject } from './model'
 import { isolationLinkName } from './resilience'
 import { Explain } from './learning/Explain'
+import { canAcknowledgeWarning, orderWarningFindings } from './warning-acknowledgements'
+import { WarningAcknowledgement } from './WarningAcknowledgement'
 
-export function RoutingIssuesPanel({ topology, report, findingId, selectedFindingId, coverageOpen, onFinding, onShowAll, onInspect, onEditObject, onOpenStaticRouting, onAssignPrefixToSite, onClose }: {
+export function RoutingIssuesPanel({ topology, report, findingId, selectedFindingId, coverageOpen, onFinding, onShowAll, onInspect, onEditObject, onOpenStaticRouting, onAssignPrefixToSite, isAcknowledged, onAcknowledge, onRestoreAll, onClose }: {
   topology: Topology; report: DiagnosticsReport; findingId?: string; selectedFindingId?: string; coverageOpen?: boolean
   onFinding: (finding: DiagnosticsFinding) => void; onInspect: (object: ObjectSelection) => void
   onEditObject?: (object: ObjectSelection) => void
@@ -18,24 +20,33 @@ export function RoutingIssuesPanel({ topology, report, findingId, selectedFindin
   onAssignPrefixToSite?: (siteId: string, prefixes: string[]) => void
   onClose: () => void
   onShowAll: () => void
+  isAcknowledged: (finding: DiagnosticsFinding) => boolean
+  onAcknowledge: (finding: DiagnosticsFinding, acknowledged: boolean) => void
+  onRestoreAll: () => void
 }) {
   const [filter, setFilter] = useState('')
   const [visibleCount, setVisibleCount] = useState(50)
   const name = (node?: ObjectSelection) => node ? topologyObject(topology, node)?.name ?? node.id : ''
   const coverage = summarizeCoverage(report)
   const allActionable = report.findings.filter((finding) => finding.severity !== 'info' && finding.severity !== 'unknown')
-  const findings = allActionable.filter((finding) => (!findingId || finding.id === findingId)
+  const findings = orderWarningFindings(allActionable.filter((finding) => (!findingId || finding.id === findingId)
     && (!filter || (finding.occurrences ?? [finding]).some((entry) =>
       [entry.prefix, entry.sourceAddress, entry.destinationAddress, name(entry.source), name(entry.target), t(entry.title), t(entry.detail)]
-        .some((value) => value?.toLocaleLowerCase().includes(filter.toLocaleLowerCase())))))
+        .some((value) => value?.toLocaleLowerCase().includes(filter.toLocaleLowerCase()))))), isAcknowledged)
   const severity = { error: 'Error', warning: 'Warning', unknown: 'Not assessed', info: 'Information' } as const
   return <CanvasOverlay title={t('Routing issues')} className="routing-issues-panel" onClose={onClose}>
     {findingId && <div className="row"><span className="muted">{t('Showing selected issue ({0} of {1})', findings.length, allActionable.length)}</span><button onClick={onShowAll}>{t('Show all routing issues')}</button></div>}
     <p className="muted">{t('Checks cover modeled connectivity between assigned networks and saved requirements. Intentional isolation may need an explicit requirement. Actual hosts, firewall rules and NAT are not verified.')}</p>
+    <p data-testid="warning-attention-count" role="status">{t('{0} findings need attention · {1} acknowledged · {2} total', allActionable.filter((finding) => !isAcknowledged(finding)).length, allActionable.filter(isAcknowledged).length, report.findings.length)}</p>
+    <p className="muted">{t('Acknowledgement is saved with this design. It does not fix a warning or change routing checks; changed evidence needs attention again.')}</p>
+    {!!topology.warningAcknowledgements?.length && <button onClick={onRestoreAll}>{t('Restore all warning attention')}</button>}
     <AnalysisCoverage report={report} topology={topology} initiallyOpen={coverageOpen} onEditObject={onEditObject} onOpenStaticRouting={onOpenStaticRouting} onAssignPrefixToSite={onAssignPrefixToSite} />
     <label className="field"><span>{t('Filter by prefix or endpoint')}</span><input aria-label={t('Filter routing issues')} value={filter} onChange={(event) => { setFilter(event.target.value); setVisibleCount(50) }} /></label>
-    <div className="flow-results">{findings.slice(0, visibleCount).map((finding) => <article key={finding.id} className={`diagnostic-finding ${finding.severity}`}>
+    <div className="flow-results">{findings.slice(0, visibleCount).map((finding, index) => <div key={finding.id}>
+      {isAcknowledged(finding) && (index === 0 || !isAcknowledged(findings[index - 1])) && <h3 className="warning-acknowledged-heading">{t('Acknowledged warnings')}</h3>}
+      <article data-finding-id={finding.id} className={`diagnostic-finding ${finding.severity}${isAcknowledged(finding) ? ' acknowledged-warning' : ''}`}>
       <div className="row"><span className="diagnostic-severity">{t(severity[finding.severity])}</span><button className="finding-title" aria-pressed={selectedFindingId === finding.id} onClick={() => onFinding(finding)}>{t(finding.title)}</button></div>
+      {canAcknowledgeWarning(finding) && <WarningAcknowledgement acknowledged={isAcknowledged(finding)} onChange={(acknowledged) => onAcknowledge(finding, acknowledged)} />}
       <p>{t(finding.detail)}</p>
       <Explain concept="coverage" evidence={[t(finding.detail), ...finding.forward.flatMap((path) => path.steps), ...finding.reverse.flatMap((path) => path.steps)]} />
       <FindingFlows finding={finding} topology={topology} onFinding={onFinding} />
@@ -59,7 +70,7 @@ export function RoutingIssuesPanel({ topology, report, findingId, selectedFindin
           </details>)}
         </div>)}
       </details>
-    </article>)}</div>
+    </article></div>)}</div>
     {!findings.length && <p className="empty">{t(coverage.scanIncomplete
       ? 'No matching issues. The incomplete check is not a clean bill of health.'
       : coverage.noCheckablePairs || (coverage.unassignedPrefixes.length > 0 && report.probes === 0)

@@ -1,4 +1,4 @@
-# Optional personal Microsoft accounts and private cloud storage
+# Optional personal Microsoft accounts, private cloud storage and sharing
 
 This feature is optional and disabled until configured. Anonymous simulation,
 local files and the Electron application continue to work without signing in.
@@ -7,6 +7,8 @@ supported. Work/school accounts and Entra External ID external tenants are not
 configured by this implementation.
 
 The browser uses Microsoft's hosted sign-in and PKCE through MSAL Browser.
+Configured Windows builds use the system browser and MSAL Node in Electron's
+main process; tokens never enter the canvas renderer.
 An Azure Functions v4 API validates delegated access tokens and accesses a
 private Blob Storage container through managed identity. Users do not grant
 Microsoft Graph permissions or access to their Azure subscriptions.
@@ -19,16 +21,106 @@ automatically. **Cloud account > Import anonymous progress** requires confirmati
 and keeps the anonymous original. Import only history that belongs to you.
 Awards and belts remain self-reported learning records, not verified certification.
 
-Topologies upload only through an explicit **Save to cloud** action and a
-confirmation. The library supports named saves, loading, replacing and deletion.
+Topologies upload only through an explicit **Save as new cloud copy**,
+**Update linked cloud save** or **Overwrite cloud save** action and confirmation.
+The library supports named saves, loading, replacing and deletion.
 Saving preserves the native topology format. Loading replaces the active design
 through normal workspace admission; it does not deploy Azure resources. Export
 any design you want to keep before loading another.
+
+The header separates **Saved locally** (this browser or desktop profile, not a
+JSON backup) from the current design's cloud relationship. **Matches last confirmed
+cloud save** compares the design with the last acknowledged upload or load, not
+continuous cloud synchronization. Later edits remain visibly unuploaded, including
+edits made while an older snapshot uploads. A failed operation does not confirm
+a save. Refreshing the cloud library can report a changed or missing record, but
+never silently advances the linked write revision; review and explicitly select
+the desired record before overwriting it.
+
+**Update linked cloud save** retains that save's ID and conditional revision.
+**Save as new cloud copy** creates another record and links this design to the
+new copy. The account-scoped link survives a reload in the same tab using bounded
+sessionStorage metadata: ID/name, provider, ETag and a content fingerprint, never
+another topology copy. If metadata storage is unavailable, the dialog warns that
+the link cannot be retained. Sign-out/account changes, new designs, accepted
+imports and samples clear the link. Practice and read-only shares do not change
+the normal design's status. There are no background topology uploads or polling.
 
 Do not upload credentials or confidential network configuration without approval.
 Topology inventory, addresses, names and retained native JSON fields are included.
 The API does not store account email or display name. It derives a storage owner
 from the validated token issuer and subject, not a browser-supplied user ID.
+
+## Read-only sharing
+
+**Cloud account > Share saved version** selects an existing owned save;
+**Enable a 30-day link** requires separate confirmation. Saving privately does
+not enable sharing. Unsaved workspace edits are never uploaded by sharing.
+**Manage shared links** lists and revokes links, including links for deleted
+saves. A stale library ETag prevents issuance; refresh cloud topologies first.
+
+The approved policy is **anyone with the link**, **latest cloud-saved version**,
+**read only**, with **30-day expiry** and owner revocation. Later saves and
+renames appear when the recipient refreshes the view. The heading identifies
+this as the latest saved version at the last refresh, with its exact cloud
+revision (ETag), not a live editor or a pinned snapshot. Native topology IDs,
+fields and manual coordinates are retained;
+both native network formats (classic VWAN and mixed/H&S/Full) use their existing
+diagram renderers without editor, import or owner-write handlers.
+
+Opening a share never loads it into the recipient's design or practice session.
+An already open workspace remains mounted but hidden, so returning preserves
+drafts/history. A fresh share tab does not mount a workspace until Return is
+selected. Signed-in recipients may explicitly export JSON or save a new record
+in **their own** cloud library, never the owner's record. Anonymous import/export
+of ordinary local designs is unchanged. Anyone who can view the document can
+technically extract its data; this login-gated copy UI is not DRM.
+
+Revocation, expiry, a missing source or deletion of its stored owner data prevents
+future resolution. Conditional overwrites preserve a server-controlled blob
+incarnation; deletion/recreation gets a new incarnation, so an old link cannot
+resurrect even when an owner reuses the topology UUID. Pre-sharing blobs acquire
+incarnation metadata conditionally on first issuance without changing their JSON
+(their ETag/last-modified time advances; refresh the library). Signing out does
+not revoke shares. Deleting a Microsoft account does not notify this independent
+store: revoke links **before** account deletion, or have the operator erase that
+owner's stored data; otherwise existing links can remain usable until expiry.
+Already downloaded data and copies cannot be recalled.
+
+Links contain a random 256-bit capability in the URL fragment, not a topology,
+owner ID, storage path, bearer token or SAS. The anonymous resolver is exclusively
+`POST /cloud/shared` with a small JSON body, not a token-bearing request URL.
+`GET/PUT/DELETE /cloud/shares` remain bearer-authenticated and owner-scoped;
+ordinary progress/topology APIs remain private. Public resolution also requires
+the owner's private index record, valid expiry and the original incarnation.
+Public/private responses use `no-store`, `nosniff`, `no-referrer` and no-index
+headers; the app already applies a global no-referrer policy. Do not log request
+bodies, fragments, authorization headers or share records in API/proxy/analytics
+instrumentation. Hashes of capabilities, not capabilities, name resolver blobs.
+
+The application bounds resolver bodies to 1 KiB, issuance to 2 KiB, documents to
+4 MiB, a best-effort threshold of 50 share records per owner (including expired
+records until revoked), resolver work to 8 concurrent
+requests and 120 requests/minute per Function instance, and issuance to 6/minute
+per owner per instance. The record threshold is not an atomic storage quota;
+simultaneous issuances may exceed it. Throttling returns 429/Retry-After. Instance quotas reset
+on restart and are **not a distributed or per-IP abuse control**. A public
+production deployment should additionally configure its gateway/WAF's aggregate
+rate, concurrency and cost limits appropriate to replica count and anticipated
+traffic. Do not trust caller-supplied forwarded IP headers for authorization.
+
+The legacy `#s=...` reader remains as a deprecated **read-only embedded snapshot**,
+not the latest saved version. Its UI warns that old links cannot expire or be
+revoked; it never replaces the workspace or auto-uploads. New full-payload URL
+generation has been removed. Cloud-link creation/resolution needs configured web
+cloud support and connectivity; unavailable, expired and revoked views preserve
+the local design. Electron does not create/manage or resolve cloud sharing links.
+Local JSON files remain its sharing alternative; legacy
+snapshots can still be viewed locally without uploading.
+
+These are source changes, not deployment instructions being executed. Deploy
+matching frontend **and** backend versions deliberately before qualifying real
+sharing. Older APIs report sharing unavailable; there is no embedded-URL fallback.
 
 ## Register the applications
 
@@ -62,8 +154,18 @@ workforce tenant; do not broaden their supported account types to work around th
 The authority is fixed to `https://login.microsoftonline.com/consumers`.
 The API accepts v2 tokens only, for the personal-account tenant
 `9188040d-6c67-4c5b-b112-36a304b66dad`. It verifies signature, issuer, expiration,
-not-before time, API audience, the authorized SPA client ID and `Cloud.Access`.
+not-before time, API audience, an explicitly authorized client ID and `Cloud.Access`.
 An ID token or a token for Microsoft Graph is not an API access token.
+
+The optional `CLOUD_DESKTOP_CLIENT_ID` setting authorizes one additional desktop
+public client without changing the existing web client or storage owner derivation.
+Register it for personal Microsoft accounts, grant the same API's delegated
+`Cloud.Access` permission and configure its desktop redirect URI before enabling
+the desktop client. Do not broaden the account audience or accept arbitrary
+client IDs. A matching verified issuer/subject retains the same storage owner
+across clients; real personal-account web/desktop interoperability still needs
+live qualification. This backend capability alone does not enable Electron login; the Windows build
+also needs the desktop configuration below.
 
 See Microsoft's [supported account types](https://learn.microsoft.com/en-us/entra/identity-platform/v2-supported-account-types)
 and [MSAL v5 redirect bridge](https://learn.microsoft.com/en-us/entra/msal/javascript/browser/redirect-bridge).
@@ -99,6 +201,81 @@ reverse proxy, because it breaks the MSAL v5 response channel. Browsers blocking
 third-party cookies or requiring fresh consent may still require
 **Sign in again / switch account**.
 
+## Configure Windows cloud sign-in
+
+Create a separate **Personal Microsoft accounts only** public-client registration.
+Under **Mobile and desktop applications**, register `http://localhost` as the
+redirect URI (not an SPA or confidential Web redirect). Grant the existing API's
+delegated `Cloud.Access` permission and obtain any required administrator consent.
+Do not add a secret, implicit grants, Graph permissions or Azure subscription
+permissions. The application uses authorization code + S256 PKCE, a random OAuth
+state and an ephemeral loopback port bound only to `127.0.0.1`. Microsoft ignores
+the port for the registered localhost desktop redirect.
+
+Set `CLOUD_DESKTOP_CLIENT_ID` on the matching Function (or the Bicep
+`desktopClientId` parameter), leaving `CLOUD_CLIENT_ID` unchanged. Deploy the
+backend allowlist support before testing desktop API access.
+
+These are public, **build-time** Windows settings:
+
+```powershell
+$env:AZNET_DESKTOP_CLOUD_CLIENT_ID = '<desktop-public-client-ID>'
+$env:AZNET_DESKTOP_CLOUD_API_SCOPE = 'api://<existing-API-client-ID>/Cloud.Access'
+$env:AZNET_DESKTOP_CLOUD_API_BASE_URL = 'https://<function-host>/api/cloud'
+npm run build:desktop
+```
+
+The API base must be an absolute HTTPS URL, not the web build's optional relative
+`/api/cloud`. CI uses repository variables `AZNET_DESKTOP_CLOUD_CLIENT_ID`,
+`AZNET_DESKTOP_CLOUD_API_BASE_URL` and the existing `VITE_CLOUD_API_SCOPE`.
+Missing/invalid configuration leaves sign-in unavailable without disabling local
+simulation. The build embeds these settings in the main bundle; changing
+environment variables after installation cannot redirect the app's cloud API.
+Never put credentials in any of these variables.
+
+Sign-in opens the system browser, not an Electron login window. **Cancel sign-in**,
+sign-out, a two-minute callback timeout and quitting the app close the listener.
+Only fixed, schema-checked library/progress/sharing-management operations cross
+guarded IPC; there is no renderer HTTP proxy, raw token or arbitrary URL API.
+The canvas keeps its existing CSP, blocked external network, sandbox and
+context isolation. Main-process API calls omit cookies, reject redirects, bound
+responses to 4 MiB and retain conditional ETags and account-generation checks.
+They do not require a new browser CORS origin.
+
+Tokens and the selected account are stored only in the current desktop profile's
+`desktop-cloud-cache.v1.bin`, encrypted using Electron `safeStorage` (Windows
+DPAPI). Unavailable OS encryption fails closed; there is no plaintext fallback.
+An unreadable cache leaves the app signed out with explicit sign-in available.
+Unavailable OS encryption prevents opening the sign-in browser.
+Configured builds allow one instance per profile to avoid competing credential
+writers. Startup restores only the deliberately selected cached account; it
+does not launch a browser or automatically upload designs. API access renews
+tokens silently when possible. Expired consent requires explicit sign-in.
+**Sign out of this app** cancels old requests and removes the app's credential
+cache; it does not sign out the system browser, revoke existing shares or erase
+local topology/progress data. Export backups before removing an entire profile.
+Switching accounts invalidates old library handles and pending replies.
+
+Cloud library CRUD and learning progress use the existing account workflows.
+Creating/managing sharing links and resolving links remain web-only in the UI;
+desktop must not generate unusable `app://` sharing URLs. Azure resource collection
+still uses its separate, explicitly chosen local Azure CLI session.
+
+### Rollout qualification
+
+Source integration and mocked tests do not establish successful production sign-in.
+Before enabling/publishing a configured installer, verify an installed Windows
+build with a real personal Microsoft account: consent, cancel/retry, restart and
+silent renewal, account switch, sign-out, offline launch and failed API access.
+Check that an existing web-created save and curriculum history appear in desktop,
+and a desktop-created save/update appears on web with the same account. Verify a
+different account cannot see either library and stale ETags still return 412.
+The backend's unchanged issuer/subject owner derivation must be qualified with
+real web/desktop access tokens; synthetic equal-claim tests are not proof that
+the registrations produce the same owner. If they differ, stop rollout and plan
+an explicit identity migration rather than silently creating a second library.
+Do not log/copy tokens or cache plaintext while diagnosing this.
+
 ## Configure the Function and storage
 
 Use an Azure Functions v4 JavaScript/Node.js app with a supported Node 22 runtime.
@@ -115,6 +292,7 @@ this container. Allow for RBAC propagation before testing.
 | `CLOUD_RUNTIME_CLIENT_ID` | Optional user-assigned managed-identity client ID. Omit for system-assigned identity. |
 | `CLOUD_API_AUDIENCE` | API application/client ID, the GUID, not `api://...`. |
 | `CLOUD_CLIENT_ID` | Authorized SPA application/client ID. |
+| `CLOUD_DESKTOP_CLIENT_ID` | Optional additional authorized desktop public-client ID; omit to keep web-only authorization. Never a wildcard or API audience. |
 | `CLOUD_ALLOWED_ORIGINS` | Comma-separated exact browser origins, with scheme and port, without paths or trailing slashes. |
 
 Also configure the Function host's own required storage and hosting settings.
@@ -122,7 +300,8 @@ Those are separate from the private user-data container. Do not reuse the
 statistics dashboard's tenant-specific authentication settings or credentials.
 
 The HTTP trigger intentionally has platform `authLevel: anonymous`: the handler
-authenticates every data request itself with a bearer access token. Do not put an
+authenticates private data requests itself with a bearer access token. Only the
+capability-based shared resolver is deliberately public. Do not put an
 interactive Easy Auth redirect in front of this API. Do not expose storage keys,
 SAS URLs, raw bearer tokens or document bodies in request logs.
 
@@ -131,6 +310,8 @@ Storage layout:
 ```text
 users/<SHA256-of-issuer-and-subject>/progress.json
 users/<same-owner>/topologies/<UUID>.json
+users/<same-owner>/shares/<management-UUID>.json
+shared/<SHA256-of-capability>.json
 ```
 
 Each write is conditional: create uses `If-None-Match: *`, replacement/deletion
@@ -208,7 +389,8 @@ Configure these **repository variables** before the selected CI build:
 | `VITE_CLOUD_API_SCOPE` | `api://<API-client-ID>/Cloud.Access` |
 | `VITE_CLOUD_API_BASE_URL` | Deployment output `apiBaseUrl` |
 
-CI injects them into the web build only, not the Electron build. Update the main
+The web build uses these variables. Windows uses the separate public-client ID
+and absolute API URL described above, with the same API scope. Update the main
 SWA CSP's exact `connect-src` API origin if provisioning another Function host.
 Changing variables does not change an already-built candidate or the live site.
 

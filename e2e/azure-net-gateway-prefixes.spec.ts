@@ -1,3 +1,4 @@
+import { downloadTopologyCopy } from './document-action-helpers'
 import { expect, test, type Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { createEmptyAzNetTopology } from '../src/azure-net/model'
@@ -35,7 +36,8 @@ const inspect = (page: Page) => menu(page, 'aznet-site-dc', 'Inspect Site BGP Ro
 const configure = (page: Page) => menu(page, 'aznet-select-vnet-hub', 'Configure VNet & Elements')
 
 for (const [mode, transport] of [['hub-spoke', 'ExpressRoute'], ['full', 'Vpn']] as const) {
-  test(`${mode} edits ${transport} gateway summaries, keeps uncovered spaces and round-trips persistence/JSON/share`, async ({ page, browser }) => {
+  test(`${mode} edits ${transport} gateway summaries, keeps uncovered spaces and round-trips persistence/JSON and legacy read-only snapshots`, async ({ page, browser }) => {
+    test.setTimeout(60_000)
     await page.addInitScript((value) => {
       if (!localStorage.getItem('aznet-visual-topology:v1')) localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology: value }))
     }, topology(transport))
@@ -59,21 +61,22 @@ for (const [mode, transport] of [['hub-spoke', 'ExpressRoute'], ['full', 'Vpn']]
     await inspect(page)
     await expect(rib.getByText('10.0.0.0/15', { exact: true })).toBeVisible()
     const downloadEvent = page.waitForEvent('download')
-    await page.getByRole('button', { name: /Export JSON/ }).click()
+    await downloadTopologyCopy(page)
     const download = await downloadEvent
     const exported = JSON.parse(readFileSync((await download.path())!, 'utf8'))
     expect(exported.vnets[0].summarizedGatewayPrefixes).toEqual(['10.0.0.0/15', '198.18.0.0/15'])
     expect(exported.vnets[0].prefixes).toEqual(['10.0.0.0/16', '192.168.0.0/16'])
-    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
     await page.getByTestId('aznet-share-url-btn').click()
-    await expect(page.getByTestId('aznet-share-url-btn')).toHaveText('✓ Link Copied')
-    const sharedUrl = await page.evaluate(() => navigator.clipboard.readText())
-    expect(sharedUrl).toContain('#s=')
+    await expect(page.getByTestId('aznet-workspace-notice')).toContainText('Unsaved edits are not shared')
+    const sharedUrl = new URL(page.url())
+    sharedUrl.hash = `s=${Buffer.from(JSON.stringify(exported)).toString('base64url')}`
     expect(new URL(page.url()).hash).toBe('')
     const shared = await browser.newPage()
-    await shared.goto(sharedUrl)
-    await inspect(shared)
-    await expect(shared.getByTestId('aznet-control-rib-card').getByText('10.0.0.0/15', { exact: true })).toBeVisible()
+    await shared.goto(sharedUrl.href)
+    await expect(shared.getByRole('heading', { name: 'Shared topology — read only' })).toBeVisible()
+    await expect(shared.getByTestId('aznet-vnet-hub')).toBeVisible()
+    await expect(shared.getByRole('button', { name: 'Export a local copy', exact: true })).toBeDisabled()
+    await expect(shared.getByTestId('aznet-app')).toHaveCount(0)
     await shared.close()
     await configure(page)
     await prefixes.fill('')

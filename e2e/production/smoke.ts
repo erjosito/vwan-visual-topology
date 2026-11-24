@@ -1,4 +1,6 @@
 import { expect, test as base, type Page } from '@playwright/test'
+import { openLearning } from '../learning-helpers'
+import { downloadTopologyCopy } from '../document-action-helpers'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { assetGraph } from '../../scripts/production-assets.mjs'
@@ -93,7 +95,7 @@ for (const hostname of ['vwan-simulator.com', 'www.vwan-simulator.com', 'aznet-s
     await ready(page, 'vwan')
     await page.goto(`${origin}/?mode=full`)
     await ready(page, 'full')
-    expect(new URL(page.url()).searchParams.has('mode')).toBe(false)
+    expect(new URL(page.url()).searchParams.get('mode')).toBe('full')
   })
 }
 
@@ -136,17 +138,33 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     })
     await page.goto(`/?mode=${mode}`)
     await ready(page, mode)
+    await expect(page.getByTestId('app-version')).toHaveText(`AzNetSim ${await page.locator('meta[name="application-version"]').getAttribute('content')}`)
     const readyMs = await page.evaluate(() => performance.now())
     await page.waitForLoadState('networkidle')
     const graph = await assetGraph([...requests])
+    const startupCss = await Promise.all(graph.files.filter(({ path }) => path.endsWith('.css'))
+      .map(({ path }) => readFile(resolve('dist', `.${path}`), 'utf8')))
+    expect(startupCss.some((css) => /\.learning-belt-progress\b|\.belt-achievement-dialog\b/.test(css)),
+      'Optional belt styles must stay out of normal startup').toBe(false)
     expect(graph.localGzipBytes).toBeLessThanOrEqual(300_000)
     expect(graph.rawBytes).toBeLessThanOrEqual(1_200_000)
     expect(graph.files.some(({ path }: { path: string }) => /\/packet-flow-/.test(path))).toBe(false)
-    expect(graph.files.some(({ path }: { path: string }) => /\/japanese-catalog-/.test(path))).toBe(false)
+    expect(graph.files.some(({ path }: { path: string }) => /\/(?:japanese-catalog|vnet-community-messages-ja)-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/(?:practice-session|PracticeWorkspaceBar)-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/flow-gif-codec-/.test(path))).toBe(false)
-    expect(graph.files.some(({ path }: { path: string }) => /\/(?:microsoft-auth|CloudPanel)-/.test(path))).toBe(false)
-    expect(graph.files.some(({ path }: { path: string }) => /\/(?:LearningStatusDetails|TrackOverview|tracks|concept-bodies)-/.test(path))).toBe(false)
+    expect(graph.files.some(({ path }: { path: string }) => /\/(?:AzureComparisonPanel|BgpNeighborsPanel|bgp-neighbors|ResilienceResults)-/.test(path))).toBe(false)
+    expect(graph.files.some(({ path }: { path: string }) => /\/(?:ConfigurationEditStatus|VwanVnetConnectionPanel|VnetConnectionEditor|GatewayCoexistenceAutoFix)-/.test(path))).toBe(false)
+    expect(graph.files.some(({ path }: { path: string }) => /\/RouteMapsPanel-/.test(path))).toBe(false)
+    expect(graph.files.some(({ path }: { path: string }) => /\/VpnRoutingWizard-/.test(path))).toBe(false)
+    expect(graph.files.some(({ path }: { path: string }) => /\/(?:UdrTableManager|UdrTableEditor)-/.test(path))).toBe(false)
+    expect(graph.files.some(({ path }: { path: string }) => /\/(?:microsoft-auth|CloudPanel|DesktopCloudProvider)-/.test(path))).toBe(false)
+    expect(graph.files.some(({ path }: { path: string }) => /\/(?:progress-sync|FlowExportControls|CloneVnetDialog|AddressPrefixEditors|subnet-allocation|VnetRoutingSettings)-/.test(path))).toBe(false)
+    if (mode !== 'vwan') expect(graph.files.some(({ path }: { path: string }) => /\/(?:VnetCommunityEditor|LearningInspection)-/.test(path))).toBe(false)
+    if (mode !== 'vwan') expect(graph.files.some(({ path }: { path: string }) => /\/(?:warning-triage|warning-evidence|WarningAcknowledgement|Explain)-/.test(path))).toBe(false)
+    if (!await page.getByTestId('document-cloud-state').count()) {
+      expect(graph.files.some(({ path }: { path: string }) => /\/CloudDocumentSaveStatus-/.test(path))).toBe(false)
+    }
+    expect(graph.files.some(({ path }: { path: string }) => /\/(?:LearningDialog|task-guidance|LearningStatusDetails|TrackOverview|tracks|concept-bodies|belt-stages)-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => mode === 'vwan' ? /\/AzureNetApp-/.test(path) : /\/App-/.test(path))).toBe(false)
     await page.getByTestId('learning-status').click()
     await expect(page.getByTestId('learning-status-details')).toContainText('Saved locally')
@@ -210,7 +228,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     await page.locator('input[data-desktop-import]').setInputFiles({ name: 'compatible.json', mimeType: 'application/json', buffer: await readFile(file) })
     await ready(page, nextMode)
     await page.getByTestId('workspace-library-open').click()
-    await page.getByRole('dialog', { name: 'Workspace', exact: true }).getByRole('button', { name: /^Open saved design:/ }).filter({
+    await page.getByRole('dialog', { name: 'Workspace', exact: true }).getByRole('button', { name: /^Open saved topology:/ }).filter({
       hasText: mode === 'vwan' ? 'Preserved production design' : 'Empty Topology',
     }).click()
     await ready(page, mode)
@@ -344,7 +362,7 @@ test('a delayed or failed inactive workspace retains loading/recovery controls a
   await expect(page.getByRole('button', { name: 'Reload workspace', exact: true })).toBeVisible()
   expect(await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))).toBe(saved)
   await page.getByRole('button', { name: 'Workspace', exact: true }).click()
-  await page.getByRole('button', { name: 'Open saved design: Saved recovery design', exact: true }).click()
+  await page.getByRole('button', { name: 'Open saved topology: Saved recovery design', exact: true }).click()
   await ready(page, 'vwan')
   await expect(page.getByLabel('Topology name', { exact: true })).toHaveValue('Saved recovery design')
 })
@@ -361,7 +379,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     await ready(page, mode)
     const storageKey = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
     const original = await page.evaluate((key) => localStorage.getItem(key), storageKey)
-    await page.getByTestId('learning-open').click()
+    await openLearning(page)
     const practice = page.getByTestId('learning-sidebar')
     await expect(practice.locator('textarea,select,pre')).toHaveCount(0)
     await practice.getByRole('button', { name: 'Load practice network', exact: true }).click()
@@ -447,6 +465,9 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
       expect(packet.packet!.reply.routing).toBe('not-assessed')
     }
 
+    const cachedCopy = page.waitForEvent('download')
+    await downloadTopologyCopy(page)
+    await cachedCopy
     await context.setOffline(true)
     const beforeDiscovery = await page.evaluate((key) => localStorage.getItem(key), storageKey)
     const design = JSON.parse(beforeDiscovery!)
@@ -492,12 +513,12 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
       await page.getByRole('button', { name: 'Close Path explorer', exact: true }).click()
     }
     const download = page.waitForEvent('download')
-    await page.getByRole('button', { name: mode === 'vwan' ? 'Export JSON' : '⬇ Export JSON', exact: true }).click()
+    await downloadTopologyCopy(page)
     const native = await readFile((await (await download).path())!)
     await page.locator('input[data-desktop-import]').setInputFiles({ name: 'roundtrip.json', mimeType: 'application/json', buffer: native })
     const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), storageKey)
     expect(mode === 'vwan' ? saved : saved.topology).toEqual(JSON.parse(native.toString()))
-    await page.getByTestId('learning-open').click()
+    await openLearning(page)
     await expect(practice.getByRole('button', { name: 'Pause learning', exact: true })).toBeVisible()
     await expect(practice.locator('textarea,select,pre')).toHaveCount(0)
     expect(external).toEqual([])

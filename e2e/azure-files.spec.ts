@@ -1,3 +1,4 @@
+import { downloadTopologyCopy } from './document-action-helpers'
 import { expect, test } from '@playwright/test'
 import type { Download, Page } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
@@ -36,6 +37,7 @@ async function confirmImport(page: Page) {
 test('Azure captures preview without replacement, cancel cleanly, and retain limitations through reload/native JSON', async ({ page }) => {
   const externalRequests: string[] = []
   await page.goto('/?mode=vwan')
+  await expect(page.getByTestId('vwan-app')).toBeVisible()
   const appOrigin = new URL(page.url()).origin
   page.on('request', (request) => { if (new URL(request.url()).origin !== appOrigin) externalRequests.push(request.url()) })
   const original = await saved(page)
@@ -53,7 +55,7 @@ test('Azure captures preview without replacement, cancel cleanly, and retain lim
   await page.reload()
   await expect(page.getByRole('status').filter({ hasText: 'Azure structure-only import' })).toBeVisible()
   const download = page.waitForEvent('download')
-  await page.getByRole('button', { name: 'Export JSON', exact: true }).click()
+  await downloadTopologyCopy(page)
   const native = JSON.parse((await contents(await download)).toString()) as Topology
   expect(native.azureImport?.hubs[0].addressPrefix).toBe('10.250.0.0/23')
   await upload(page, native)
@@ -66,6 +68,7 @@ test('Azure captures preview without replacement, cancel cleanly, and retain lim
 
 test('partial imports disclose omissions, require renewed acknowledgement, and reject malformed files without changing the workspace', async ({ page }) => {
   await page.goto('/?mode=vwan')
+  await expect(page.getByTestId('vwan-app')).toBeVisible()
   const original = await saved(page)
   await upload(page, capture())
   await panel(page).getByLabel('I understand this is a structure-only import, not verified Azure routing.').check()
@@ -119,9 +122,13 @@ test('synthetic 200-VNet capture remains selectable, bounded and lossless throug
   expect(before.spokes).toHaveLength(200)
   expect(before.azureImport?.spokes).toHaveLength(200)
   const download = page.waitForEvent('download')
-  await page.getByRole('button', { name: 'Export JSON', exact: true }).click()
+  await downloadTopologyCopy(page)
   const native = JSON.parse((await contents(await download)).toString()) as Topology
+  const tabs = page.getByRole('tablist', { name: 'Designs', exact: true }).getByRole('tab')
+  const tabCount = await tabs.count()
   await upload(page, native)
+  await expect(tabs).toHaveCount(tabCount + 1)
+  await expect.poll(() => saved(page)).toEqual(native)
   await page.reload()
   await expect(svg.locator('.spoke-node')).toHaveCount(200)
   expect(await saved(page)).toEqual(native)
@@ -239,6 +246,7 @@ test('version 2 Azure captures retain observed effective-route snapshots and exp
 
 test('collector downloads the exact reviewable script from a static asset, with no Azure authentication', async ({ page }) => {
   await page.goto('/?mode=vwan')
+  await expect(page.getByTestId('vwan-app')).toBeVisible()
   const original = await saved(page)
   await page.getByRole('button', { name: 'Azure files', exact: true }).click()
   const link = panel(page).getByRole('link', { name: 'Download Azure collector' })

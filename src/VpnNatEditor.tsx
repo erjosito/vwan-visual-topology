@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { t } from './i18n'
+import { confirmConfigurationSwitch } from './configuration-selection'
 import './vpn-nat-messages-ja'
 import type { AzNetTopology, AzVpnConnection } from './azure-net/model'
+import { VpnGatewaySettings } from './azure-net/VnetRoutingSettings'
 import { VPN_NAT_CAPABILITIES, validateVpnNat, vpnNatGateway, type ClassicVpnNatGateway, type VpnNatRule } from './vpn-nat'
 import { traceVpnNatPacket, type VpnNatPacketResult } from './vpn-nat-packet'
 
@@ -13,8 +15,8 @@ const updateChecked = (topology: AzNetTopology, commit: Props['commit'], edit: (
   commit(edit)
 }
 
-export function VpnNatGatewayEditor({ topology, targetKind, targetId, commit }: Props & {
-  targetKind: 'vnet-gateway' | 'vwan-hub'; targetId: string
+export function VpnNatGatewayEditor({ topology, targetKind, targetId, commit, showGatewaySettings = true }: Props & {
+  targetKind: 'vnet-gateway' | 'vwan-hub'; targetId: string; showGatewaySettings?: boolean
 }) {
   const [error, setError] = useState('')
   const classic = targetKind === 'vnet-gateway'
@@ -24,6 +26,19 @@ export function VpnNatGatewayEditor({ topology, targetKind, targetId, commit }: 
   const config = gateway.vpnNat
   const connections = topology.vpnConnections.filter((connection) => connection.targetId === targetId && connection.targetKind === targetKind && connection.nat)
   return <section className="aznet-card" data-testid="vpn-nat-gateway-editor">
+    {showGatewaySettings && classic && 'kind' in gateway && <VpnGatewaySettings gateway={gateway}
+      coexisting={topology.vnets.some((vnet) => vnet.gateways.includes(gateway) &&
+        vnet.gateways.some((entry) => entry.enabled && entry.kind === 'ExpressRoute') && gateway.enabled)}
+      routeExchange={topology.vnets.some((vnet) => vnet.gateways.includes(gateway) &&
+        vnet.routeServer?.enabled && vnet.routeServer.branchToBranchTraffic)}
+      onMode={(mode) => commit((draft) => {
+        const target = draft.vnets.flatMap((vnet) => vnet.gateways).find((entry) => entry.id === targetId)!
+        if (mode === undefined) delete target.activeActive
+        else target.activeActive = mode
+      })}
+      onConfiguration={(configuration) => commit((draft) => {
+        Object.assign(draft.vnets.flatMap((vnet) => vnet.gateways).find((entry) => entry.id === targetId)!, configuration)
+      })} />}
     <h3>{t('VPN overlap NAT gateway')}: {gateway.name}</h3>
     <p>{t(classic ? VPN_NAT_CAPABILITIES.classic : VPN_NAT_CAPABILITIES.vwan)}</p>
     <p>{t(VPN_NAT_CAPABILITIES.scope)}</p>
@@ -32,17 +47,24 @@ export function VpnNatGatewayEditor({ topology, targetKind, targetId, commit }: 
       try {
         const data = new FormData(event.currentTarget)
         updateChecked(topology, commit, (draft) => {
-          if (classic) draft.vnets.flatMap((vnet) => vnet.gateways).find((gateway) => gateway.id === targetId)!.vpnNat = {
-            sku: String(data.get('sku')) as ClassicVpnNatGateway['sku'], bgpRouteTranslation: data.has('bgpTranslation'),
+          if (classic) {
+            const target = draft.vnets.flatMap((vnet) => vnet.gateways).find((gateway) => gateway.id === targetId)!
+            const sku = String(data.get('sku')) as ClassicVpnNatGateway['sku']
+            target.vpnNat = { sku, bgpRouteTranslation: data.has('bgpTranslation') }
+            target.sku = sku
+            if (/^VpnGw[45](AZ)?$/.test(sku)) target.vpnGatewayGeneration = 'Generation2'
           }
           else draft.vwanHubs.find((hub) => hub.id === targetId)!.vpnNat = { bgpRouteTranslation: data.has('bgpTranslation') }
         })
         setError('')
       } catch (error) { setError(error instanceof Error ? error.message : String(error)) }
     }}>
-      {classic && <label className="field">{t('Classic VPN NAT SKU')}<select name="sku" defaultValue={config && 'sku' in config ? config.sku : 'VpnGw2'}>
+      {classic && <label className="field">{t('Classic VPN NAT SKU')}<select name="sku" defaultValue={config && 'sku' in config ? config.sku : 'kind' in gateway && /^VpnGw[2-5](AZ)?$/.test(gateway.sku ?? '') ? gateway.sku : 'VpnGw2AZ'}>
         {['VpnGw2', 'VpnGw3', 'VpnGw4', 'VpnGw5', 'VpnGw2AZ', 'VpnGw3AZ', 'VpnGw4AZ', 'VpnGw5AZ'].map((sku) => <option key={sku}>{sku}</option>)}
       </select></label>}
+      {classic && <p>{t('VPN NAT requires VpnGw2–5 or their AZ variants; VpnGw1 and VpnGw1AZ do not support NAT. Saving this capability also sets the actual gateway SKU above.')}</p>}
+      {classic && config && 'sku' in config && 'kind' in gateway && gateway.sku && gateway.sku !== config.sku &&
+        <p role="status">{t('The actual gateway SKU differs from the declared NAT capability. Select a supported NAT SKU and save the capability to align them.')}</p>}
       <label><input type="checkbox" name="bgpTranslation" defaultChecked={config?.bgpRouteTranslation ?? false} />{t('Enable gateway BGP route translation')}</label>
       <p>{t('Gateway-wide setting; only exact prefixes with matching connection-owned NAT rules are translated. Unmatched connections and prefixes stay unchanged. Static routing requires explicit post-NAT routes.')}</p>
       <button type="submit">{t('Save VPN NAT gateway capability')}</button>
@@ -52,7 +74,29 @@ export function VpnNatGatewayEditor({ topology, targetKind, targetId, commit }: 
   </section>
 }
 
-export function VpnNatConnectionEditor({ topology, connectionId, commit }: Props & { connectionId: string }) {
+export function VpnNatHubEditor({ topology, hubId, commit }: Props & { hubId: string }) {
+  const [selectedId, setSelectedId] = useState('')
+  const connections = topology.vpnConnections.filter((connection) =>
+    connection.targetKind === 'vwan-hub' && connection.targetId === hubId && connection.transport !== 'SDWAN')
+  const selected = connections.find((connection) => connection.id === selectedId) ?? connections[0]
+  return <section aria-label={t('VPN NAT')}>
+    <VpnNatGatewayEditor topology={topology} targetKind="vwan-hub" targetId={hubId} commit={commit} />
+    <p>{t('Gateway BGP route translation changes route advertisements; it does not create mapping rules or enable NAT on every connection.')}</p>
+    <p>{t('Rules belong to the selected original VPN connection. Saving a rule associates it with that connection; there is no separate hub-wide NAT enable switch.')}</p>
+    {!selected ? <p role="status">{t('No IPsec VPN connections target this hub. Create a VPN connection from an on-premises site to this hub first. SD-WAN connections do not support overlap NAT.')}</p> : <>
+      <label className="field">{t('VPN NAT connection')}<select value={selected.id} onChange={(event) => {
+        if (confirmConfigurationSwitch('[data-testid="vpn-nat-connection-editor"]')) setSelectedId(event.target.value)
+      }}>
+        {connections.map((connection) => <option key={connection.id} value={connection.id}>
+          {connection.name} · {topology.sites.find((site) => site.id === connection.siteId)?.name ?? connection.siteId}
+        </option>)}
+      </select></label>
+      <VpnNatConnectionEditor key={selected.id} topology={topology} connectionId={selected.id} commit={commit} showGateway={false} />
+    </>}
+  </section>
+}
+
+export function VpnNatConnectionEditor({ topology, connectionId, commit, showGateway = true }: Props & { connectionId: string; showGateway?: boolean }) {
   const [error, setError] = useState('')
   const [editing, setEditing] = useState('')
   const connection = topology.vpnConnections.find((connection) => connection.id === connectionId)
@@ -66,7 +110,7 @@ export function VpnNatConnectionEditor({ topology, connectionId, commit }: Props
     } catch (error) { setError(error instanceof Error ? error.message : String(error)); return false }
   }
   return <>
-    <VpnNatGatewayEditor topology={topology} targetKind={connection.targetKind} targetId={connection.targetId} commit={commit} />
+    {showGateway && <VpnNatGatewayEditor topology={topology} targetKind={connection.targetKind} targetId={connection.targetId} commit={commit} />}
     <section className="aznet-card" data-testid="vpn-nat-connection-editor">
       <h3>{t('Connection-owned VPN overlap NAT')}</h3>
       <p><code>{connection.id}</code></p>

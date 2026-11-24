@@ -3,7 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { PlatformJobs } from './jobs'
 import { RenderJobs } from './render-jobs'
-import { capabilities, engineVersion } from '../src/platform/contract'
+import { capabilities, engineVersion, platformLimits, platformModes, platformOperations, supportedContractVersions } from '../src/platform/contract'
 import vwanExample from '../public/docs/samples/hub-routing-preferences.json'
 import hubSpokeExample from '../public/docs/samples/azure-net/hub-spoke-firewall-udr.json'
 import fullExample from '../public/docs/samples/azure-net/hybrid-vwan-and-hub-spoke.json'
@@ -23,7 +23,7 @@ server.registerTool('get_capabilities', {
 
 server.registerTool('get_schema', {
   description: 'Get the request envelope, owned endpoint shapes and an authored native topology example for a mode. Use the real validator before assuming compatibility.',
-  inputSchema: { mode: z.enum(['vwan', 'hub-spoke', 'full']) }, annotations,
+  inputSchema: { mode: z.enum(platformModes) }, annotations,
 }, async ({ mode }) => reply({
   ...capabilities,
   envelope: { contractVersion: 1, operation: 'evaluate', document: { mode, topology: 'native topology JSON shown below' }, requirements: [], budget: { maxMillis: 15000, maxOutputBytes: 8000000 } },
@@ -41,6 +41,13 @@ server.registerTool('get_schema', {
     { id: 'unique-route-id', kind: 'route', table: mode === 'vwan' ? 'hub ID' : 'simulation subnet table key, or hub ID with explicit hubTableId', prefix: 'canonical IPv4 CIDR', expectation: 'present or absent', optional: 'hubTableId: exact owned table ID, subject to complete modeled coverage' },
   ],
   example: mode === 'vwan' ? vwanExample : mode === 'hub-spoke' ? hubSpokeExample : fullExample,
+  ...(mode === 'vwan' ? { optionalWanFederation: {
+    wans: [{ id: 'wan-a', name: 'WAN A' }, { id: 'wan-b', name: 'WAN B' }],
+    hubOwnership: 'Every hub must carry wanId matching an explicit scope. Without scopes the legacy single-WAN behavior is unchanged.',
+    interWanVpns: [{ id: 'tunnel', name: 'Declared S2S', aHubId: 'hub-in-a', bHubId: 'hub-in-b', enabled: true,
+      status: 'configured or unknown', aToB: ['10.10.0.0/16'], bToA: ['10.20.0.0/16'] }],
+    boundary: 'Exactly two WANs, at most one manually declared S2S route-export link; selected Default-table IPv4 routes only. P2S, gateway session negotiation and default-route exports unsupported. Independent node/input/output budgets still apply.',
+  } } : {}),
   optionalStaticHubFirewall: { firewall: { id: 'original-local-firewall', name: 'Local Azure Firewall' },
     staticRoute: { name: 'inspect-private', destinationType: 'CIDR', destinations: ['10.0.0.0/8'], nextHopType: 'ResourceId', nextHop: 'original-local-firewall' },
     boundary: 'Single hub, routing intent disabled; define the route in the ingress associated hub table. Unknown targets remain unassessed.' },
@@ -53,6 +60,16 @@ server.registerTool('get_schema', {
       tuple: { sourceAddress: 'original initiator IPv4', destinationAddress: 'initiator-visible destination IPv4',
         protocol: 'tcp or udp', sourcePort: '1-65535', destinationPort: '1-65535' } },
       result: 'vpnPacket section: original/translated tuples, native forwarding and one bounded conditional reply; no security/application delivery certification' },
+  optionalVpnOverEr: mode === 'vwan' ? { supported: false, reason: 'Use the classic Azure/Full Hybrid native provider, not a Virtual WAN VPN gateway.' } : {
+    gateway: { kind: 'Vpn', activeActive: false, vpnType: 'RouteBased', publicIpSku: 'Standard',
+      enablePrivateIpAddress: true, privateIpAddresses: ['owned GatewaySubnet RFC1918 IPv4'] },
+    connection: { targetKind: 'vnet-gateway', targetId: 'original VPN gateway ID', bgpEnabled: true, useLocalAzureIpAddress: true,
+      advertisedPrefixes: ['exact existing site workload prefix'],
+      underlay: { kind: 'express-route', azureLinkId: 'original Azure ER link ID', siteLinkId: 'original site ER link ID',
+        azureEndpoint: 'owned GatewaySubnet private IPv4', onPremEndpoint: 'site private device IPv4' } },
+    siteErLink: { advertisedPrefixes: ['exact existing site transport prefix; host/subnet/aggregate allowed'] },
+    note: 'An absent advertisedPrefixes selection exports all site routes; [] withdraws all BGP export. Configure the on-prem independent endpoint context and workload inbound local preference explicitly.',
+  },
   packetDestinationShapes: [{ kind: 'public-ip', publicIpId: 'original public-IP ID' },
     { kind: 'load-balancer', loadBalancerId: 'original LB ID', frontendId: 'original frontend ID' }],
   inventoryShapes: {
@@ -92,12 +109,12 @@ server.registerTool('start_simulation', {
   description: 'Start an isolated bounded validation/simulation/evaluation job. Requirements must be explicit, uniquely identified and fully represented. Returns an expiring session-local handle, not a passing grade.',
   inputSchema: {
     request: z.object({
-      contractVersion: z.union([z.literal(1), z.literal(2)]),
+      contractVersion: z.union([z.literal(supportedContractVersions[0]), z.literal(supportedContractVersions[1])]),
       engineVersion: z.string().optional(),
-      operation: z.enum(['validate', 'simulate', 'evaluate', 'application']),
-      document: z.object({ mode: z.enum(['vwan', 'hub-spoke', 'full']), topology: z.record(z.string(), z.unknown()) }).strict(),
+      operation: z.enum(platformOperations),
+      document: z.object({ mode: z.enum(platformModes), topology: z.record(z.string(), z.unknown()) }).strict(),
       locale: z.enum(['en', 'ja']).optional(),
-      requirements: z.array(z.record(z.string(), z.unknown())).max(64).optional(),
+      requirements: z.array(z.record(z.string(), z.unknown())).max(platformLimits.maxRequirements).optional(),
       application: z.record(z.string(), z.unknown()).optional(),
       packet: z.object({
         source: z.record(z.string(), z.unknown()), target: z.record(z.string(), z.unknown()),
@@ -108,7 +125,7 @@ server.registerTool('start_simulation', {
         tuple: z.object({ sourceAddress: z.string(), destinationAddress: z.string(), protocol: z.enum(['tcp', 'udp']),
           sourcePort: z.number().int().min(1).max(65535), destinationPort: z.number().int().min(1).max(65535) }).strict(),
       }).strict().optional(),
-      budget: z.object({ maxMillis: z.number().int().positive().max(15000).optional(), maxOutputBytes: z.number().int().positive().max(8000000).optional() }).strict().optional(),
+      budget: z.object({ maxMillis: z.number().int().positive().max(platformLimits.maxMillis).optional(), maxOutputBytes: z.number().int().positive().max(platformLimits.maxOutputBytes).optional() }).strict().optional(),
     }).strict(),
   }, annotations,
 }, async ({ request }) => reply({ handle: jobs.start(request), status: 'running', lifetimeSeconds: 600 }))
@@ -123,14 +140,14 @@ server.registerTool('get_job', {
       contractVersion: result.contractVersion, engineVersion: result.engineVersion, revision: result.revision,
       resultStatus: result.status, errors: result.errors, limitations: result.limitations.slice(0, 20),
       assessments: result.assessments.map(({ id, outcome, reasons }) => ({ id, outcome, reasons })),
-      sections: ['document', 'simulation', 'assessments', 'packet', 'vpnPacket', 'application'],
+      sections: ['document', 'simulation', 'bgpNeighbors', 'assessments', 'packet', 'vpnPacket', 'application'],
     } : {}),
   })
 })
 
 server.registerTool('get_evidence', {
   description: 'Retrieve bounded JSON-text chunks of a completed job section. Concatenate all chunks in offset order before parsing; a partial chunk is not complete evidence.',
-  inputSchema: { handle: z.string().uuid(), section: z.enum(['document', 'simulation', 'assessments', 'packet', 'vpnPacket', 'application']), offset: z.number().int().min(0).default(0), limit: z.number().int().min(1).max(16000).default(8000) }, annotations,
+  inputSchema: { handle: z.string().uuid(), section: z.enum(['document', 'simulation', 'bgpNeighbors', 'assessments', 'packet', 'vpnPacket', 'application']), offset: z.number().int().min(0).default(0), limit: z.number().int().min(1).max(16000).default(8000) }, annotations,
 }, async ({ handle, section, offset, limit }) => {
   const { result } = jobs.get(handle)
   if (!result) throw new Error('Job is still running.')

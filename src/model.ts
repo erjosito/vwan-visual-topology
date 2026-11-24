@@ -14,9 +14,10 @@ export interface DiagramLayout {
 
 export interface Hub {
   id: string
+  wanId?: string
   name: string
   label?: string
-  region: string
+  region?: string
   preference: Preference
   routingIntent: { private: boolean; internet: boolean; privatePrefixes: string[] }
   routeMapAssignments?: RouteMapAssignment[]
@@ -198,6 +199,7 @@ export interface AzureImportInfo {
   capturedAt: string
   collectorVersion: string
   wanId: string
+  wanIds?: string[]
   warnings: string[]
   hubs: { hubId: string; resourceId: string; addressPrefix: string; limitations: string[]; routingScopeComplete?: boolean }[]
   spokes?: { spokeId: string; resourceId: string; virtualNetworkId: string }[]
@@ -207,7 +209,10 @@ export interface AzureImportInfo {
 export interface Topology {
   version: 1
   name: string
+  warningAcknowledgements?: string[]
   allowBranchToBranchTraffic?: boolean
+  wans?: { id: string; name: string; allowBranchToBranchTraffic?: boolean }[]
+  interWanVpns?: InterWanVpn[]
   hubs: Hub[]
   sites: Site[]
   spokes: Spoke[]
@@ -220,6 +225,18 @@ export interface Topology {
   azureImport?: AzureImportInfo
   inventory?: NetworkInventory
   application?: ApplicationInventory
+}
+
+/** Deliberately configured S2S connectivity, not inferred Azure/P2S state. */
+export interface InterWanVpn {
+  id: string
+  name: string
+  aHubId: string
+  bHubId: string
+  enabled: boolean
+  status: 'configured' | 'unknown'
+  aToB: string[]
+  bToA: string[]
 }
 
 export type ObjectKind = 'hub' | 'spoke' | 'site' | 'connection' | 'siteLink' | 'erLocation' | 'erLink'
@@ -243,6 +260,14 @@ export const transportLabels: Record<Transport, string> = {
 
 export function siteLabel(topology: Topology, id: string): string {
   return topology.connections.some((connection) => connection.transport === 'SpokeNVA' && connection.siteId === id) ? 'Spoke BGP NVA' : 'site'
+}
+
+export type VpnRoutingMode = 'static' | 'bgp'
+
+export function vpnRoutingMode(topology: Topology, connection: Connection): VpnRoutingMode | 'mixed' {
+  const statics = topology.sites.find((site) => site.id === connection.siteId)?.vpnStaticRoutes?.some((route) => route.connectionId === connection.id)
+  const bgp = connection.learnSiteRoutes
+  return statics ? bgp ? 'mixed' : 'static' : 'bgp'
 }
 
 export const preferenceLabels: Record<Preference, string> = {

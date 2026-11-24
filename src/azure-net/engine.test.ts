@@ -1,6 +1,7 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import * as addressPrimitives from '../ipv4'
 import {
   compareAzNetWithObservations,
   importAzNetCapture,
@@ -70,6 +71,21 @@ describe('AzNetSim VNet Engine & Diagnostics', () => {
   }
 
   const expectedPair = { scope: 'pair', sourceKey: 'subnet:spoke:work', destinationKey: 'site:site:172.16.0.0/24' } as const
+
+  it('performs one prefix parse per active LPM row and does not cache mutable route-table state', () => {
+    const table = simulateAzNet(transitTopology('Vpn')).subnetTables.work
+    table.routes.reverse()
+    const parse = vi.spyOn(addressPrimitives, 'cidr')
+    try {
+      const selected = lookupSubnetEffectiveRoute(table, '172.16.0.4')!
+      expect(selected.source).toBe('VirtualNetworkGateway')
+      expect(parse).toHaveBeenCalledTimes(table.routes.filter(route => route.active).length)
+      selected.active = false
+      expect(lookupSubnetEffectiveRoute(table, '172.16.0.4')?.id).not.toBe(selected.id)
+    } finally {
+      parse.mockRestore()
+    }
+  })
 
   it.each([false, true])('exports original per-VNet communities over classic ER and preserves alternatives and origin through site policy (ARS: %s)', (ars) => {
     const topology = transitTopology()
@@ -292,6 +308,8 @@ describe('AzNetSim VNet Engine & Diagnostics', () => {
     result = simulateAzNet(topology)
     expect(lookupSubnetEffectiveRoute(result.subnetTables.firewall, '172.16.10.4')?.nextHopResourceId).toBe('vpn-gw')
     topology.erLinks.find((link) => link.id === 'er-gw')!.enabled = true
+    result = simulateAzNet(topology)
+    expect(lookupSubnetEffectiveRoute(result.subnetTables.firewall, '172.16.10.4')?.nextHopResourceId).toBe('gw')
     topology.udrTables = [{
       id: 'override', name: 'Explicit override', disableBgpRoutePropagation: false,
       routes: [{ id: 'drop', name: 'Drop site', prefix: '172.16.10.0/24', nextHopType: 'None', enabled: true }],
@@ -303,6 +321,7 @@ describe('AzNetSim VNet Engine & Diagnostics', () => {
 
   it('retains explicit ARS preference and restores ER coexistence preference when ARS is disabled', () => {
     const topology = coexistenceTopology()
+    topology.vnets[0].gateways[0].activeActive = true
     topology.vnets[0].routeServer = {
       id: 'ars', name: 'ARS', enabled: true, branchToBranchTraffic: true, hubRoutingPreference: 'ASPath', peerApplianceIds: [],
     }
@@ -379,6 +398,7 @@ describe('AzNetSim VNet Engine & Diagnostics', () => {
   function arsTopology(transport: 'ExpressRoute' | 'Vpn' = 'Vpn') {
     const topology = transitTopology(transport)
     const hub = topology.vnets[0]
+    if (transport === 'Vpn') hub.gateways[0].activeActive = true
     hub.subnets.push({ id: 'nvas', name: 'NVAs', prefix: '10.0.2.0/24' })
     hub.appliances = ['one', 'two'].map((id, index) => ({
       id, name: `NVA ${id}`, kind: 'nva-vm', subnetId: 'nvas', privateIp: `10.0.2.${4 + index}`,
@@ -393,6 +413,129 @@ describe('AzNetSim VNet Engine & Diagnostics', () => {
     }
     return topology
   }
+
+  function protectedRouteTopology(source: 'ExpressRoute' | 'Vpn' | 'RouteServer') {
+    const topology = source === 'RouteServer' ? arsTopology('ExpressRoute') : transitTopology(source)
+    const prefixes = ['10.0.0.0/16', '10.0.128.0/17', '10.1.0.0/16', '10.1.128.0/17',
+      '10.2.1.0/24', '10.2.2.0/24', '172.16.0.0/24']
+    const hub = topology.vnets[0]
+    // Summarization lets equal-prefix on-prem routes reach the ER RIB instead of matching its own exports.
+    if (source === 'ExpressRoute') hub.summarizedGatewayPrefixes = ['10.0.0.0/8']
+    hub.subnets.push({ id: 'firewall', name: 'AzureFirewallSubnet', prefix: '10.0.64.0/26' },
+      { id: 'local-work', name: 'Local workload', prefix: '10.0.128.0/24' })
+    topology.vnets[1].subnets[0].prefix = '10.1.128.0/24'
+    if (source === 'RouteServer') {
+      hub.appliances[0].advertisedPrefixes = prefixes
+      hub.appliances[1].advertisedPrefixes = []
+    } else {
+      topology.sites[0].prefixes = prefixes
+    }
+    for (const [index, prefix] of ['10.2.1.0/24', '10.2.2.0/24'].entries()) {
+      topology.vnets.push({ id: `remote-${index}`, name: `Non-peered remote ${index}`, role: 'spoke',
+        region: 'West Europe', prefixes: [prefix], subnets: [], gateways: [], appliances: [] })
+    }
+    return topology
+  }
+
+  it.each(['ExpressRoute', 'Vpn', 'RouteServer'] as const)(
+    'protects local and directly peered system routes from equal and more-specific %s BGP routes',
+    (source) => {
+      const topology = protectedRouteTopology(source)
+      const simulation = simulateAzNet(topology)
+      const table = simulation.subnetTables.firewall
+      for (const [prefix, nextHopType, address] of [
+        ['10.0.0.0/16', 'VnetLocal', '10.0.128.10'],
+        ['10.1.0.0/16', 'VNetPeering', '10.1.128.10'],
+      ]) {
+        expect(table.routes).toContainEqual(expect.objectContaining({ prefix, source: 'System', nextHopType, active: true }))
+        expect(lookupSubnetEffectiveRoute(table, address)).toMatchObject({ prefix, source: 'System', nextHopType })
+        const flow = traceAzNetFlow(topology, simulation, { kind: 'subnet', vnetId: 'hub', subnetId: 'firewall' }, address)
+        expect(flow.status).toBe('delivered')
+        expect(flow.traversedApplianceIds).toEqual([])
+        if (nextHopType === 'VNetPeering') expect(flow.hops.some((hop) => hop.edgeId === 'peer')).toBe(true)
+      }
+      for (const prefix of ['10.0.0.0/16', '10.0.128.0/17', '10.1.0.0/16', '10.1.128.0/17']) {
+        expect(table.routes.filter((route) => route.prefix === prefix && route.source !== 'System')).toContainEqual(
+          expect.objectContaining({ active: false, suppressedReason: expect.stringMatching(/protected.*System/i) }),
+        )
+      }
+    },
+  )
+
+  it.each(['ExpressRoute', 'Vpn', 'RouteServer'] as const)(
+    'preserves UDR overrides and non-peered BGP destinations with protected %s routes',
+    (source) => {
+      const topology = protectedRouteTopology(source)
+      topology.udrTables = [{ id: 'policy', name: 'Explicit local/peered policy', disableBgpRoutePropagation: false,
+        routes: ['10.0.0.0/16', '10.1.0.0/16', '0.0.0.0/0'].map((prefix, index) => ({
+          id: `drop-${index}`, name: 'Explicit drop', prefix, nextHopType: 'None', enabled: true,
+        })) }]
+      topology.vnets[0].subnets.find((subnet) => subnet.id === 'firewall')!.routeTableId = 'policy'
+      const simulation = simulateAzNet(topology)
+      const table = simulation.subnetTables.firewall
+      for (const address of ['10.0.128.10', '10.1.128.10']) {
+        expect(lookupSubnetEffectiveRoute(table, address)).toMatchObject({ source: 'User', nextHopType: 'None' })
+        expect(traceAzNetFlow(topology, simulation, { kind: 'subnet', vnetId: 'hub', subnetId: 'firewall' }, address).status).toBe('dropped-blackhole')
+      }
+      for (const address of ['10.2.1.10', '10.2.2.10', '172.16.0.10']) {
+        expect(lookupSubnetEffectiveRoute(table, address)).toMatchObject({
+          source: source === 'RouteServer' ? 'RouteServer' : 'VirtualNetworkGateway', active: true,
+        })
+      }
+    },
+  )
+
+  it.each(['ExpressRoute', 'Vpn', 'RouteServer'] as const)(
+    'keeps a broader %s BGP summary eligible outside protected local and peered ranges',
+    (source) => {
+      const topology = protectedRouteTopology(source)
+      if (source === 'RouteServer') topology.vnets[0].appliances[0].advertisedPrefixes!.push('10.0.0.0/14')
+      else topology.sites[0].prefixes.push('10.0.0.0/14')
+      const table = simulateAzNet(topology).subnetTables.firewall
+      expect(table.routes).toContainEqual(expect.objectContaining({ prefix: '10.0.0.0/14', active: true }))
+      for (const address of ['10.0.64.4', '10.1.64.4']) {
+        expect(lookupSubnetEffectiveRoute(table, address)).toMatchObject({ source: 'System', active: true })
+      }
+      expect(lookupSubnetEffectiveRoute(table, '10.3.64.4')).toMatchObject({
+        prefix: '10.0.0.0/14', source: source === 'RouteServer' ? 'RouteServer' : 'VirtualNetworkGateway', active: true,
+      })
+    },
+  )
+
+  it('does not let conflicting BGP routes bypass a connected peering with virtual-network access disabled', () => {
+    const topology = protectedRouteTopology('ExpressRoute')
+    topology.vnetPeerings[0].aToB.allowVirtualNetworkAccess = false
+    const simulation = simulateAzNet(topology)
+    expect(lookupSubnetEffectiveRoute(simulation.subnetTables.firewall, '10.1.128.10')).toMatchObject({ source: 'System', nextHopType: 'VNetPeering' })
+    expect(traceAzNetFlow(topology, simulation, { kind: 'subnet', vnetId: 'hub', subnetId: 'firewall' }, '10.1.128.10').status).toBe('dropped-peering-access')
+  })
+
+  it('keeps the peering route active when a second hub advertises the same /24 over ExpressRoute', () => {
+    const topology = transitTopology('ExpressRoute')
+    const [gwc, weu] = topology.vnets
+    gwc.prefixes = ['10.1.0.0/24']
+    gwc.subnets = [{ id: 'gwc-gateway', name: 'GatewaySubnet', prefix: '10.1.0.0/27' },
+      { id: 'gwc-firewall', name: 'AzureFirewallSubnet', prefix: '10.1.0.64/26' }]
+    weu.prefixes = ['10.2.0.0/24']
+    weu.subnets = [{ id: 'weu-gateway', name: 'GatewaySubnet', prefix: '10.2.0.0/27' },
+      { id: 'weu-work', name: 'Workload', prefix: '10.2.0.64/26' }]
+    weu.gateways = [{ id: 'weu-er', name: 'WEU ER Gateway', kind: 'ExpressRoute', asn: 65515, bgpEnabled: true, enabled: true }]
+    topology.vnetPeerings[0].bToA.useRemoteGateways = false
+    topology.erLinks = topology.erLinks.filter((link) => link.targetKind !== 'site')
+    topology.erLinks.push({ id: 'er-weu', name: 'WEU circuit', locationId: 'er', targetKind: 'vnet-gateway', targetId: 'weu-er', enabled: true })
+    topology.sites = []
+    const simulation = simulateAzNet(topology)
+    const table = simulation.subnetTables['gwc-firewall']
+    expect(simulation.gatewayRibs.gw).toContainEqual(expect.objectContaining({ prefix: '10.2.0.0/24', preferred: true }))
+    expect(table.routes).toContainEqual(expect.objectContaining({
+      prefix: '10.2.0.0/24', source: 'VirtualNetworkGateway', active: false, asPath: [12076, 12076],
+      suppressedReason: expect.stringMatching(/protected System VNetPeering route 10.2.0.0\/24/),
+    }))
+    expect(lookupSubnetEffectiveRoute(table, '10.2.0.68')).toMatchObject({
+      prefix: '10.2.0.0/24', source: 'System', nextHopType: 'VNetPeering', active: true,
+    })
+    expect(traceAzNetFlow(topology, simulation, { kind: 'subnet', vnetId: 'hub', subnetId: 'gwc-firewall' }, '10.2.0.68').status).toBe('delivered')
+  })
 
   function arsPeerLimitTopology(count: number) {
     const topology = arsTopology()
@@ -1086,11 +1229,61 @@ describe('AzNetSim VNet Engine & Diagnostics', () => {
     expect(finding).toMatchObject({ category: 'asymmetric-firewall-bypass', severity: 'warning' })
     expect(finding.summary).toContain('No active covering UDR to suppress VNet peering routes in Hub/GatewaySubnet')
     expect(finding.summary).not.toContain('matched only the 0.0.0.0/0 Internet')
+    expect(finding.inspection?.forward).toMatchObject({
+      sourceIp: '10.1.1.4', destinationIp: '172.16.0.4', inspected: ['Inspection firewall'], bypassed: [],
+    })
+    expect(finding.inspection?.reverse).toMatchObject({
+      sourceIp: '172.16.0.4', destinationIp: '10.1.1.4', inspected: [], bypassed: ['Inspection firewall'],
+    })
+    expect(finding.inspection?.reverse.routes).toContainEqual(expect.objectContaining({
+      vnetId: 'hub', subnetId: 'gateway', prefix: '10.1.0.0/16', source: 'System', routeTable: 'Return table',
+    }))
+    expect(finding.inspection?.repairs).toEqual([expect.objectContaining({
+      direction: 'reverse', vnetId: 'hub', subnetId: 'gateway', tableName: 'Return table',
+      prefix: '10.1.1.0/24', nextHopIp: '10.0.2.4', replacing: false,
+    })])
     expect(lookupSubnetEffectiveRoute(simulation.subnetTables.gateway, '10.1.1.4')?.nextHopType).toBe('VNetPeering')
     topology.udrTables[0].routes.push({
       id: 'return-fw', name: 'Inspect return', prefix: '10.0.0.0/8', nextHopType: 'VirtualAppliance', nextHopIp: '10.0.2.4', enabled: true,
     })
     expect(analyzeAzNetConnectivity(topology, simulateAzNet(topology), expectedPair).findings).toEqual([])
+  })
+
+  it('retains the correct direction when the site is the source and never mutates the topology to propose a repair', () => {
+    const topology = inspectedTransitTopology()
+    const before = structuredClone(topology)
+    const finding = analyzeAzNetConnectivity(topology, simulateAzNet(topology), {
+      scope: 'pair', sourceKey: expectedPair.destinationKey, destinationKey: expectedPair.sourceKey,
+    }).findings[0]
+    expect(finding.inspection?.forward.bypassed).toEqual(['Inspection firewall'])
+    expect(finding.inspection?.reverse.inspected).toEqual(['Inspection firewall'])
+    expect(finding.inspection?.repairs[0]).toMatchObject({ direction: 'forward', subnetId: 'gateway' })
+    expect(topology).toEqual(before)
+  })
+
+  it('shows differing inspected appliances without proposing an unverified single-hop replacement for a service chain', () => {
+    const topology = inspectedTransitTopology()
+    topology.vnets[0].subnets.push({ id: 'nva-subnet', name: 'NVA', prefix: '10.0.3.0/24' })
+    topology.vnets[0].appliances.push({
+      id: 'other-inspection', name: 'Return NVA', kind: 'nva-vm', subnetId: 'nva-subnet',
+      privateIp: '10.0.3.4', enableIpForwarding: true, inspectsTraffic: true, staticRoutes: [],
+    })
+    topology.udrTables[0].routes.push({ id: 'return-nva', name: 'Return NVA', prefix: '10.1.0.0/16',
+      enabled: true, nextHopType: 'VirtualAppliance', nextHopIp: '10.0.3.4' })
+    const finding = analyzeAzNetConnectivity(topology, simulateAzNet(topology), expectedPair).findings[0]
+    expect(finding.inspection?.forward.inspected).toEqual(['Inspection firewall'])
+    expect(finding.inspection?.forward.bypassed).toEqual(['Return NVA'])
+    expect(finding.inspection?.reverse.inspected).toEqual(['Return NVA'])
+    expect(finding.inspection?.reverse.bypassed).toEqual(['Inspection firewall'])
+    expect(finding.inspection?.repairs).toEqual([])
+  })
+
+  it('does not propose a route-table edit for an invalid regional association or describe unknown routing as a bypass', () => {
+    const topology = inspectedTransitTopology()
+    topology.udrTables[0].region = 'eastus'
+    const finding = analyzeAzNetConnectivity(topology, simulateAzNet(topology), expectedPair).findings[0]
+    expect(finding.category).toBe('routing-not-assessed')
+    expect(finding.inspection).toBeUndefined()
   })
 
   it('groups a shared return-UDR cause while retaining each flow and recomputing partial repairs', () => {

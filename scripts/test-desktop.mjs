@@ -5,6 +5,7 @@ import { createRequire } from 'node:module'
 import { build } from 'esbuild'
 
 const artifacts = resolve('test-artifacts', 'desktop')
+const { version } = JSON.parse(await readFile(resolve('package.json'), 'utf8'))
 await mkdir(artifacts, { recursive: true })
 await build({ entryPoints: [resolve('tests', 'fixtures', 'hub-firewall.ts')], bundle: true, platform: 'node',
   format: 'cjs', outfile: join(artifacts, 'hub-firewall-fixture.cjs') })
@@ -12,12 +13,13 @@ await build({ entryPoints: [resolve('tests', 'fixtures', 'nva-bgp.ts')], bundle:
   format: 'cjs', outfile: join(artifacts, 'nva-bgp-fixture.cjs') })
 await build({ entryPoints: [resolve('tests', 'fixtures', 'vpn-gateway-mode.ts')], bundle: true, platform: 'node',
   format: 'cjs', outfile: join(artifacts, 'vpn-gateway-mode-fixture.cjs') })
+await build({ entryPoints: [resolve('src', 'learning', 'curriculum-v2.ts')], bundle: true, platform: 'node',
+  format: 'cjs', outfile: join(artifacts, 'curriculum-v2-fixture.cjs') })
 const executablePath = process.env.DESKTOP_EXECUTABLE
 let brandedWindowsResources = false
 if (executablePath) {
   const { NtExecutable, NtExecutableResource } = await import('resedit')
   const icon = await readFile(resolve('public', 'desktop-icon.png'))
-  const { version } = JSON.parse(await readFile(resolve('package.json'), 'utf8'))
   for (const file of [executablePath, resolve('release', `Azure-Network-Simulator-${version}-x64.exe`)]) {
     const resources = NtExecutableResource.from(NtExecutable.from(await readFile(file))).entries
     expect(resources.some((entry) => entry.type === 3 && Buffer.from(entry.bin).equals(icon))).toBe(true)
@@ -33,14 +35,21 @@ const { executePlatform } = require('../platform-dist/service.cjs')
 const { hubFirewallTopology, azHubFirewallTopology } = require(join(artifacts, 'hub-firewall-fixture.cjs'))
 const { nvaBgpTopology } = require(join(artifacts, 'nva-bgp-fixture.cjs'))
 const { vpnGatewayModeTopology } = require(join(artifacts, 'vpn-gateway-mode-fixture.cjs'))
+const { curriculumV2Bundle } = require(join(artifacts, 'curriculum-v2-fixture.cjs'))
 const outbound = [], failures = []
 try {
   const page = await application.firstWindow()
+  // Format scenarios are independent; reload checks retain their actual tab session.
+  const openScenario = async (url) => {
+    await page.evaluate(() => localStorage.removeItem('network-simulator:workspace-tabs:v1'))
+    await page.goto(url)
+  }
   page.on('request', (request) => { if (/^https?:/.test(request.url())) outbound.push(request.url()) })
   page.on('pageerror', (error) => failures.push(error.message))
   await page.locator('[data-testid="vwan-app"], [data-testid="aznet-app"], dialog[aria-labelledby="workspace-library-title"]').waitFor()
+  await expect(page.locator('.desktop-tools')).toHaveCount(0)
   await page.evaluate(() => {
-    for (const key of ['aznet-ui-preview:v1', 'network-simulator:workspace:v1', 'network-simulator:originals:v1', 'network-simulator:practice-workspace:v1', 'network-simulator:learning-progress:v1', 'vwan-visual-topology:v1', 'aznet-visual-topology:v1']) localStorage.removeItem(key)
+    for (const key of ['aznet-ui-preview:v1', 'network-simulator:workspace:v1', 'network-simulator:workspace-tabs:v1', 'network-simulator:originals:v1', 'network-simulator:practice-workspace:v1', 'network-simulator:learning-progress:v1', 'vwan-visual-topology:v1', 'aznet-visual-topology:v1']) localStorage.removeItem(key)
   })
   await page.reload()
   await page.getByTestId('aznet-app').waitFor()
@@ -62,13 +71,14 @@ try {
   await page.keyboard.press('Escape')
   const previewSettings = page.locator('.presentation-group').filter({ has: page.locator('summary', { hasText: 'Help & feedback' }) })
   await previewSettings.locator('summary').click()
+  await expect(previewSettings.getByTestId('app-version')).toHaveText(`AzNetSim ${version}`)
   await expect(previewSettings.getByRole('button', { name: 'Feedback', exact: true })).toBeDisabled()
   await page.keyboard.press('Escape')
   await expect(page.getByTestId('aznet-add-vnet-btn')).toBeEnabled()
   await page.getByTestId('ui-preview-toggle').click()
   await expect(page.getByTestId('ui-preview-toggle')).toHaveAttribute('aria-pressed', 'false')
   expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(beforePreview)
-  await page.goto('app://simulator/?mode=vwan')
+  await openScenario('app://simulator/?mode=vwan')
   await page.getByTestId('vwan-app').waitFor()
   await expect(page.getByRole('button', { name: 'Feedback', exact: true })).toBeDisabled()
   await expect(page.locator('.diagram [data-node-id]')).toHaveCount(0)
@@ -85,24 +95,55 @@ try {
   await page.reload()
   await expect(page.locator('.hub-node')).toHaveCount(hubCount)
   expect(await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))).toBe(savedVwan)
-  await page.evaluate(() => localStorage.setItem('vwan-visual-topology:v1', 'damaged saved workspace'))
+  await page.evaluate(() => {
+    const id = JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')).activeId
+    localStorage.setItem(`network-simulator:workspace-tab:v1:${id}:topology`, 'damaged saved workspace')
+    localStorage.setItem('vwan-visual-topology:v1', 'damaged saved workspace')
+  })
   await page.reload()
   await expect(page.getByRole('button', { name: 'Download original saved topology', exact: true })).toBeVisible()
   await expect(page.locator('.diagram [data-node-id]')).toHaveCount(0)
   expect(await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))).toBe('damaged saved workspace')
-  await page.evaluate(() => localStorage.removeItem('vwan-visual-topology:v1'))
+  await page.evaluate(() => {
+    const id = JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')).activeId
+    localStorage.removeItem(`network-simulator:workspace-tab:v1:${id}:topology`)
+    localStorage.removeItem('network-simulator:workspace-tabs:v1')
+    localStorage.removeItem('vwan-visual-topology:v1')
+  })
   await page.reload()
   await page.evaluate(() => localStorage.removeItem('aznet-simulator:practice:v1'))
   expect(await page.evaluate(() => ({ node: typeof window.require, ipc: Object.keys(window.desktopSimulator) }))).toEqual({
-    node: 'undefined', ipc: ['openTopology', 'accounts', 'targets', 'collect', 'simulate'],
+    node: 'undefined', ipc: ['openTopology', 'accounts', 'targets', 'collect', 'simulate', 'openDocument', 'saveDocument', 'releaseDocument',
+      'cloudStatus', 'cloudSignIn', 'cloudSignOut', 'cloudRequest'],
   })
+  const cloudStatus = await page.evaluate(() => window.desktopSimulator.cloudStatus())
+  await expect(page.getByRole('button', { name: 'Use AzNetSim elsewhere', exact: true })).toHaveCount(0)
+  expect(cloudStatus.ok).toBe(true)
+  expect(cloudStatus.value).toEqual({ configured: expect.any(Boolean) })
+  if (cloudStatus.value.configured) {
+    await page.getByTestId('cloud-account-open').first().click()
+    const accountDialog = page.getByRole('dialog', { name: 'Cloud account', exact: true })
+    await expect(accountDialog.getByRole('button', { name: 'Sign in with Microsoft', exact: true })).toBeEnabled()
+    await expect(accountDialog.getByText('Sign-in opens your system browser.', { exact: false })).toBeVisible()
+    await accountDialog.getByRole('button', { name: 'Close', exact: true }).click()
+  } else {
+    await expect(page.getByTestId('cloud-account-open')).toHaveCount(0)
+  }
+  const protectedCredentials = await application.evaluate(({ safeStorage }) => {
+    if (process.platform !== 'win32') return true
+    if (!safeStorage.isEncryptionAvailable()) return false
+    const synthetic = 'aznetsim-synthetic-credential-check'
+    const encrypted = safeStorage.encryptString(synthetic)
+    return !encrypted.includes(Buffer.from(synthetic)) && safeStorage.decryptString(encrypted) === synthetic
+  })
+  expect(protectedCredentials).toBe(true)
   for (const [mode, file] of [
     ['vwan', 'hub-routing-preferences.json'],
     ['hub-spoke', 'azure-net/hub-spoke-firewall-udr.json'],
     ['full', 'azure-net/hybrid-vwan-and-hub-spoke.json'],
   ]) {
     await page.evaluate(() => localStorage.removeItem('network-simulator:learning-progress:v1'))
-    await page.goto(`app://simulator/?mode=${mode}`)
+    await openScenario(`app://simulator/?mode=${mode}`)
     await page.getByTestId(mode === 'vwan' ? 'vwan-app' : 'aznet-app').waitFor()
     const topology = JSON.parse(await readFile(resolve('public', 'docs', 'samples', ...file.split('/')), 'utf8'))
     const inventoryOwner = mode === 'vwan' ? topology.spokes[0] : topology.vnets.find((vnet) => vnet.role === 'spoke-vnet')
@@ -162,8 +203,10 @@ try {
     await application.evaluate(({ dialog }, filePath) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filePath] })
     }, localFile)
-    await page.getByRole('button', { name: 'Open local JSON', exact: true }).click()
-    await expect(page.getByRole('status').filter({ hasText: 'Review the local file' })).toBeVisible()
+    await page.getByRole('button', { name: 'Load', exact: true }).click()
+    await page.getByRole('dialog', { name: 'Load topology', exact: true }).getByRole('button', { name: 'Load file', exact: true }).click()
+    await expect(page.locator('.document-artifact-status')).toHaveText('Locally saved')
+    await expect(page.locator('.document-artifact-details summary')).toHaveAttribute('title', new RegExp(`^Saved .*roundtrip-${mode}\\.json$`))
     const readSaved = () => page.evaluate((mode) => {
       const value = JSON.parse(localStorage.getItem(mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'))
       return mode === 'vwan' ? value : value.topology
@@ -255,7 +298,10 @@ try {
         })
       })
     }, exportFile)
-    await page.getByRole('button', { name: /Export JSON/ }).click()
+    await page.getByRole('button', { name: 'Save As', exact: true }).click()
+    const saveDialog = page.getByRole('dialog', { name: 'Save As', exact: true })
+    await saveDialog.getByRole('combobox', { name: 'Destination', exact: true }).selectOption('download')
+    await saveDialog.getByRole('button', { name: 'Save', exact: true }).click()
     expect(await application.evaluate(() => globalThis.__desktopDownloadDone)).toBe('completed')
     expect(JSON.parse(await readFile(exportFile, 'utf8'))).toEqual(await readSaved())
     if (mode === 'full') {
@@ -295,9 +341,13 @@ try {
       await expect(diagnostics.getByRole('region', { name: 'Diagnostic results' })).toBeVisible({ timeout: 15000 })
     }
     await page.getByTestId('learning-open').click()
+    await page.getByTestId('learning-start').click()
     const learning = page.getByTestId('learning-sidebar')
+    const [firstTask, quizTask, nextTask] = curriculumV2Bundle.lessons[0].tasks
+    const quiz = curriculumV2Bundle.checks.find((check) => check.id === quizTask.checkId)
+    const correct = quiz.params.choices.find((choice) => choice.id === quiz.params.correctChoiceId)
     await expect(learning.locator('textarea,select,pre')).toHaveCount(0)
-    await expect(learning.getByTestId('learning-active-track')).toHaveText('Routing foundations · Scenario edition')
+    await expect(learning.getByTestId('learning-active-track')).toHaveText(`${curriculumV2Bundle.course.title.en} · Guided curriculum v2`)
     await learning.getByText('Progress, review & options', { exact: true }).click()
     const trackOverview = learning.getByTestId('learning-tracks')
     await trackOverview.locator('summary').click()
@@ -317,14 +367,22 @@ try {
     await learning.getByRole('button', { name: 'Load practice network', exact: true }).click()
     await learning.getByRole('button', { name: 'Open protected practice workspace', exact: true }).click()
     await expect(page.getByTestId('practice-workspace-bar')).toContainText('your normal design is kept separately')
-    await expect(page.getByTestId('learning-status')).toContainText('5 points')
-    await expect(page.getByTestId('learning-status')).toContainText('Scenario edition - White belt')
-    await learning.getByRole('button', { name: 'Show me where', exact: true }).click()
-    await expect(page.getByTestId('aznet-subnet-selector')).toHaveValue('a-work')
-    await expect(page.locator('.learning-cue')).toHaveCount(1)
+    await page.waitForTimeout(2200)
+    await expect(page.getByTestId('learning-status')).toContainText('0 points')
+    await expect(learning.getByTestId('learning-debrief')).toHaveCount(0)
+    await learning.getByTestId(`learning-guide-${firstTask.guidanceIds[0]}`).click()
+    await expect(learning.getByTestId('learning-debrief')).toContainText(firstTask.debrief.paragraphs[0].en)
+    await expect(page.getByTestId('learning-status')).toContainText(`${firstTask.points} points`)
+    await learning.getByRole('button', { name: 'Next', exact: true }).click()
+    await expect(page.getByTestId('learning-status')).toContainText('Guided curriculum v2 - White belt')
+    await expect(learning.getByTestId('learning-task')).toHaveAttribute('data-task-id', quizTask.id)
+    await learning.getByRole('radio', { name: correct.text.en, exact: true }).check()
+    await learning.getByRole('button', { name: 'Submit answer', exact: true }).click()
     await expect(page.getByTestId('learning-record-inspection')).toHaveCount(0)
-    await expect(learning.getByRole('heading', { name: 'Meet the network requirements', exact: true })).toBeVisible()
-    await expect(page.getByTestId('learning-status')).toContainText('10 points')
+    await expect(page.getByTestId('learning-status')).toContainText(`${firstTask.points + quizTask.points} points`)
+    await expect(learning.getByTestId('learning-debrief')).toContainText(quizTask.debrief.paragraphs[0].en)
+    await learning.getByRole('button', { name: 'Next', exact: true }).click()
+    await expect(learning.getByTestId('learning-task')).toHaveAttribute('data-task-id', nextTask.id)
     const practice = await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:practice-workspace:v1')).document)
     expect(await readSaved()).toEqual(retainedWorkspace)
     await learning.getByRole('button', { name: 'Pause learning', exact: true }).click()
@@ -332,9 +390,10 @@ try {
     await expect(page.getByTestId('practice-workspace-bar')).toContainText('your normal design is kept separately')
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:practice-workspace:v1')).document)).toEqual(practice)
     await page.getByTestId('learning-open').click()
+    await page.getByTestId('learning-start').click()
     await expect(learning.getByText('Navigation help never costs points and never changes configuration or answers questions.', { exact: true })).toBeHidden()
-    await expect(page.getByTestId('learning-status')).toContainText('10 points')
-    await expect(learning.getByRole('heading', { name: 'Meet the network requirements', exact: true })).toBeVisible()
+    await expect(page.getByTestId('learning-status')).toContainText(`${firstTask.points + quizTask.points} points`)
+    await expect(learning.getByTestId('learning-task')).toHaveAttribute('data-task-id', nextTask.id)
     await learning.getByRole('button', { name: 'Pause learning', exact: true }).click()
     await page.getByRole('button', { name: 'Return to my design', exact: true }).click()
     await expect(page.getByTestId(mode === 'vwan' ? 'vwan-app' : 'aznet-app')).toBeVisible()
@@ -342,7 +401,7 @@ try {
   }
   for (const mode of ['hub-spoke', 'full']) {
     const topology = JSON.parse(await readFile(resolve('public', 'docs', 'samples', 'azure-net', 'subnet-peering.json'), 'utf8'))
-    await page.goto(`app://simulator/?mode=${mode}`)
+    await openScenario(`app://simulator/?mode=${mode}`)
     await page.getByTestId('aznet-app').waitFor()
     await page.locator('input[type="file"]').first().setInputFiles({
       name: 'subnet-peering.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
@@ -365,7 +424,7 @@ try {
   }
   for (const mode of ['hub-spoke', 'full']) {
     const topology = nvaBgpTopology()
-    await page.goto(`app://simulator/?mode=${mode}`)
+    await openScenario(`app://simulator/?mode=${mode}`)
     await page.getByTestId('aznet-app').waitFor()
     await page.locator('input[data-desktop-import]').setInputFiles({
       name: 'vpn-mode.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(vpnGatewayModeTopology())),
@@ -390,6 +449,45 @@ try {
     await expect(capturedNeighbors.locator('tbody tr')).toHaveCount(2)
     await expect(capturedNeighbors).toContainText('Idle')
     await expect(capturedNeighbors.locator('tbody tr td').last()).toHaveText('0')
+    await page.locator('input[data-desktop-import]').setInputFiles(resolve('tests', 'fixtures', 'gateway-route-capture.json'))
+    const capturedRoutes = page.getByTestId('captured-gateway-routes')
+    await expect(capturedRoutes.locator('tbody tr')).toHaveCount(3)
+    await expect(capturedRoutes).toContainText('truncated')
+    await capturedNeighbors.getByRole('button', { name: 'Inspect captured routes', exact: true }).click()
+    await expect(capturedRoutes.locator('tbody tr')).toHaveCount(1)
+    await expect(capturedRoutes).toContainText('198.51.100.1')
+    await expect(capturedRoutes).not.toContainText('198.18.0.0/24')
+    await capturedNeighbors.getByRole('combobox', { name: 'Local BGP endpoint', exact: true }).selectOption('10.1.0.5')
+    await expect(capturedRoutes).toContainText('198.51.100.0/24')
+    await expect(capturedRoutes).not.toContainText('203.0.113.0/24')
+    await capturedNeighbors.getByRole('combobox', { name: 'Captured gateway', exact: true }).selectOption('vpn-routes-only')
+    await expect(capturedRoutes).toContainText('172.16.0.0/16')
+    await expect(capturedNeighbors.getByTestId('captured-gateway-neighbor-table')).toHaveCount(0)
+    await page.locator('input[data-desktop-import]').setInputFiles(resolve('tests', 'fixtures', 'gateway-advertised-capture.json'))
+    const advertisedRoutes = page.getByTestId('captured-gateway-advertised-routes')
+    await expect(advertisedRoutes).toBeHidden()
+    await capturedNeighbors.getByRole('button', { name: 'Inspect advertised routes', exact: true }).click()
+    await expect(advertisedRoutes.locator('tbody tr')).toHaveCount(2)
+    await expect(advertisedRoutes).toContainText('Advertised to peer 192.0.2.9')
+    await expect(advertisedRoutes.locator('tbody tr').first().locator('td').last()).toHaveText('Not captured')
+    await capturedNeighbors.getByRole('combobox', { name: 'Local BGP endpoint', exact: true }).selectOption('10.1.0.5')
+    await expect(advertisedRoutes.locator('tbody tr')).toHaveCount(1)
+    await expect(advertisedRoutes).toContainText('198.51.100.0/24')
+    await capturedNeighbors.getByRole('combobox', { name: 'Advertised-to peer', exact: true }).selectOption('192.0.2.12')
+    await expect(advertisedRoutes).toContainText('denied · Unknown / incomplete')
+    await page.locator('input[data-desktop-import]').setInputFiles(resolve('tests', 'fixtures', 'gateway-native-endpoints-capture.json'))
+    await capturedNeighbors.getByText('Native VPN IP configurations', { exact: true }).first().click()
+    const nativeConfigurations = capturedNeighbors.getByTestId('captured-vpn-ip-configurations')
+    await expect(nativeConfigurations.locator('tbody tr')).toHaveCount(2)
+    await expect(nativeConfigurations.locator('tbody tr').first()).toContainText('ipConfigurations/second')
+    await expect(nativeConfigurations.locator('tbody tr').first()).toContainText('10.1.0.5')
+    await expect(capturedNeighbors.getByTestId('captured-gateway-neighbor-table')).toHaveCount(0)
+    const nativeEndpoint = capturedNeighbors.getByRole('combobox', { name: 'Local BGP endpoint', exact: true })
+    await expect(nativeEndpoint.locator('option[value="198.51.100.2"]')).toHaveCount(0)
+    await capturedNeighbors.getByRole('combobox', { name: 'Captured gateway', exact: true }).selectOption('vpn-as')
+    await expect(nativeEndpoint.locator('option')).toHaveCount(1)
+    await expect(nativeConfigurations.locator('tbody tr')).toHaveCount(1)
+    await expect(capturedNeighbors.getByTestId('captured-gateway-neighbor-table')).toHaveCount(0)
     if (mode === 'full') topology.vnets[0].summarizedGatewayPrefixes = ['10.0.0.0/12', '203.0.113.0/24']
     await page.locator('input[type="file"]').first().setInputFiles({
       name: 'nva-bgp-native.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
@@ -429,7 +527,7 @@ try {
   }
   for (const mode of ['vwan', 'full']) {
     const topology = mode === 'vwan' ? hubFirewallTopology('published-branch') : azHubFirewallTopology('published-branch')
-    await page.goto(`app://simulator/?mode=${mode}`)
+    await openScenario(`app://simulator/?mode=${mode}`)
     await page.getByTestId(mode === 'vwan' ? 'vwan-app' : 'aznet-app').waitFor()
     await page.locator('input[type="file"]').first().setInputFiles({
       name: 'static-firewall-native.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
@@ -498,7 +596,7 @@ try {
         udrTables: kind === 'direct' ? [] : [{ id: 'steering', name: 'Steering', disableBgpRoutePropagation: false,
           routes: [{ id: 'default', name: 'Default', prefix: '0.0.0.0/0', nextHopType: 'VirtualAppliance', nextHopIp: '10.1.2.4', enabled: true }] }],
         vnetPeerings: [], vwanHubs: [], erLocations: [], erLinks: [], erGlobalReachLinks: [], sites: [], vpnConnections: [], siteLinks: [], inventory }
-    await page.goto(`app://simulator/?mode=${mode}`)
+    await openScenario(`app://simulator/?mode=${mode}`)
     await page.getByTestId(native ? 'vwan-app' : 'aznet-app').waitFor()
     const input = { contractVersion: 1, operation: 'simulate', document: { mode, topology }, packet: {
       source: { kind: 'workload', workloadId: 'client', nicId: 'client-nic', ipConfigurationId: 'client-ip' },
@@ -627,7 +725,7 @@ try {
     expect(unknownGrade.value).toEqual(executePlatform(gradeInput))
     expect(unknownGrade.value.assessments.map((assessment) => assessment.outcome)).toEqual(['not assessed', 'not assessed'])
   }
-  await page.goto('app://simulator/?mode=vwan&feedback=1')
+  await openScenario('app://simulator/?mode=vwan&feedback=1')
   await page.getByTestId('vwan-app').waitFor()
   await expect(page.getByRole('button', { name: 'Feedback', exact: true })).toBeDisabled()
   expect(await page.locator('.feedback-modal').count()).toBe(0)

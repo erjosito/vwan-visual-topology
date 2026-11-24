@@ -1,8 +1,12 @@
 import { contractVersion, engineVersion, type PlatformRequest, type PlatformResult } from '../platform/contract'
 import type { CourseBundle, CourseTask } from './course-contract'
+import { inspectionScope } from './task-guidance'
 import type { Localized } from './content'
 import type { PracticeWorkspace } from './practice-workspace'
-import type { AzSimulationResult } from '../azure-net/engine'
+import { createPlatformRequest } from '../platform/request'
+import { newBeltAchievement, type BeltAchievement } from './belt-achievement'
+import { matchesConfiguration } from './configuration-check'
+import { lookupSubnetEffectiveRoute } from '../azure-net/engine'
 
 export type LearningWorkspace = { practice: PracticeWorkspace; revision: number; scope: number }
 export type LearningObservation = {
@@ -12,6 +16,8 @@ export type LearningObservation = {
   siteId?: string
   hubId?: string
   tableId?: string
+  gatewayId?: string
+  locationId?: string
   prefix: string
 }
 export type TaskCompletion = {
@@ -39,11 +45,12 @@ export type RunnerState = {
   completions: readonly TaskCompletion[]
   running: boolean
   automatic: boolean
+  awaitingNext: boolean
   feedback?: RunnerFeedback
   explanation?: Localized
   unmet: string[]
   observation?: LearningObservation
-  celebration?: { title: Localized; points: number; explanation?: Localized }
+  celebration?: { title: Localized; points: number; explanation?: Localized; belt?: BeltAchievement; beltDismissed?: boolean }
   canContinue: boolean
 }
 export type CourseRunner = ReturnType<typeof createCourseRunner>
@@ -89,6 +96,7 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
   let automaticTimer: ReturnType<typeof setTimeout> | undefined
   let automaticAttempt: string | undefined
   let celebration: RunnerState['celebration']
+  let awaitingNext = false
   let state: RunnerState
   const current = () => tasks.find((item) => item.task.id === taskId)
   const binding = () => {
@@ -103,20 +111,21 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
   const publish = () => {
     const key = binding()
     const check = bundle.checks.find((item) => item.id === current()?.task.checkId)
-    if ((check?.kind === 'routes.inspected' || check?.kind === 'control-routes.inspected') && key) {
-      if (!observation || observationKey !== key) observation = { token: crypto.randomUUID(), ...check.params }
+    const inspection = inspectionScope(check)
+    if (!awaitingNext && inspection && key) {
+      if (!observation || observationKey !== key) observation = { token: crypto.randomUUID(), ...inspection }
       observationKey = key
     } else { observation = undefined; observationKey = undefined }
     state = { taskId, reviewId, replayLessonId: replay?.lessonId, completions: [...completions],
-      running: !!job, automatic, feedback, explanation, unmet, observation, celebration,
-      canContinue: !reviewId && !!key && proof === key && !job }
+      running: !!job, automatic, awaitingNext, feedback, explanation, unmet, observation, celebration,
+      canContinue: !reviewId && (awaitingNext || !!key && proof === key && !job) }
     options.changed(state)
     clearTimeout(automaticTimer)
     automaticTimer = undefined
-    if (!automatic || reviewId || job || !key || !check) return
-    if (state.canContinue) automaticTimer = setTimeout(() => { if (automatic) advance() }, 1600)
+    if (!automatic || awaitingNext || reviewId || job || !key || !check) return
+    if (state.canContinue) automaticTimer = setTimeout(() => { if (automatic) complete() }, 450)
     else if (check.kind !== 'quiz.answered' && automaticAttempt !== key
-      && (!['routes.inspected', 'control-routes.inspected'].includes(check.kind) || observed === key)) {
+      && (!inspection || observed === key)) {
       automaticTimer = setTimeout(() => {
         if (!automatic || key !== binding()) return
         automaticAttempt = key
@@ -131,12 +140,12 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
     feedback = reason; explanation = undefined; unmet = []
   }
   const workspaceChanged = () => {
-    celebration = undefined
+    if (!awaitingNext) celebration = undefined
     invalidate(job || proof || observed || feedback === 'stale' ? 'stale' : undefined)
     publish()
   }
   const assess = async (answerId?: string) => {
-    if (reviewId || !taskId) return
+    if (reviewId || awaitingNext || !taskId) return
     job?.abort()
     proof = undefined; feedback = undefined; explanation = undefined; unmet = []
     const key = binding()
@@ -155,15 +164,24 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
         const choice = check.params.choices.find((entry) => entry.id === answerId)
         detail = choice?.feedback
         result = !choice ? 'answer' : choice.id === check.params.correctChoiceId ? 'passed' : 'incorrect'
-      } else if ((check.kind === 'routes.inspected' || check.kind === 'control-routes.inspected') && observed !== key) result = 'inspect'
+      } else if (inspectionScope(check) && observed !== key) result = 'inspect'
       else {
         const document = structuredClone(live.practice.document)
         let configured = true
-        if (check.kind === 'vnet.peered') {
-          configured = document.mode !== 'vwan' && document.topology.vnetPeerings.some((peering) =>
+        if (check.kind === 'topology.configured') configured = matchesConfiguration(document.topology, check.params.expected)
+        if (check.kind === 'udrs.configured') {
+          configured = document.mode !== 'vwan' && check.params.routes.every((scope) => {
+            const subnet = document.topology.vnets.find((vnet) => vnet.id === scope.vnetId)?.subnets.find((entry) => entry.id === scope.subnetId)
+            return document.topology.udrTables.find((table) => table.id === subnet?.routeTableId)?.routes.some((route) =>
+              route.enabled && route.prefix === scope.prefix && route.nextHopType === 'VirtualAppliance' && route.nextHopIp === scope.nextHopIp)
+          })
+        }
+        if (check.kind === 'vnet.peered' || check.kind === 'peerings.configured') {
+          const pairs = check.kind === 'vnet.peered' ? [check.params] : check.params.peerings
+          configured = document.mode !== 'vwan' && pairs.every((pair) => document.topology.vnetPeerings.some((peering) =>
             peering.enabled && peering.aToB.allowVirtualNetworkAccess && peering.bToA.allowVirtualNetworkAccess
-            && ((peering.vnetAId === check.params.vnetAId && peering.vnetBId === check.params.vnetBId)
-              || (peering.vnetBId === check.params.vnetAId && peering.vnetAId === check.params.vnetBId)))
+            && ((peering.vnetAId === pair.vnetAId && peering.vnetBId === pair.vnetBId)
+              || (peering.vnetBId === pair.vnetAId && peering.vnetAId === pair.vnetBId))))
         }
         if (check.kind === 'hub-associations.configured') {
           configured = document.mode !== 'vwan' && check.params.associations.every((scope) => {
@@ -189,8 +207,8 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
         if (!configured) result = check.kind === 'vnet.peered' ? 'peering' : 'requirements'
         else {
           const requirements = 'requirements' in check.params ? check.params.requirements : undefined
-          const evaluated = await options.evaluate({ contractVersion, engineVersion, document,
-            operation: requirements ? 'evaluate' : 'validate', ...(requirements ? { requirements } : {}) }, controller.signal)
+          const evaluated = await options.evaluate(createPlatformRequest({ contractVersion, engineVersion, document,
+            operation: requirements ? 'evaluate' : 'validate', requirements }), controller.signal)
           if (evaluated.status === 'complete' && evaluated.contractVersion === contractVersion
             && evaluated.engineVersion === engineVersion && evaluated.document && !evaluated.errors.length) {
             if (!requirements) result = 'passed'
@@ -202,12 +220,15 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
                 failures = evaluated.assessments.filter((entry) => entry.outcome !== 'satisfied').map((entry) => entry.id)
                 result = failures.length ? 'requirements' : 'passed'
               }
-              if (result === 'passed' && check.kind === 'connections.configured') {
-                const simulation = evaluated.simulation as AzSimulationResult | undefined
-                const selected = check.params.selectedRoutes.every((scope) => {
+              if (result === 'passed' && (check.kind === 'connections.configured'
+                || check.kind === 'topology.configured' && check.params.selectedRoutes)) {
+                const simulation = evaluated.document.mode !== 'vwan' && evaluated.simulation
+                  && 'subnetTables' in evaluated.simulation ? evaluated.simulation : undefined
+                const selected = check.params.selectedRoutes!.every((scope) => {
                   const table = simulation?.subnetTables?.[scope.subnetId]
                   return table?.vnetId === scope.vnetId && table.routes.some((route) =>
                     route.active && route.prefix === scope.prefix && route.nextHopResourceId === scope.nextHopResourceId)
+                    && (!scope.destinationAddress || lookupSubnetEffectiveRoute(table, scope.destinationAddress)?.nextHopResourceId === scope.nextHopResourceId)
                 })
                 if (!selected) result = 'requirements'
               }
@@ -223,14 +244,16 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
     if (result === 'passed') proof = key
     publish()
   }
-  const advance = () => {
+  const complete = () => {
     const key = binding()
     if (!key || proof !== key || job || reviewId || !taskId) {
       invalidate('stale'); publish(); return false
     }
     const { task, lesson } = current()!
-    const firstAward = !taskCompleted(bundle, completions, task)
-    if (firstAward) {
+    const firstCompletion = !taskCompleted(bundle, completions, task)
+    const firstAward = !completions.some((entry) => entry.courseId === bundle.course.id && entry.awardId === task.awardId)
+    const before = completions
+    if (firstCompletion) {
       const live = options.workspace()!
       const completion: TaskCompletion = {
         courseId: bundle.course.id, contentVersion: bundle.course.contentVersion, lessonId: lesson.id,
@@ -241,9 +264,19 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
       try {
         if (options.completed?.(completion) === false) { proof = undefined; feedback = 'progress'; publish(); return false }
       } catch { proof = undefined; feedback = 'progress'; publish(); return false }
-      completions.push(completion)
+      completions = [...completions, completion]
     }
-    celebration = { title: task.title, points: firstAward ? task.points : 0, explanation }
+    const belt = firstCompletion ? newBeltAchievement(bundle, before, completions) : undefined
+    celebration = { title: task.title, points: firstAward ? task.points : 0, explanation, belt }
+    awaitingNext = true
+    invalidate(); publish()
+    return true
+  }
+  const advance = () => {
+    if (reviewId || !taskId) return false
+    if (!awaitingNext && !complete()) return false
+    const { task, lesson } = current()!
+    awaitingNext = false
     if (replay) {
       replay.done.add(task.id)
       taskId = lesson.taskOrder.find((id) => !replay!.done.has(id))
@@ -254,7 +287,7 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
   }
   const review = (id?: string) => {
     if (id && !tasks.some(({ task }) => task.id === id && taskCompleted(bundle, completions, task))) return
-    celebration = undefined
+    if (!awaitingNext) celebration = undefined
     invalidate()
     reviewId = id
     publish()
@@ -265,6 +298,7 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
     const lessonIndex = tasks.findIndex((entry) => entry.lesson.id === lessonId)
     if (!lesson || (firstUnmetIndex >= 0 && lessonIndex > firstUnmetIndex)) return
     celebration = undefined
+    awaitingNext = false
     invalidate(); reviewId = undefined
     replay = { lessonId, done: new Set() }
     taskId = lesson.taskOrder[0]; sessionId = crypto.randomUUID()
@@ -275,6 +309,10 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
     bundle,
     getSnapshot: () => state,
     assess, advance, review, replayLesson, workspaceChanged,
+    dismissBelt: () => {
+      if (!celebration?.belt) return
+      celebration = { ...celebration, beltDismissed: true }; publish()
+    },
     setAutomatic: (enabled: boolean) => {
       if (automatic === enabled) return
       automatic = enabled
@@ -284,17 +322,19 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
     },
     replaceProgress: (entries: readonly TaskCompletion[]) => {
       celebration = undefined
+      awaitingNext = false
       invalidate(); completions = [...entries]; reviewId = undefined; replay = undefined
       taskId = nextUncompleted(); sessionId = crypto.randomUUID(); publish()
     },
-    cancel: () => { celebration = undefined; invalidate('cancelled'); automaticAttempt = binding(); publish() },
+    cancel: () => { if (!awaitingNext) celebration = undefined; invalidate('cancelled'); automaticAttempt = binding(); publish() },
     resumeCurrent: () => {
       celebration = undefined
+      awaitingNext = false
       invalidate(); reviewId = undefined; replay = undefined; taskId = nextUncompleted(); publish()
     },
     observe: (event: LearningObservation) => {
       const key = binding()
-      if (!reviewId && key && observationKey === key && observation && Object.entries(observation).every(([name, value]) =>
+      if (!reviewId && !awaitingNext && key && observationKey === key && observation && Object.entries(observation).every(([name, value]) =>
         event[name as keyof LearningObservation] === value)) {
         observed = key; feedback = 'observed'; publish()
       }

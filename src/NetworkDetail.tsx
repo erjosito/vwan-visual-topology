@@ -12,21 +12,26 @@ import type { AzSimulationResult } from './azure-net/engine'
 import './network-detail.css'
 import './network-detail-messages-ja'
 import { contains, ipv4 } from './validation'
+import { subnetAddressError, vnetAddressError } from './azure-net/addressing'
 import { ApplicationFlowPanel } from './ApplicationFlowPanel'
 import { applicationProjection, validateApplicationInventory, type ApplicationResult } from './application'
 import { revisionOf } from './platform/service'
 import { TopologyContextMenu, type ContextAction } from './TopologyContextMenu'
 import { networkDetailProjection, type DetailEntity, type DetailTarget } from './network-detail-projection'
 import { NetworkDetailAttachments } from './NetworkDetailAttachments'
+import subnetIcon from './assets/azure/subnet.svg'
+import virtualNetworkIcon from './assets/azure/virtual-network.svg'
+import { guidanceAnchor } from './learning/guidance'
 
 export interface DetailBoundary { direction: 'forward' | 'reply'; destination: string; evidence: string; subnetIds: string[] }
 
-export function NetworkDetail({ topology, owner, simulation, selectedId, selectedTargetId, boundaries = [], returnFocus, onSelect, onSelectTarget, onApplianceAction, getContextActions, commit, onClose }: {
+export function NetworkDetail({ topology, owner, simulation, selectedId, selectedTargetId, initialLoadBalancerId, boundaries = [], returnFocus, onSelect, onSelectTarget, onApplianceAction, getContextActions, commit, onClose }: {
   topology: InventoryTopology
   owner: InventoryOwner
   simulation: Simulation | AzSimulationResult
   selectedId?: string
   selectedTargetId?: string
+  initialLoadBalancerId?: string
   boundaries?: DetailBoundary[]
   returnFocus?: Element | null
   onSelect: (id: string) => void
@@ -62,6 +67,7 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, selecte
   const applicationResult = applicationEvidence?.topology === topology ? applicationEvidence.result : undefined
   const applicationSelection = applicationProjection(topology, owner, applicationResult)
   const network = inventoryOwners(topology).find((entry) => sameInventoryOwner(entry, owner))
+  const addressError = network ? vnetAddressError(network) : undefined
   const nics = (topology.inventory?.nics ?? []).filter((nic) => sameInventoryOwner(nic.owner, owner))
   const workloads = (topology.inventory?.workloads ?? []).filter((workload) => workload.nicIds.some((id) => nics.some((nic) => nic.id === id)))
   const matchingWorkloads = workloads.filter((workload) => [workload.name, workload.id,
@@ -124,6 +130,9 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, selecte
       if (action) queueMicrotask(action)
     }
   }, [returnFocus])
+  useEffect(() => {
+    if (initialLoadBalancerId) focusEditor(`[data-learning-anchor=${JSON.stringify(guidanceAnchor('load-balancer-health', owner.id, initialLoadBalancerId))}]`)
+  }, [initialLoadBalancerId, owner.id])
   const close = () => dialog.current?.close()
   const leaveFor = (action: () => void) => { pendingAction.current = action; close() }
   const selectWorkload = (id: string) => {
@@ -167,6 +176,7 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, selecte
       if (subnetId) revealSubnet(subnetId, '.nat-gateway-editor summary')
     } })
     if (entity.kind === 'load-balancer') actions.push({ label: t('Standard Load Balancers'), run: () => focusEditor('[data-testid="load-balancer-editor"]') })
+    if (entity.kind === 'application') actions.push({ label: t('Application and DNS contracts'), run: () => focusEditor('[data-testid="application-flow-panel"]') })
     if (entity.kind === 'private-endpoint' && entity.subnetIds[0]) {
       const subnetId = entity.subnetIds[0], children = sharedActions({ kind: 'subnet', id: subnetId })
       if (children.length) actions.push({ label: t('Subnet actions: {0}', network?.subnets.find((subnet) => subnet.id === subnetId)?.name ?? subnetId), children })
@@ -189,51 +199,48 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, selecte
     <header className="row dialog-heading"><h2 id="network-detail-title">{t('VNet detail')}: {network?.name ?? t('Unavailable')}</h2>
       <button ref={closeButton} type="button" onClick={close} aria-label={t('Close VNet detail')}>{t('Close')}</button></header>
     {!network ? <p role="status">{t('The original network is no longer available. No replacement network is shown.')}</p> : <>
-      <p><code>{owner.id}</code> · {network.prefixes.join(', ')}</p>
+      <div className="network-detail-graph" data-testid="vnet-detail-diagram">
+      <div className="detail-network-heading">
+        <img src={virtualNetworkIcon} alt="" />
+        <div><h3>{network.name}</h3><code style={{ color: addressError ? 'var(--error)' : undefined }}
+          title={addressError ? t(addressError) : undefined}>{network.prefixes.join(', ')}</code></div>
       <button type="button" onClick={(event) => {
         const bounds = event.currentTarget.getBoundingClientRect()
         onSelectTarget?.({ kind: 'network', id: owner.id })
         openActions(network.name, sharedActions({ kind: 'network', id: owner.id }), event.currentTarget, bounds.left, bounds.bottom)
       }}>{t('Network actions')}</button>
-      <p>{t('This is a view of the original topology. Workloads are endpoints, not extra routers. Declare original NSGs, NAT, ingress and Standard Load Balancers without adding global Internet links.')}</p>
-      {error && <p role="alert" className="notice error">{error}</p>}
-      {boundaries.length > 0 && <section aria-label={t('Selected flow boundaries')}>
-        <h3>{t('Selected flow boundaries')}</h3>
-        {boundaries.slice(0, 16).map((boundary, index) => <p key={index}>
-          <strong>{t(boundary.direction === 'forward' ? 'Forward routing' : 'Reply routing')}</strong>{' → '}
-          <code>{boundary.destination}</code>: {boundary.evidence}
-        </p>)}
-        <p>{t('External destinations remain boundary references; no global Internet links are added.')}</p>
-      </section>}
-      <div className="network-detail-graph">
+      </div>
         <section aria-label={t('Subnets and NIC attachments')}>
-          <h3>{t('Subnets and NIC attachments')}</h3>
-          <p>{t('Containers and arrows show declared attachments, not forwarding links. Right-click or press Shift+F10 for actions.')}</p>
-          <label>{t('Search subnets')}<input type="search" value={subnetQuery} onChange={(event) => { setSubnetQuery(event.target.value); setSubnetPage(0) }} /></label>
+          <label className="detail-subnet-search">{t('Search subnets')}<input type="search" value={subnetQuery} onChange={(event) => { setSubnetQuery(event.target.value); setSubnetPage(0) }} /></label>
           {!network.subnets.length && <p>{t('No detailed subnets have been declared. No workload addressing is inferred from VNet prefixes.')}</p>}
           {matchingSubnets.slice(currentSubnetPage * 100, (currentSubnetPage + 1) * 100).map((subnet) => {
+            const addressError = subnetAddressError(network.prefixes, subnet.prefix)
             const attached = nics.filter((nic) => nic.ipConfigurations.some((config) => config.subnetId === subnet.id))
             const directions = [...new Set(boundaries.filter((boundary) => boundary.subnetIds.includes(subnet.id)
               || (ipv4(boundary.destination) !== undefined && contains(subnet.prefix, ipv4(boundary.destination)!))).map((boundary) => boundary.direction))]
             const subnetActions = () => { onSelectTarget?.({ kind: 'subnet', id: subnet.id }); return [...sharedActions({ kind: 'subnet', id: subnet.id }),
               { label: t('Subnet NSG'), run: () => focusEditor(`[data-testid=${JSON.stringify(`nsg-editor-subnet-${subnet.id}`)}]`) }]
             }
-            return <article className="detail-subnet" key={subnet.id} data-testid="detail-subnet" data-subnet-id={subnet.id}>
-              <h4><button type="button" className="detail-subnet-target" aria-label={`${t('Subnet')}: ${subnet.name}`}
+            return <article className={`detail-subnet detail-subnet-tone-${network.subnets.indexOf(subnet) % 4}`} key={subnet.id} data-testid="detail-subnet" data-subnet-id={subnet.id}>
+              <h4><button type="button" className="detail-subnet-target" aria-label={`${t('Subnet')}: ${subnet.name} ${subnet.prefix}`}
+                title={`${subnet.name} · ${subnet.prefix} · ${subnet.id}`}
                 aria-pressed={selectedTargetId === subnet.id}
                 onClick={(event) => { const bounds = event.currentTarget.getBoundingClientRect(); openActions(subnet.name, subnetActions(), event.currentTarget, bounds.left, bounds.bottom) }}
                 onContextMenu={(event) => { event.preventDefault(); openActions(subnet.name, subnetActions(), event.currentTarget, event.clientX, event.clientY) }}
                 onKeyDown={(event) => { if (event.key === 'ContextMenu' || event.key === 'F10' && event.shiftKey) {
                   event.preventDefault(); const bounds = event.currentTarget.getBoundingClientRect()
                   openActions(subnet.name, subnetActions(), event.currentTarget, bounds.left, bounds.bottom)
-                } }}>{subnet.name}</button></h4><code>{subnet.prefix}</code> · <code>{subnet.id}</code>
+                } }}><img src={subnetIcon} alt="" /><span>{subnet.name}</span>{' '}<code
+                  style={{ color: addressError ? 'var(--error)' : undefined }}
+                  title={addressError ? t(addressError) : undefined}>{subnet.prefix}</code></button></h4>
               {applicationSelection.subnetIds.has(subnet.id) && <p data-testid="application-subnet-reference"><strong>{t('Selected application reference')}</strong>: <code>{subnet.id}</code></p>}
               {directions.map((direction) => <p key={direction}><strong>{t(direction === 'forward' ? 'Forward routing' : 'Reply routing')}</strong></p>)}
-              <p>{t('{0} NIC attachments', attached.length)}</p>
+              <p className="detail-subnet-count">{t('{0} NIC attachments', attached.length)}</p>
               <details open className="detail-subnet-content"><summary>{t('Attached devices and policies')}</summary>
               <NetworkDetailAttachments key={subnet.id} entities={entities.filter((entity) => entity.subnetIds.includes(subnet.id))}
                 workloads={workloads} selectedId={selectedId} selectedTargetId={selectedTargetId} subnetId={subnet.id}
                 onRevealOriginal={revealOriginal} onSelect={selectWorkload} onActions={entityActions} />
+              <details className="detail-subnet-policies"><summary>{t('Subnet configuration')}</summary>
               <NatGatewayEditor topology={topology} owner={owner} subnetId={subnet.id} change={change} />
               <NsgEditor topology={topology} owner={owner} target={{ kind: 'subnet', id: subnet.id }} change={change} />
               {topology.version === 2 && topology.vnets.find((vnet) => vnet.id === owner.id)?.appliances
@@ -251,7 +258,7 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, selecte
                   <DnatEditor topology={topology} owner={{ kind: 'appliance', id: device.id }} name={device.name}
                     kind={device.kind === 'azure-firewall' ? 'firewall-dnat' : 'nva-dnat'} change={change} />
                 </div>)}
-              </details>
+              </details></details>
             </article>
           })}
           {matchingSubnets.length > 100 && <div className="row">
@@ -271,21 +278,35 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, selecte
             <NetworkDetailAttachments entities={entities.filter((entity) => !entity.subnetIds.length)}
               workloads={workloads} selectedId={selectedId} selectedTargetId={selectedTargetId} onSelect={selectWorkload} onActions={entityActions} />
           </section>}
-          {owner.kind === 'spoke' && <form onSubmit={(event) => {
-            event.preventDefault()
-            const form = event.currentTarget, data = new FormData(form), id = `subnet-${crypto.randomUUID()}`
-            if (change((draft) => {
-              if (draft.version !== 1) return
-              const spoke = draft.spokes.find((spoke) => spoke.id === owner.id)!
-              ;(spoke.subnets ??= []).push({ id, name: String(data.get('name')), prefix: String(data.get('prefix')) })
-            })) form.reset()
-          }}>
-            <h4>{t('Declare subnet')}</h4>
-            <label>{t('Subnet name')}<input name="name" required maxLength={120} /></label>
-            <label>{t('Subnet prefix')}<input name="prefix" required placeholder="10.1.1.0/24" /></label>
-            <button type="submit">{t('Add detailed subnet')}</button>
-          </form>}
         </section>
+        <p className="detail-diagram-help">{t('Subnet pipes and branches show declared attachments, not forwarding links. Right-click or press Shift+F10 on a resource for actions.')}</p>
+      </div>
+      {error && <p role="alert" className="notice error">{error}</p>}
+      {boundaries.length > 0 && <section aria-label={t('Selected flow boundaries')}>
+        <h3>{t('Selected flow boundaries')}</h3>
+        {boundaries.slice(0, 16).map((boundary, index) => <p key={index}>
+          <strong>{t(boundary.direction === 'forward' ? 'Forward routing' : 'Reply routing')}</strong>{' → '}
+          <code>{boundary.destination}</code>: {boundary.evidence}
+        </p>)}
+        <p>{t('External destinations remain boundary references; no global Internet links are added.')}</p>
+      </section>}
+      <details className="detail-configuration" open><summary>{t('Configuration and workload inventory')}</summary>
+        <p><code>{owner.id}</code> · {network.prefixes.join(', ')}</p>
+        <p>{t('This is a view of the original topology. Workloads are endpoints, not extra routers. Declare original NSGs, NAT, ingress and Standard Load Balancers without adding global Internet links.')}</p>
+        {owner.kind === 'spoke' && <form onSubmit={(event) => {
+          event.preventDefault()
+          const form = event.currentTarget, data = new FormData(form), id = `subnet-${crypto.randomUUID()}`
+          if (change((draft) => {
+            if (draft.version !== 1) return
+            const spoke = draft.spokes.find((spoke) => spoke.id === owner.id)!
+            ;(spoke.subnets ??= []).push({ id, name: String(data.get('name')), prefix: String(data.get('prefix')) })
+          })) form.reset()
+        }}>
+          <h4>{t('Declare subnet')}</h4>
+          <label>{t('Subnet name')}<input name="name" required maxLength={120} /></label>
+          <label>{t('Subnet prefix')}<input name="prefix" required placeholder="10.1.1.0/24" /></label>
+          <button type="submit">{t('Add detailed subnet')}</button>
+        </form>}
         <section aria-label={t('Named workloads')}>
           <details open className="detail-workload-inventory"><summary>{t('Workload inventory and NIC policies')}</summary>
           <h3>{t('Named workloads')} ({workloads.length})</h3>
@@ -309,10 +330,10 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, selecte
           {!workloads.length && <p>{t('No named workloads are declared. Legacy subnet probes remain available; they are not discovered VMs.')}</p>}
           </details>
         </section>
-      </div>
       <ApplicationFlowPanel key={revisionOf(topology)} topology={topology} owner={owner} result={applicationResult}
         onResult={(result) => setApplicationEvidence({ topology, result })} />
-      <LoadBalancerEditor topology={topology} owner={owner} change={change} onSelect={(id) => { setQuery(''); onSelect(id) }} />
+      <LoadBalancerEditor key={initialLoadBalancerId ?? ''} initialSelectedId={initialLoadBalancerId}
+        topology={topology} owner={owner} change={change} onSelect={(id) => { setQuery(''); onSelect(id) }} />
       {selected && <form data-testid="selected-workload-form" key={JSON.stringify([selected, nics.filter((nic) => selected.nicIds.includes(nic.id)), topology.inventory?.publicIps])} onSubmit={(event) => {
         event.preventDefault()
         const data = new FormData(event.currentTarget)
@@ -393,6 +414,7 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, selecte
       <PacketFlowPanel topology={topology} simulation={simulation} guidanceVnetId={owner.kind === 'vnet' ? owner.id : undefined} onHighlight={(id) => {
         if (workloads.some((workload) => workload.id === id)) { setQuery(''); onSelect(id) }
       }} />
+      </details>
     </>}
     {menu && <TopologyContextMenu x={menu.x} y={menu.y} title={menu.title} actions={menu.actions}
       onClose={() => { if (menu.invoker.isConnected) menu.invoker.focus({ preventScroll: true }); setMenu(undefined) }} />}

@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test'
 import { guidanceAnchor } from '../src/learning/guidance'
 import { practiceWorkspaceKey } from '../src/learning/practice-workspace'
 import { exampleCourse } from '../src/learning/course-examples'
-import { completeLearningTasks as next, learningOptions, loadLearningNetwork as load } from './learning-helpers'
+import { openLearning, advanceLearningTask, completeLearningTasks as next, learningOptions, loadLearningNetwork as load } from './learning-helpers'
 import { runnerLabels } from '../src/learning/runner-content'
 import { guidedProgressKey } from '../src/learning/progress-ledger'
 import { orderedTasks } from '../src/learning/runner'
@@ -24,7 +24,7 @@ test.beforeEach(async ({ page }) => {
 
 async function open(page: Page) {
   await page.goto('/?mode=full')
-  await page.getByTestId('learning-open').click()
+  await openLearning(page)
   await expect(sidebar(page)).toBeVisible()
 }
 
@@ -52,7 +52,7 @@ for (const language of ['en', 'ja'] as const) for (const taskId of ['wan.verify'
     }, { language, completions, document, scenarioId: lesson.scenarioId, progressKey: guidedProgressKey, practiceKey: practiceWorkspaceKey })
     await page.setViewportSize({ width: 1440, height: 1000 })
     await page.goto('/')
-    await page.getByTestId('learning-open').click()
+    await openLearning(page)
     await expect(sidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', taskId)
     await learningOptions(page, language)
     const before = await saved(page)
@@ -64,7 +64,7 @@ for (const language of ['en', 'ja'] as const) for (const taskId of ['wan.verify'
     await expect(row.first()).toBeVisible()
     await expect(cue(page)).toHaveCount(await row.count())
     await expect(row.first()).toBeFocused()
-    await page.getByRole('button', { name: translate(language, 'Move {0} to left', 'Effective routes'), exact: true }).click()
+    await page.getByRole('button', { name: translate(language, 'Move {0} to left', translate(language, 'BGP table')), exact: true }).click()
     await expect(cue(page).first()).toBeVisible()
     const tableSelect = page.getByTestId('aznet-control-rib-card').getByRole('combobox')
     await tableSelect.selectOption('noneRouteTable')
@@ -77,7 +77,7 @@ for (const language of ['en', 'ja'] as const) for (const taskId of ['wan.verify'
     await show.click()
     await expect(filter).toHaveValue('')
     await expect(row.first()).toBeVisible()
-    await page.getByRole('button', { name: translate(language, 'Close {0}', 'Effective routes'), exact: true }).click()
+    await page.getByRole('button', { name: translate(language, 'Close {0}', translate(language, 'BGP table')), exact: true }).click()
     await expect(cue(page)).toHaveCount(0)
     await show.click()
     await expect(row.first()).toBeVisible()
@@ -106,15 +106,16 @@ test('automatic learning requires committed answers and visible fresh inspection
   await expect(sidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', taskId!)
   await expect(sidebar(page).getByRole('button', { name: 'Check task', exact: true })).toHaveCount(0)
   await sidebar(page).getByRole('button', { name: runnerLabels.submit.en, exact: true }).click()
-  await expect(sidebar(page).getByRole('heading', { name: 'Inspect the starting routes', exact: true })).toBeVisible()
   await expect(sidebar(page).getByTestId('learning-celebration')).toContainText(runnerLabels.success.en)
+  await expect(sidebar(page).getByTestId('learning-debrief')).toContainText(correct.feedback.en)
+  await advanceLearningTask(page)
+  await expect(sidebar(page).getByRole('heading', { name: 'Inspect the starting routes', exact: true })).toBeVisible()
   const inspectionId = await sidebar(page).getByTestId('learning-task').getAttribute('data-task-id')
-  const why = sidebar(page).getByText(runnerLabels.why.en, { exact: true })
-  await why.click()
+  await learningOptions(page)
   await sidebar(page).getByRole('button', { name: sidebarLabels.show.en, exact: true }).click()
   await page.waitForTimeout(1600)
   await expect(sidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', inspectionId!)
-  await why.click()
+  await sidebar(page).getByText(sidebarLabels.options.en, { exact: true }).click()
   await page.getByTestId('aznet-effective-route-table').evaluate((element) => {
     const bounds = element.getBoundingClientRect(), cover = document.createElement('div')
     cover.id = 'inspection-test-cover'
@@ -124,18 +125,19 @@ test('automatic learning requires committed answers and visible fresh inspection
   })
   await page.waitForTimeout(1800)
   await expect(sidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', inspectionId!)
-  await page.evaluate(() => document.getElementById('inspection-test-cover')!.remove())
-  await expect(sidebar(page).getByTestId('learning-feedback')).toContainText(runnerLabels.passed.en)
   await page.evaluate(() => {
+    document.getElementById('inspection-test-cover')!.remove()
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
     document.dispatchEvent(new Event('visibilitychange'))
   })
   await page.waitForTimeout(2200)
   await expect(sidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', inspectionId!)
+  await expect(sidebar(page).getByTestId('learning-debrief')).toHaveCount(0)
   await page.evaluate(() => {
     Reflect.deleteProperty(document, 'visibilityState')
     document.dispatchEvent(new Event('visibilitychange'))
   })
+  await advanceLearningTask(page)
   await expect(sidebar(page).getByRole('heading', { name: 'Peer VNet A with VNet B', exact: true })).toBeVisible()
   expect((await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), guidedProgressKey)).completions).toHaveLength(3)
 })
@@ -165,7 +167,7 @@ test('sidebar is non-modal, has no JSON or picker, confirms loading and pauses w
   await sidebar(page).getByRole('button', { name: 'Pause learning', exact: true }).click()
   await expect(sidebar(page)).toHaveCount(0)
   await expect(page.getByTestId('learning-open')).toBeFocused()
-  await page.getByTestId('learning-open').click()
+  await openLearning(page)
   await expect(sidebar(page).getByRole('heading', { name: 'Inspect the starting routes', exact: true })).toBeVisible()
 })
 
@@ -194,6 +196,7 @@ test('exact subnet routes recover after closure, selection changes, movement and
   await expect.poll(async () => (await cue(page).boundingBox())!.width).toBeGreaterThan(10)
   expect((await saved(page)).document).toEqual(original)
   await sidebar(page).getByText(sidebarLabels.options.en, { exact: true }).click()
+  await advanceLearningTask(page)
   await expect(sidebar(page).getByRole('heading', { name: 'Peer VNet A with VNet B', exact: true })).toBeVisible()
 })
 
@@ -201,6 +204,7 @@ test('nested peering cues name A-to-B, follow the submenu and never execute its 
   test.setTimeout(60_000)
   await open(page); await next(page, 3)
   const taskId = await sidebar(page).getByTestId('learning-task').getAttribute('data-task-id')
+  await learningOptions(page)
   const original = (await saved(page)).document
   const show = sidebar(page).getByRole('button', { name: 'Show me where', exact: true })
   await show.click()
@@ -219,21 +223,24 @@ test('nested peering cues name A-to-B, follow the submenu and never execute its 
   expect((await saved(page)).document.topology.vnetPeerings).toHaveLength(1)
   await show.click()
   await expect(page.getByRole('menu')).toHaveCount(0)
-  await expect(sidebar(page).getByTestId('learning-feedback')).toContainText(runnerLabels.passed.en)
   await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
   await expect(sidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', taskId!)
   expect((await saved(page)).document.topology.vnetPeerings).toHaveLength(0)
   await page.getByRole('button', { name: '↷ Redo', exact: true }).click()
+  await sidebar(page).getByText(sidebarLabels.options.en, { exact: true }).click()
+  await advanceLearningTask(page)
   await expect(sidebar(page).locator(`[data-task-id="${taskId}"]`)).toHaveCount(0)
   await sidebar(page).getByRole('button', { name: 'Show me where', exact: true }).click()
   await page.getByTestId('aznet-subnet-selector').selectOption('work-b')
   await expect(page.getByTestId('learning-record-inspection')).toHaveCount(0)
   await page.getByTestId('aznet-subnet-selector').selectOption('work-a')
+  await advanceLearningTask(page)
   await expect(sidebar(page).getByRole('heading', { name: 'Verify the forward and return paths', exact: true })).toBeVisible()
 })
 
-test('route-table guidance scopes prefix candidates and exact route, preserves typing, and recovers from missing association', async ({ page }) => {
+for (const preview of [false, true]) test(`${preview ? 'new' : 'legacy'} UI route-table guidance scopes prefix candidates and exact route, preserves typing, and recovers from missing association`, async ({ page }) => {
   test.setTimeout(90_000)
+  await page.addInitScript(preview => localStorage.setItem('aznet-ui-preview:v1', String(preview)), preview)
   let delayEditor = false
   let releaseEditor!: () => void
   const editorReady = new Promise<void>((resolve) => { releaseEditor = resolve })
@@ -258,12 +265,12 @@ test('route-table guidance scopes prefix candidates and exact route, preserves t
   const name = route.locator('input').nth(1)
   await name.fill('Learner drop route')
   releaseEditor()
-  await expect(page.getByRole('textbox', { name: 'VNet BGP community', exact: true })).toBeAttached()
+  await expect(page.getByRole('textbox', { name: 'VNet BGP community', exact: true, includeHidden: true })).toBeAttached()
   await expect(name).toBeFocused()
   await expect(name).toBeInViewport()
   await expect(cue(page)).toHaveCount(1)
   await learningOptions(page)
-  await page.getByTestId('aznet-delete-rt-blocking').click()
+  await page.getByTestId('aznet-rt-card-blocking').getByRole('button', { name: /^Dissociate / }).click()
   await expect(sidebar(page).getByRole('status')).toContainText('no longer associated')
   await expect(cue(page)).toHaveCount(0)
   await load(page)
@@ -273,7 +280,8 @@ test('route-table guidance scopes prefix candidates and exact route, preserves t
   await expect(sidebar(page).getByTestId('learning-feedback')).toHaveCount(0)
   await next(page, 2)
   await expect(sidebar(page).getByRole('heading', { name: 'Open the partial-outage incident', exact: true })).toBeVisible()
-  await expect(sidebar(page).getByTestId('learning-completion-count')).toHaveText('11 / 40 Completed')
+  await expect(sidebar(page).getByTestId('learning-debrief')).toBeVisible()
+  await expect(sidebar(page).getByTestId('learning-completion-count')).toHaveText('12 / 40 Completed')
   await learningOptions(page)
   await sidebar(page).getByText('Learning path and completed-task review', { exact: true }).click()
   await sidebar(page).getByRole('button', { name: 'Peer VNet A with VNet B — Completed', exact: true }).click()
@@ -281,7 +289,7 @@ test('route-table guidance scopes prefix candidates and exact route, preserves t
   await sidebar(page).getByRole('button', { name: 'Replay this lesson', exact: true }).click()
   await sidebar(page).getByRole('button', { name: 'Start lesson replay', exact: true }).click()
   await expect(sidebar(page).getByRole('heading', { name: 'Load the practice network', exact: true })).toBeVisible()
-  await expect(sidebar(page).getByTestId('learning-completion-count')).toHaveText('11 / 40 Completed')
+  await expect(sidebar(page).getByTestId('learning-completion-count')).toHaveText('12 / 40 Completed')
 })
 
 test('missing-target guidance does not select another entity or award legacy credit', async ({ page }) => {
@@ -293,7 +301,7 @@ test('missing-target guidance does not select another entity or award legacy cre
     localStorage.setItem('aznet-simulator:practice:v1', 'legacy original')
   }, { document, key: practiceWorkspaceKey })
   await page.goto('/')
-  await page.getByTestId('learning-open').click()
+  await openLearning(page)
   await next(page, 2)
   const original = await saved(page)
   await sidebar(page).getByRole('button', { name: 'Show me where', exact: true }).click()
@@ -355,7 +363,7 @@ test('all six missions reach black belt through scoped repairs without touching 
   expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(original)
   await page.reload()
   await expect(page.getByTestId('learning-status')).toContainText('Black belt · 1325 points')
-  await page.getByTestId('learning-open').click()
+  await openLearning(page)
   await expect(sidebar(page).getByRole('heading', { name: 'Routing foundations complete', exact: true })).toBeVisible()
   expect(await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)).toBe(earned)
   await page.getByRole('button', { name: 'Return to my design', exact: true }).click()
@@ -388,6 +396,7 @@ for (const language of ['en', 'ja'] as const) {
     const selector = page.locator('header [data-language-selector]')
     await selector.selectOption(language)
     await load(page, language)
+    await advanceLearningTask(page, language)
     const heading = sidebar(page).getByRole('heading', { name: exampleCourse.lessons[0].tasks[1].title[language], exact: true })
     await expect(heading).toBeFocused()
     await expect(heading).toHaveAttribute('tabindex', '-1')
@@ -411,18 +420,18 @@ test('Japanese dark reduced-motion journey reaches black belt using all forty lo
   await expect(page.getByTestId('learning-status')).toContainText('黒帯 · 1325 ポイント')
   await page.reload()
   await expect(page.getByTestId('learning-status')).toContainText('黒帯 · 1325 ポイント')
-  await page.getByTestId('learning-open').click()
+  await openLearning(page)
   await expect(completed).toBeVisible()
 })
 
 test('failed optional sidebar loading preserves the canvas and supports explicit reload recovery', async ({ page }) => {
   await page.route('**/src/learning/LearningDialog.tsx*', (route) => route.abort())
   await page.goto('/?mode=full')
-  await page.getByTestId('learning-open').click()
+  await openLearning(page)
   await expect(page.getByRole('status').filter({ hasText: 'Learning tools could not load' })).toBeVisible()
   await expect(sidebar(page)).toHaveCount(0)
   await page.unroute('**/src/learning/LearningDialog.tsx*')
   await page.getByRole('button', { name: 'Reload', exact: true }).click()
-  await page.getByTestId('learning-open').click()
+  await openLearning(page)
   await expect(sidebar(page)).toBeVisible()
 })

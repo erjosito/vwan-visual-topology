@@ -1,5 +1,17 @@
 # UI simplification comparison and inspector follow-up
 
+## Maintainer review follow-up (2026-11-23)
+
+One formative maintainer review identified browser scrolling in the main app:
+the top menu and bottom zoom controls should be visible together. #450 handles
+viewport containment and fit-aware manual zoom in #451, separately from this research.
+Saved-coordinate diagrams remain the default; the dense-view review currently
+prefers lanes as an opt-in follow-up and rejects matrix/regional replacements.
+Focus scope now explains its effect and is disabled in inapplicable alternatives.
+Comparison-page viewport changes were explicitly deprioritized and are not made.
+This is qualitative feedback, not a structured task-time/participant study;
+the earlier audit observations below remain historical.
+
 ## Current status
 
 The initial evaluation below describes the opt-in preview delivered in #252.
@@ -102,6 +114,83 @@ assertion, rather than racing the browser's keyboard-scroll completion.
 This is not a global basic/advanced mode, a routing/schema change or a completed
 human usability study. Native VWAN and other dialog hierarchies remain outside
 this slice; human participants are still zero.
+
+### Subnet and gateway context-menu follow-up
+
+The approved next slice evaluates the existing **hub-spoke/full subnet and
+standalone VNet gateway menus**, not a new action catalog or a configuration
+redesign. Inspection of the current menu builders found:
+
+- A subnet with an associated route table has 12 ordinary root entries:
+  owner detail, three path entries, configuration, effective routes, the existing
+  route-table destination picker, two propagation toggles, outbound access,
+  a second configuration shortcut and deletion. The inherited failure action
+  or unassessed notice adds one more root. These mix immediate inspection with
+  maintenance of imported policies.
+- A gateway has only three ordinary entries: BGP RIB, configuration and removal.
+  It has no modeled workload-subnet path endpoint. It also lacks the direct
+  owner-detail entry already available from a subnet.
+
+| Bounded alternative | Decision and tradeoff |
+| --- | --- |
+| Leave both menus flat | Lowest change cost and no additional disclosure, but leaves subnet policy maintenance mixed with core inspection. Retain the flat gateway structure because three actions do not justify another navigation step. |
+| Wrap subnet connect/association/policies in a general advanced menu | Reject: the existing route-table and path destination pickers would acquire a second submenu level, particularly awkward for narrow screens and keyboard/touch use. |
+| Replace secondary subnet actions with an All actions link | Reuses the existing VNet strategy, but unnecessarily moves the current table and propagation tasks away from their context. The searchable Workspace controls already provide the full catalog. |
+| Keep direct inspection and destination pickers; group only flat policy maintenance | Selected. One **Subnet policies** submenu contains the original propagation/outbound handlers and original policy-configuration shortcut. Owner detail, path actions, configuration, effective routes, current-table association and deletion remain direct. The associated table name stays visible. |
+
+For the configured fixture the root changes from **13 to 10 entries**, including
+the unchanged failure entry. This is a menu count, not a usability or task-time
+claim. A gateway deliberately remains flat; the new presentation adds only
+**Open VNet detail**, reusing the existing owner-detail handler. Its three
+original actions and destructive treatment remain unchanged. No gateway path
+action is invented. Legacy retains its original subnet/gateway presentation.
+The native VWAN menus are outside this subnet/gateway slice.
+
+Only presentation over the original action objects changes. The full catalog
+used by visible/searchable Workspace controls and graphical VNet detail stays
+ungrouped, with original IDs, handlers, imported settings and undo history.
+Fault/restore-only handling still runs outside presentation grouping; inactive
+gateway identity, deletion styling, incomplete-capture warnings and modeling
+boundaries remain intact. No topology, routing, schema, sharing or cloud code
+changes are included.
+
+Nine explicit-preview browser cases in the existing presentation test file
+cover hub-spoke/full, EN/light/desktop and JA/dark/390 px. They compare flat and
+grouped screenshots/counts, keyboard submenu focus and Escape return, touch
+activation, root destination pickers, imported-policy edit/undo, detail-context
+original handlers, Workspace search equivalents, routes/path availability,
+advanced configuration/unknown warnings, gateway owner detail and inactive
+identity, and inherited restore-only menus. Scoped axe checks cover the new
+submenu; the extra unknown-region case checks disabled root warnings and
+unavailable on-premises destinations. They explicitly seed
+`aznet-ui-preview:v1=true`; legacy coverage is
+obtained by switching presentation over the same saved design. Existing detail
+and desktop checks retain native VWAN/three-mode coverage.
+
+Reproduce the focused cases with an owned Vite server on port 4183:
+
+```powershell
+$env:PLAYWRIGHT_BASE_URL='http://127.0.0.1:4183'
+npx playwright test workspace-presentation.spec.ts -g "subnet and gateway menu disclosure" --workers=2
+```
+
+Validation: the final focused menu run passes **9/9**; **85 existing browser
+regressions** also pass across the presentation, graphical-detail, subnet-peering,
+VPN-mode, Workspace controls and failure suites. The combined development run
+initially exposed an incorrect new test assumption about available destinations;
+the final focused run checks the actual disabled on-premises destination instead.
+Build, platform build, lint and **16 action/localization unit tests** pass.
+Lint retains the pre-existing `ErLocationInfoModal` warning. The existing chained
+Electron smoke passes, including offline/native integration and graphical-detail
+original IDs, edit/undo/redo and keyboard focus in all three modes. The
+unchanged-source 28-state accessibility gate is recorded against the committed
+revision in the PR rather than changing this report during that audit.
+
+Human participants remain **zero**; discoverability, task efficiency, manual
+screen-reader assessment and touch-device usability remain unverified. Existing
+untranslated legacy action labels are not relabeled by this slice; the new
+group and reused owner-detail entry have EN/JA text. Production startup and
+packaged-release validation remain separate gates, not inferred from dev tests.
 
 ## Initial preview decision and scope (historical)
 
@@ -240,3 +329,68 @@ Revise the mobile layout if its height harms the tasks. If accepted, promote in 
 separate reviewed change, retain a seven-day rollback window, then remove the
 temporary flag and old presentation. If not accepted, revise or remove this
 preview instead of allowing two permanent interfaces. #228 remains open.
+
+## Current-default task audit and critique (2026-11-23)
+
+This follow-up evaluates the current default, not the historical opt-in preview.
+It first challenged the proposed solutions: another toolbar rearrangement would
+not establish which task is difficult, and a permanent basic/advanced mode or
+new wizard would duplicate navigation without evidence of better discovery.
+The dense-view experiments in `issue-240-dense-visualization.md` are a separate,
+dev-only comparison, not a new capability mode in the application.
+
+Two reproducible English walkthroughs use local Windows/Chromium and a fresh
+mixed/full workspace:
+1440 x 1000/light and 390 x 1000/dark. They create two VNets with the existing
+searchable Workspace controls, use **Peer with VNet**, inspect the actual
+effective-route table, run **Routing checks > Check routing**, then download
+through **Save As**. The downloaded JSON matches the current topology; export
+does not mutate the stored design. Keyboard context-menu activation uses the
+same original object and existing handlers.
+
+At 390 px, Workspace controls is deliberately behind **Workspace actions**.
+The first creation requires opening that disclosure, then the controls panel;
+the panel must be reopened for the second creation. Desktop starts with the
+existing controls panel visible. This is an observed scripted access cost, not
+proof that a novice cannot discover the controls.
+
+| Possible response | Critique and next decision |
+| --- | --- |
+| Keep Workspace controls permanently exposed on narrow screens | Removes a disclosure but adds persistent chrome; compare the same create task and remaining canvas space before choosing |
+| Empty-canvas create/example entry using existing handlers | Contextual and temporary, but could compete with import/cloud recovery or imply a mandatory wizard; compare against the current entry before implementing |
+| Another basic/advanced mode or onboarding wizard | Adds capability/switching state without locating the problem; reject for this slice |
+| Task-specific dense views | May help inventory or configured-peer lookup, but do not address first-create discovery and cannot replace routing evidence |
+
+The bounded recommendation is to test the current creation entry against an
+empty-canvas affordance, rather than redesign every menu or promote a new mode.
+No additional production affordance is implemented by this research.
+
+The audit measures initial header geometry and viewport-intersecting buttons,
+selects and summaries, excluding the fixed Workspace controls panel and
+CSS-invisible/collapsed content. Counts are not total capabilities, usable hit
+targets or participant discovery results. Raw current observations are retained
+in `issue-228-240-observations.json`; historical figures above are not rewritten.
+
+| Current baseline | Header height | Sampled visible header controls | Panel openings for two creations | Header disclosure openings |
+| --- | ---: | ---: | ---: | ---: |
+| 1440 px, English/light | 89 px | 13 | 0 | 0 |
+| 390 px, English/dark | 94 px | 4 | 2 | 1 |
+
+Reproduce only this audit:
+
+```powershell
+npx playwright test workspace-presentation.spec.ts -g "current UI task audit" --workers=1 --retries=0
+```
+
+**Human participants remain zero.** The walkthrough knows labels and uses search
+and a Save As shortcut; it does not measure unaided discovery, human completion
+time, perceived complexity, manual screen-reader use or real touch interaction.
+It also does not establish failed/unknown-path classification, first-time
+advanced-setting discovery, Japanese task completion or cloud interoperability.
+Use the participant protocol above before claiming those outcomes. #228 remains
+open; the current audit is a reproducible baseline, not a completed human study.
+
+After integrating main `2c6a959`, the native graph-preservation case and both
+current-UI walkthroughs pass again. Both raw walkthrough records, including
+header measurements, action counts and visible effective routes, exactly match
+the committed observations.

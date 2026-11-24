@@ -16,21 +16,30 @@ export function LearningTools(props: {
   const trigger = useRef<HTMLButtonElement>(null)
   const [Panel, setPanel] = useState<typeof LearningDialog>()
   const [failed, setFailed] = useState(false)
-  const loading = view.open && !Panel && !failed
+  const ready = Panel && (!session || session.learning)
+  const loading = view.open && !ready && !failed
   const loadLearning = session?.loadLearning
   useEffect(() => {
-    if (!view.open || Panel || failed) return
+    if (!view.open || ready || failed) return
     let active = true
     Promise.all([import('./LearningDialog'), loadLearning?.()]).then(([{ LearningDialog }]) => {
       if (active) setPanel(() => LearningDialog)
     }, () => { if (active) setFailed(true) })
     return () => { active = false }
-  }, [view.open, Panel, failed, loadLearning])
+  }, [view.open, ready, failed, loadLearning])
+  useEffect(() => {
+    if (view.open && ready) document.getElementById('learning-title')?.focus({ preventScroll: true })
+  }, [view.open, ready])
   return <>
-    <button ref={trigger} type="button" data-testid="learning-open" disabled={loading} aria-busy={loading} aria-expanded={view.open} aria-controls={view.open && Panel ? 'learning-sidebar' : undefined}
-      onClick={() => setView({ ...view, open: !view.open })}>{t('Learn & practice')}</button>
+    <button ref={trigger} type="button" data-testid="learning-open"
+      aria-haspopup="dialog" aria-expanded={session?.learningDetailsOpen ?? view.open}
+      aria-controls={session?.learningDetailsOpen ? 'local-learning-status' : undefined}
+      onClick={() => session?.setLearningDetailsOpen
+        ? session.setLearningDetailsOpen(!session.learningDetailsOpen)
+        : setView({ ...view, open: !view.open })}>{t('Learn & practice')}</button>
     {view.open && Panel && <Panel document={props.document} onGuide={props.onGuide}
       onPause={() => { setView({ ...view, open: false }); trigger.current?.focus({ preventScroll: true }) }} />}
+    {loading && <span role="status">{t('Loading learning status...')}</span>}
     {failed && <p role="status">{t('Learning tools could not load. Your workspace is unchanged; reload to retry.')}
       <button type="button" onClick={() => window.location.reload()}>{t('Reload')}</button></p>}
   </>

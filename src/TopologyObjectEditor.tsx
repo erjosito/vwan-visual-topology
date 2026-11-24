@@ -5,11 +5,17 @@ import type { FormEvent, ReactElement } from 'react'
 import { objectLabels, preferenceLabels, siteLabel, topologyObject, transportLabels } from './model'
 import type { ObjectKind, ObjectSelection, Preference, RouterSelection, Topology, Transport } from './model'
 import { ER_PEERING_LOCATIONS_CATALOG, evaluateErSkuRegionalCompatibility } from './er-locations-catalog'
+import { AzureRegionSelect } from './AzureRegionSelect'
 import type { ErCircuitSku } from './er-locations-catalog'
 import { spokeNvaConnectionForSite, spokeNvaConnectionForSpoke } from './topology-graph'
 import { createExpressRouteAttachment, deleteTopologyObject, syncNvaDownstreamLinks, syncSiteNvaSpokeLinks } from './topology-mutations'
 import { defaultSpokeNvaPeerIp, parseAsPath, validateTopology } from './validation'
 import { CanvasOverlay } from './CanvasOverlay'
+import { ConfigurationEditStatus } from './WorkspacePresentation'
+import { measureAzWork } from './azure-net/performance'
+import { useWorkspaceConfigurationPending } from './workspace-context'
+import { applyRoutingIntentEdit } from './native-routing-intent'
+import { RoutingIntentNotice } from './RoutingIntentNotice'
 const HubStaticRoutesEditor = lazy(() => import('./HubStaticRoutesEditor').then((module) => ({ default: module.HubStaticRoutesEditor })))
 
 export interface EditorRequest { kind: ObjectKind; id?: string; hubId?: string; siteId?: string; locationId?: string; spokeId?: string; nvaSpokeId?: string; deleting?: boolean; focusFirewall?: boolean }
@@ -24,8 +30,11 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
   topology: Topology; request: EditorRequest; onSave: (next: Topology, selection: ObjectSelection) => void; onClose: () => void; onRouteMaps: (router: RouterSelection) => void; onStaticRouting: (router: RouterSelection) => void; onAddNva: (spokeId: string) => void; onOpenErLocationInfo?: (peeringLocation?: string, sku?: ErCircuitSku, hubRegion?: string, erLocationId?: string) => void
 }) {
   const [error, setError] = useState('')
+  const [dirty, setDirty] = useState(false)
+  useWorkspaceConfigurationPending(dirty)
   const item = request.id ? topologyObject(topology, { kind: request.kind, id: request.id }) : undefined
   const hub = topology.hubs.find((h) => h.id === request.id)
+  const [hubIntent, setHubIntent] = useState(hub?.routingIntent ?? { private: false, internet: false, privatePrefixes: [] })
   const [hubStatic, setHubStatic] = useState(() => ({ id: hub?.id ?? crypto.randomUUID(), firewall: hub?.firewall, routeTables: hub?.routeTables }))
   const spoke = topology.spokes.find((s) => s.id === request.id)
   const site = topology.sites.find((s) => s.id === request.id)
@@ -50,7 +59,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
   const nvaSpokes = topology.spokes.filter((s) => s.id !== request.id && Boolean(s.hubId) && Boolean(spokeNvaConnectionForSpoke(topology, s.id)))
   const title = request.deleting ? t("Delete {0}", label) : t(item ? 'Edit {0}' : 'Add {0}', connectedSite ? t('connected site') : label)
 
-  const save = (event: FormEvent<HTMLFormElement>) => {
+  const save = (event: FormEvent<HTMLFormElement>) => measureAzWork('editor-submit', () => {
     event.preventDefault()
     try {
       const id = request.id ?? crypto.randomUUID()
@@ -67,12 +76,17 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
         const customLabel = text('label') || undefined
         if (request.kind === 'hub') {
           const value = {
-            ...hub, id, name, label: customLabel, region: text('region'), preference: text('preference') as Preference,
+            ...hub, id, name, label: customLabel, preference: text('preference') as Preference,
+            ...(text('region') || hub?.region !== undefined ? { region: text('region') } : {}),
+            ...(topology.wans ? { wanId: text('wan') } : {}),
             firewall: hubStatic.firewall, routeTables: hubStatic.routeTables,
             routingIntent: { private: data.has('privateIntent'), internet: data.has('internetIntent'), privatePrefixes: prefixes(text('privatePrefixes')) },
           }
           if (hub) next.hubs[next.hubs.findIndex((h) => h.id === id)] = value
           else next.hubs.push(value)
+          if (next.interWanVpns) next.interWanVpns = next.interWanVpns.map((vpn) => [vpn.aHubId, vpn.bHubId].includes(id)
+            ? { ...vpn, enabled: data.has(`vpn-enabled-${vpn.id}`), status: text(`vpn-status-${vpn.id}`) as 'configured' | 'unknown',
+              aToB: prefixes(text(`vpn-a-${vpn.id}`)), bToA: prefixes(text(`vpn-b-${vpn.id}`)) } : vpn)
         } else if (request.kind === 'spoke') {
           const hubIdValue = text('hub') || undefined
           const selectedNvaSpokes = data.getAll('nvaSpokeIds').map(String).filter(Boolean)
@@ -145,6 +159,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
                 next.connections.push({
                   id: crypto.randomUUID(), name: text('connectionName') || `${name} connection`, hubId: request.hubId!, siteId: id,
                   transport: transportValue, enabled: true, inbound: [], outbound: [], learnSiteRoutes: true,
+                  propagateDefaultRoute: true,
                 })
               }
             }
@@ -221,9 +236,10 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           else next.siteLinks.push(value)
         }
       }
+      applyRoutingIntentEdit(topology, next)
       onSave(validateTopology(next), savedSelection)
     } catch (error) { setError(error instanceof Error ? error.message : 'Invalid input.') }
-  }
+  })
   const hubOptions = topology.hubs.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)
   const siteOptions = topology.sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)
   const transport = <Field title={t("Transport")}><select name="transport" value={transportValue} onChange={(event) => setTransportValue(event.target.value as Transport)}>{Object.entries(transportLabels).map(([value, name]) => <option key={value} value={value}>{name}</option>)}</select></Field>
@@ -232,9 +248,10 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
   const removedPeers = topology.siteLinks.filter((l) => l.a === request.id || l.b === request.id).length
 
   return <CanvasOverlay title={title} className="object-editor" onClose={onClose}>
-    <form onSubmit={save}>
+    <form onSubmit={save} data-configuration-scope data-configuration-pending={dirty} onChange={() => setDirty(true)}>
+      {!request.deleting && <Suspense fallback={null}><ConfigurationEditStatus form /></Suspense>}
       {request.deleting ? <>
-        <p>{t("Delete")} <strong>{item?.name}</strong>{t("? This cannot be undone. Export JSON first if you need a backup.")}</p>
+        <p>{t("Delete")} <strong>{item?.name}</strong>{t("? This cannot be undone. Save first if you need a file or cloud backup.")}</p>
         {request.kind === 'hub' && <p>{t('This also removes {0} attached spoke{1} and {2} connection{3}. On-premises sites are kept.', removedSpokes, removedSpokes === 1 ? '' : 's', removedConnections, removedConnections === 1 ? '' : 's')}</p>}
         {request.kind === 'site' && <p>{t('This also removes {0} hub connection{1} and {2} on-premises link{3}.', removedConnections, removedConnections === 1 ? '' : 's', removedPeers, removedPeers === 1 ? '' : 's')}</p>}
         {(request.kind === 'hub' || request.kind === 'site' || request.kind === 'erLocation') && <p>{t("Attached ER connections are also removed; the other endpoints are kept.")}</p>}
@@ -326,15 +343,31 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           </>}
         </>}
         {request.kind === 'hub' && <>
-          <Field title={t("Region")}><input name="region" required maxLength={120} defaultValue={hub?.region ?? ''} placeholder="West Europe" /></Field>
+          {topology.wans && <Field title="Virtual WAN scope"><select name="wan" aria-label="Virtual WAN scope" required defaultValue={hub?.wanId ?? topology.wans[0]?.id}>{topology.wans.map((wan) => <option key={wan.id} value={wan.id}>{wan.name}</option>)}</select></Field>}
+          {topology.interWanVpns?.filter((vpn) => [vpn.aHubId, vpn.bHubId].includes(request.id ?? '')).map((vpn) => <fieldset key={vpn.id}>
+            <legend>Inter-WAN S2S VPN: {vpn.name}</legend>
+            <p>A: {topology.hubs.find((entry) => entry.id === vpn.aHubId)?.name} → B: {topology.hubs.find((entry) => entry.id === vpn.bHubId)?.name}</p>
+            <label className="checkbox-field"><input type="checkbox" name={`vpn-enabled-${vpn.id}`} defaultChecked={vpn.enabled} />S2S tunnel enabled</label>
+            <Field title="VPN model provenance"><select name={`vpn-status-${vpn.id}`} aria-label="VPN model provenance" defaultValue={vpn.status}><option value="configured">Manually configured assumptions</option><option value="unknown">Unknown / not assessed</option></select></Field>
+            <Field title="A to B IPv4 export prefixes"><input name={`vpn-a-${vpn.id}`} aria-label="A to B IPv4 export prefixes" defaultValue={vpn.aToB.join(', ')} /></Field>
+            <Field title="B to A IPv4 export prefixes"><input name={`vpn-b-${vpn.id}`} aria-label="B to A IPv4 export prefixes" defaultValue={vpn.bToA.join(', ')} /></Field>
+            <p className="muted">Exports selected Default-table routes contained in these prefixes. Empty means no export. P2S clients, authentication and gateway BGP sessions are unsupported.</p>
+          </fieldset>)}
+          <Field title={t("Region")}><AzureRegionSelect name="region" required={!hub} defaultValue={hub?.region ?? ''} /></Field>
           <Field title={t("Routing preference")}><select name="preference" defaultValue={hub?.preference ?? 'ExpressRoute'}>{Object.entries(preferenceLabels).map(([value, name]) => <option key={value} value={value}>{t(name)}</option>)}</select></Field>
           <fieldset><legend>{t("Routing intent")}</legend>
-            <label className="checkbox-field"><input type="checkbox" name="privateIntent" aria-label={t("Private traffic routing intent")} defaultChecked={hub?.routingIntent.private ?? false} />{t("Private traffic via Azure Firewall")}</label>
-            <label className="checkbox-field"><input type="checkbox" name="internetIntent" aria-label={t("Internet traffic routing intent")} defaultChecked={hub?.routingIntent.internet ?? false} />{t("Internet traffic via Azure Firewall")}</label>
+            <label className="checkbox-field"><input type="checkbox" name="privateIntent" aria-label={t("Private traffic routing intent")} checked={hubIntent.private}
+              onChange={(event) => setHubIntent({ ...hubIntent, private: event.target.checked })} />{t("Private traffic via Azure Firewall")}</label>
+            <label className="checkbox-field"><input type="checkbox" name="internetIntent" aria-label={t("Internet traffic routing intent")} checked={hubIntent.internet}
+              onChange={(event) => setHubIntent({ ...hubIntent, internet: event.target.checked })} />{t("Internet traffic via Azure Firewall")}</label>
             <Field title={t("Additional private traffic prefixes")}><input name="privatePrefixes" defaultValue={hub?.routingIntent.privatePrefixes.join(', ') ?? ''} placeholder="100.64.0.0/10" /></Field>
             <p className="muted">{t("RFC1918 prefixes are included automatically with private intent. Firewall nodes and route views update when you save.")}</p>
           </fieldset>
-          <Suspense fallback={null}><HubStaticRoutesEditor hub={hubStatic} focusFirewall={request.focusFirewall} onChange={(owner) => setHubStatic({ id: owner.id, firewall: owner.firewall, routeTables: owner.routeTables })} /></Suspense>
+          <RoutingIntentNotice hub={{ ...hubStatic, name: hub?.name ?? '', routingIntent: hubIntent }} />
+          <Suspense fallback={null}><HubStaticRoutesEditor hub={{ ...hubStatic, routingIntent: hubIntent }} focusFirewall={request.focusFirewall} onChange={(owner) => {
+            setDirty(true)
+            setHubStatic({ id: owner.id, firewall: owner.firewall, routeTables: owner.routeTables })
+          }} /></Suspense>
         </>}
         {request.kind === 'spoke' && <Field title={t("Hub")}><select name="hub" value={selectedSpokeHubId} onChange={(e) => setSelectedSpokeHubId(e.target.value)}>{hubOptions}<option value="">{t("None (standalone / behind spoke NVA)")}</option></select></Field>}
         {request.kind === 'connection' && transportValue !== 'SpokeNVA' && <Field title={t("Hub")}><select name="hub" required defaultValue={connection?.hubId ?? request.hubId ?? topology.hubs[0]?.id}>{hubOptions}</select></Field>}
@@ -343,7 +376,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           <p className="muted">Region is explicit, not inferred from hub attachment or ER location. Missing or unrecognized regions are unassessed in failure analysis.</p>
           <Field title={t("Prefixes")}><input name="prefixes" required defaultValue={spoke?.prefixes.join(', ') ?? ''} placeholder="10.50.0.0/16" /></Field>
           <VnetCommunityEditor value={spoke?.bgpCommunities} formField />
-          {selectedSpokeHubId && <label className="checkbox-field"><input type="checkbox" name="propagateDefaultRoute" defaultChecked={spoke?.propagateDefaultRoute ?? false} />{t("Propagate default route (0.0.0.0/0)")}</label>}
+          {selectedSpokeHubId && <label className="checkbox-field"><input key={selectedSpokeHubId} type="checkbox" name="propagateDefaultRoute" defaultChecked={spoke?.hubId ? spoke.propagateDefaultRoute ?? false : true} />{t("Propagate default route (0.0.0.0/0)")}</label>}
           {nvaSpokes.length > 0 && <fieldset><legend>{t("Connected NVA spokes")}</legend>
             <p className="muted">{t("Attach this VNet behind one or more spoke BGP NVAs so those NVAs advertise its prefixes to Virtual WAN.")}</p>
             {nvaSpokes.map((nvaSpoke) => <label key={nvaSpoke.id} className="checkbox-field"><input type="checkbox" name="nvaSpokeIds" value={nvaSpoke.id} defaultChecked={spoke?.nvaSpokeIds?.includes(nvaSpoke.id) || request.nvaSpokeId === nvaSpoke.id} />{nvaSpoke.name} ({nvaSpoke.prefixes.join(', ')})</label>)}
@@ -358,7 +391,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           <fieldset><legend>{t("Spoke NVA BGP peering")}</legend>
             <Field title={t("Hosting spoke")}><select name="spoke" required value={selectedHostSpokeId} onChange={(e) => setSelectedHostSpokeId(e.target.value)}>{topology.spokes.filter((s) => Boolean(s.hubId)).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
             <Field title={t("NVA BGP interface IPv4")}><input name="peerIp" defaultValue={existingNvaConn?.peerIp ?? inferredPeerIp} placeholder={inferredPeerIp || '10.50.0.4'} /></Field>
-            <label className="checkbox-field"><input type="checkbox" name="propagateDefaultRoute" defaultChecked={Boolean(existingNvaConn?.propagateDefaultRoute || hostSpoke?.propagateDefaultRoute)} />{t("Propagate default route (0.0.0.0/0)")}</label>
+            <label className="checkbox-field"><input type="checkbox" name="propagateDefaultRoute" defaultChecked={existingNvaConn ? Boolean(existingNvaConn.propagateDefaultRoute || hostSpoke?.propagateDefaultRoute) : true} />{t("Propagate default route (0.0.0.0/0)")}</label>
             <p className="muted">{t("Optional — automatically inferred from the hosting spoke's range ({0}) if left blank. Must be an IPv4 address inside the hosting spoke.", inferredPeerIp || '.4')}</p>
             <p className="muted">{t("Use a public or private 2-byte NVA ASN, excluding Azure/IANA reserved ASNs. One logical peer represents identical advertisements to both hub router IPs (AS65515).")}</p>
             <a href="https://learn.microsoft.com/azure/virtual-wan/scenario-bgp-peering-hub#benefits-and-considerations" target="_blank" rel="noreferrer">{t("Microsoft spoke NVA BGP requirements")}</a>
@@ -391,7 +424,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           <Field title={t("On-premises site")}><select name="site" required defaultValue={connection?.siteId ?? request.siteId ?? topology.sites[0]?.id}>{siteOptions}</select></Field>{transport}
           <label className="checkbox-field"><input type="checkbox" name="enabled" defaultChecked={connection?.enabled ?? true} />{t("Connection enabled")}</label>
           <label className="checkbox-field"><input type="checkbox" name="learnSiteRoutes" defaultChecked={connection?.learnSiteRoutes ?? true} />{t("Advertise site-originated and learned routes")}</label>
-          <label className="checkbox-field"><input type="checkbox" name="propagateDefaultRoute" defaultChecked={connection?.propagateDefaultRoute ?? false} />{t("Propagate default route (0.0.0.0/0)")}</label>
+          <label className="checkbox-field"><input key={connection ? connection.id : transportValue} type="checkbox" name="propagateDefaultRoute" defaultChecked={connection ? connection.propagateDefaultRoute ?? false : transportValue !== 'ExpressRoute'} />{t("Propagate default route (0.0.0.0/0)")}</label>
           <p className="muted">{t("Advertisements are preserved. Route maps belong to the attached hub and site. Unassign their policies before retargeting a connection or making an incompatible transport change.")}</p>
           </div>
           <p className="muted">{t("Use Route maps on either endpoint to configure inbound/outbound policies for this connection.")}</p>

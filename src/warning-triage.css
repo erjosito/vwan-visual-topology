@@ -1,0 +1,5 @@
+.warning-triage-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-block: 8px; }
+.acknowledged-warning { border-color: var(--border) !important; background: var(--surface-muted) !important; }
+.acknowledged-warning h4, .acknowledged-warning .finding-title, .acknowledged-warning .diagnostic-severity, .acknowledged-warning .warning-triage-actions > span { color: var(--text-muted); }
+.acknowledged-warning .aznet-badge { color: var(--text-muted); background: var(--surface-muted); }
+.warning-acknowledged-heading { color: var(--text-muted); font-size: 14px; margin-block: 16px 8px; }

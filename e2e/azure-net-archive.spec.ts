@@ -1,3 +1,4 @@
+import { downloadTopologyCopy } from './document-action-helpers'
 import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { expect, test } from '@playwright/test'
@@ -21,8 +22,8 @@ test('recorded S4 hybrid BGP origins, asymmetric inspection and native round-tri
   await importFile.setInputFiles({ name: archive.exportFile, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)) })
   for (const [node, menu, observations] of [
     ['aznet-site-sdwan', 'Inspect Site BGP Route Table', archive.azurePrefixes.map((prefix) => ({ prefix, asPath: archive.sdwanAsPath }))],
-    ['aznet-erloc-er', 'Inspect ExpressRoute Location BGP RIB', archive.azurePrefixes.map((prefix) => ({ prefix, asPath: archive.mseeAsPath }))],
-    ['aznet-chip-ergw-hub', 'Inspect Gateway BGP RIB', archive.erGatewayRoutes],
+    ['aznet-erloc-er', 'Inspect ExpressRoute Location BGP table', archive.azurePrefixes.map((prefix) => ({ prefix, asPath: archive.mseeAsPath }))],
+    ['aznet-chip-ergw-hub', 'Inspect Gateway BGP table', archive.erGatewayRoutes],
   ] as const) {
     await page.getByTestId(node).focus()
     await page.keyboard.press('Shift+F10')
@@ -30,7 +31,7 @@ test('recorded S4 hybrid BGP origins, asymmetric inspection and native round-tri
     for (const observed of observations) {
       await expect(page.getByTestId('aznet-control-rib-card').locator(`tr[data-prefix="${observed.prefix}"] .as-path`)).toHaveText(observed.asPath.join(' '))
     }
-    await page.getByRole('button', { name: 'Close Effective routes', exact: true }).click()
+    await page.getByRole('button', { name: 'Close BGP table', exact: true }).click()
   }
   await page.getByTestId('aznet-subnet-work1').focus()
   await page.keyboard.press('Shift+F10')
@@ -48,7 +49,7 @@ test('recorded S4 hybrid BGP origins, asymmetric inspection and native round-tri
   }
   await page.getByRole('button', { name: 'Close Path explorer', exact: true }).click()
   const downloadPromise = page.waitForEvent('download')
-  await page.getByRole('button', { name: /Export JSON/ }).click()
+  await downloadTopologyCopy(page)
   const exported = JSON.parse(await readFile((await (await downloadPromise).path())!, 'utf8'))
   expect(exported).toEqual(topology)
   await writeFile(testInfo.outputPath(archive.exportFile), JSON.stringify(exported, null, 2) + '\n')
@@ -96,7 +97,7 @@ for (const id of ['access-disabled', 'access-corrected']) {
     }
     await page.getByRole('button', { name: 'Close Path explorer', exact: true }).click()
     const downloadPromise = page.waitForEvent('download')
-    await page.getByRole('button', { name: /Export JSON/ }).click()
+    await downloadTopologyCopy(page)
     const download = await downloadPromise
     const exported = JSON.parse(await readFile((await download.path())!, 'utf8'))
     expect(exported).toEqual(entry.topology)
@@ -132,7 +133,7 @@ for (const id of ['summary-only', 'explicit-spokes']) {
     if (id === 'explicit-spokes') await expect(winner).toContainText('10.0.1.4')
     await page.getByRole('button', { name: 'Close Effective routes', exact: true }).click()
     const downloadPromise = page.waitForEvent('download')
-    await page.getByRole('button', { name: /Export JSON/ }).click()
+    await downloadTopologyCopy(page)
     const download = await downloadPromise
     const exported = JSON.parse(await readFile((await download.path())!, 'utf8'))
     expect(exported).toEqual(entry.topology)
@@ -161,13 +162,13 @@ for (const id of ['baseline-ecmp', 'bird-default-prepend']) {
     await importTopology()
     await page.getByTestId('aznet-chip-ars-poland').focus()
     await page.keyboard.press('Shift+F10')
-    await page.getByRole('menuitem', { name: 'Inspect Route Server RIB (ASN 65515)', exact: true }).click()
+    await page.getByRole('menuitem', { name: 'Inspect Route Server BGP table (ASN 65515)', exact: true }).click()
     const rib = page.getByTestId('aznet-control-rib-card')
     for (const observed of archive.learned) {
       const path = observed.peerId === 'nva2' && observed.prefix === '0.0.0.0/0' ? entry.nva2DefaultAsPath : observed.asPath
       await expect(rib.locator(`[data-prefix="${observed.prefix}"]`).filter({ hasText: observed.peerId === 'nva1' ? 'NVA1' : 'NVA2' }).locator('.as-path')).toHaveText(path.join(' '))
     }
-    await page.getByRole('button', { name: 'Close Effective routes', exact: true }).click()
+    await page.getByRole('button', { name: 'Close BGP table', exact: true }).click()
     await page.getByTestId('aznet-subnet-c1-work').focus()
     await page.keyboard.press('Shift+F10')
     await page.getByRole('menuitem', { name: 'Inspect Subnet Effective Routes', exact: true }).click()
@@ -188,7 +189,7 @@ for (const id of ['baseline-ecmp', 'bird-default-prepend']) {
     await page.keyboard.press('Escape')
     await importTopology()
     const downloadPromise = page.waitForEvent('download')
-    await page.getByRole('button', { name: /Export JSON/ }).click()
+    await downloadTopologyCopy(page)
     const download = await downloadPromise
     await download.saveAs(testInfo.outputPath(entry.exportFile))
     const exported = JSON.parse(await readFile((await download.path())!, 'utf8'))

@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useEffectEvent, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useWorkspaceEditorState } from '../workspace-context'
 import { diagramCurve } from '../diagram-layout'
 import { t } from '../i18n'
 import { CanvasBackground, CanvasControls, CanvasEdgeSelection } from '../CanvasPresentation'
@@ -6,6 +7,7 @@ import { centerOfBox, connectionBend, fitDiagram, reverseCurve } from '../connec
 import { NetworkNodeIcon } from '../NetworkNodeIcon'
 import { DiagramNodeBadge, DiagramNodeText } from '../DiagramNodeLabels'
 import { DiagramButton } from '../DiagramButton'
+import { normalizeAzureRegionName } from '../er-locations-catalog'
 import { azHubGatewayConnections, hubGatewayLabel } from '../hub-gateways'
 import { useCanvasPresentation } from '../useCanvasPresentation'
 import { useCanvasZoom } from '../useCanvasZoom'
@@ -17,7 +19,8 @@ import { azHubPolicyLinks, azSitePolicyLinks } from './route-maps'
 import { azInterHubLinks } from './hub-routing'
 import { inventoryCounts } from '../inventory'
 import { azFindingFlows, type AzDiagnosticFinding } from './diagnostics'
-import type { AzFlowTrace } from './engine'
+import { subnetAddressError, vnetAddressError } from './addressing'
+import type { AzFlowTrace, AzSimulationResult } from './engine'
 import type { AzNetTopology, AzPeeringDirectionFlags, AzUdrTable, AzVNet } from './model'
 
 const zoomLimits = { minZoom: 0.65, maxZoom: 1.6, zoomStep: 0.15 }
@@ -48,11 +51,13 @@ export interface AzRouteMapSelection {
 }
 
 interface AzureNetDiagramProps {
+  readOnly?: boolean
   frameRequest?: { vnetId: string; revision: number }
   faults?: import('../failures').FaultMap
   risks?: Record<string, number>
   onRisk?: (id: string) => void
   topology: AzNetTopology
+  vpnUnderlays?: AzSimulationResult['vpnUnderlays']
   selected?: AzSelectedEntity
   onSelect: (entity: AzSelectedEntity) => void
   onClearSelection: () => void
@@ -81,6 +86,7 @@ interface AzureNetDiagramProps {
     routeTableId: string | undefined,
   ) => void
   onOpenEditorForEntity?: (entity: AzSelectedEntity) => void
+  onOpenVnetConnection?: (vnetId: string) => void
   onShowRouteMapRules?: (selection: AzRouteMapSelection) => void
   forwardTrace?: AzFlowTrace | null
   reverseTrace?: AzFlowTrace | null
@@ -222,7 +228,9 @@ function computePositions(topology: AzNetTopology): {
 }
 
 export function AzureNetDiagram({
+  readOnly = false,
   topology,
+  vpnUnderlays,
   frameRequest,
   faults = {},
   risks = {},
@@ -238,6 +246,7 @@ export function AzureNetDiagram({
   onUpdateRouteTable,
   onAssociateSubnetRouteTable,
   onOpenEditorForEntity,
+  onOpenVnetConnection,
   onShowRouteMapRules,
   forwardTrace,
   reverseTrace,
@@ -267,8 +276,8 @@ export function AzureNetDiagram({
     clearTimeout(policyTimer.current)
     if (hoverTimerRef.current !== null) clearTimeout(hoverTimerRef.current)
   }, [])
-  const [zoom, setZoom] = useState(1)
-  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [zoom, setZoom] = useWorkspaceEditorState('aznet.zoom', 1)
+  const [pan, setPan] = useWorkspaceEditorState('aznet.pan', { x: 0, y: 0 })
   const [focusSelection, setFocusSelection] = useState<AzSelectedEntity>()
   const [hoverPopover, setHoverPopover] = useState<
     | { kind: 'peering'; peeringId: string; x: number; y: number }
@@ -322,11 +331,6 @@ export function AzureNetDiagram({
   const [preview, setPreview] = useState<{ kind: 'vnet' | 'vwan-hub' | 'er-location' | 'site'; id: string; x: number; y: number } | null>(null)
   const dragPointerId = useRef<number | null>(null)
   const suppressBackgroundClick = useRef(false)
-  useCanvasZoom({
-    svgRef, zoom, onZoom: (next) => { closePolicyPreview(); setHoverPopover(null); setZoom(next) }, ...zoomLimits,
-    onPan: (delta) => setPan((value) => ({ x: value.x + delta.x, y: value.y + delta.y })),
-    isDragging: () => dragPointerId.current !== null,
-  })
   const clearDrag = (event?: { pointerId: number }) => {
     if (event && event.pointerId !== dragPointerId.current) return
     dragPointerId.current = null
@@ -355,13 +359,14 @@ export function AzureNetDiagram({
     const collection = preview.kind === 'vnet' ? positions.vnets : preview.kind === 'vwan-hub' ? positions.vwanHubs : preview.kind === 'er-location' ? positions.erLocations : positions.sites
     if (collection[preview.id]) collection[preview.id] = { ...collection[preview.id], x: preview.x, y: preview.y }
   }
-  const openKeyboardContext = (event: KeyboardEvent<SVGGElement>, entity: AzSelectedEntity) => {
+  const openKeyboardContext = (event: KeyboardEvent<SVGGElement>, entity: AzSelectedEntity, onActivate?: () => void) => {
     if (event.key === 'Escape' && dragState) {
       event.preventDefault()
       clearDrag()
       return
     }
-    if (event.target === event.currentTarget && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
+    if (!onActivate && event.target === event.currentTarget && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
+      if (readOnly) return
       const node = entity.kind === 'vnet' ? { kind: 'vnet' as const, id: entity.vnetId, box: positions.vnets[entity.vnetId] }
         : entity.kind === 'vwan-hub' ? { kind: 'vwan-hub' as const, id: entity.hubId, box: positions.vwanHubs[entity.hubId] }
           : entity.kind === 'er-location' ? { kind: 'er-location' as const, id: entity.locationId, box: positions.erLocations[entity.locationId] }
@@ -378,7 +383,8 @@ export function AzureNetDiagram({
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
       event.stopPropagation()
-      onSelect(entity)
+      if (onActivate) onActivate()
+      else onSelect(entity)
       return
     }
     if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return
@@ -488,6 +494,14 @@ export function AzureNetDiagram({
     ...Object.entries(positions.erLocations).map(([id, box]) => [`er-location:${id}`, box] as const),
     ...Object.entries(positions.sites).map(([id, box]) => [`site:${id}`, box] as const),
   ])
+  const fitBounds = fitDiagram([...motionBoxes.values()], 1180 / 790)
+  const fitZoom = 1180 / fitBounds.width
+  const availableZoomLimits = { ...zoomLimits, minZoom: Math.min(zoomLimits.minZoom, fitZoom, zoom) }
+  useCanvasZoom({
+    svgRef, zoom, onZoom: (next) => { closePolicyPreview(); setHoverPopover(null); setZoom(next) }, ...availableZoomLimits,
+    onPan: (delta) => setPan((value) => ({ x: value.x + delta.x, y: value.y + delta.y })),
+    isDragging: () => dragPointerId.current !== null,
+  })
   const deviceOwners = new Map(topology.vnets.flatMap((vnet) =>
     [...vnet.gateways, ...vnet.appliances].map((device) => [device.id, `vnet:${vnet.id}`] as const),
   ))
@@ -496,7 +510,7 @@ export function AzureNetDiagram({
   const connections = [
     ...azInterHubLinks(topology),
     ...topology.vnetPeerings.map((link) => ({ id: link.id, from: `vnet:${link.vnetAId}`, to: `vnet:${link.vnetBId}` })),
-    ...topology.vnets.flatMap((vnet) => vnet.vwanHubAttachment?.enabled ? [{
+    ...topology.vnets.flatMap((vnet) => vnet.vwanHubAttachment ? [{
       id: `vhub-attach:${vnet.id}:${vnet.vwanHubAttachment.hubId}`, from: `vnet:${vnet.id}`, to: `vwan-hub:${vnet.vwanHubAttachment.hubId}`,
     }] : []),
     ...topology.erLinks.map((link) => ({ id: link.id, from: `er-location:${link.locationId}`, to: targetKey(link.targetKind, link.targetId) })),
@@ -515,6 +529,23 @@ export function AzureNetDiagram({
     return [[link.id, { from: link.from, to: link.to, curve: diagramCurve(centerOfBox(a), centerOfBox(b),
       { x: a.width / 2, y: a.height / 2 }, { x: b.width / 2, y: b.height / 2 }, bend) }] as const]
   }))
+  for (const connection of topology.vpnConnections) {
+    const path = connection.underlay
+    const current = connectionCurves.get(connection.id)
+    const er = topology.erLinks.find((link) => link.id === path?.azureLinkId)
+    const location = er && positions.erLocations[er.locationId]
+    const site = positions.sites[connection.siteId]
+    const target = current && motionBoxes.get(current.to)
+    if (!path || !current || !location || !site || !target) continue
+    const waypoint = { x: location.x + location.width + 22, y: location.y + location.height / 2 }
+    const first = diagramCurve(centerOfBox(site), waypoint, { x: site.width / 2, y: site.height / 2 }, { x: 1, y: 1 }, 28)
+    const second = diagramCurve(waypoint, centerOfBox(target), { x: 1, y: 1 }, { x: target.width / 2, y: target.height / 2 }, 28)
+    connectionCurves.set(connection.id, { ...current, curve: {
+      ...first, end: second.end, d: `${first.d} L ${second.start.x} ${second.start.y} ${second.d.replace(/^M [^Q]+/, '')}`,
+      label: { x: waypoint.x + 12, y: waypoint.y },
+      at: (t: number) => t < 0.5 ? first.at(t * 2) : second.at((t - 0.5) * 2),
+    } })
+  }
   const resolveFocus = (entity?: AzSelectedEntity): { name: string; node?: string; connectionId?: string } | undefined => {
     if (!entity) return
     const nodeKey = 'vnetId' in entity ? `vnet:${entity.vnetId}`
@@ -738,6 +769,7 @@ export function AzureNetDiagram({
         viewBox={`${pan.x} ${pan.y} ${viewW} ${viewH}`}
         onPointerDownCapture={(event) => {
           closePolicyPreview()
+          if (readOnly && event.target !== event.currentTarget) { event.stopPropagation(); return }
           if (event.button !== 0 || dragPointerId.current !== null) {
             if (event.button !== 2) { event.preventDefault(); event.stopPropagation() }
             return
@@ -930,23 +962,39 @@ export function AzureNetDiagram({
         {/* 2. VNet-to-vWAN Hub Attachments */}
         {topology.vnets.map((vnet) => {
           const att = vnet.vwanHubAttachment
-          if (!att || !att.enabled) return null
-          const vBox = positions.vnets[vnet.id]
-          const hBox = positions.vwanHubs[att.hubId]
-          if (!vBox || !hBox) return null
+          if (!att) return null
           const edgeId = `vhub-attach:${vnet.id}:${att.hubId}`
-          const curve = connectionCurves.get(edgeId)!.curve
+          const curve = connectionCurves.get(edgeId)?.curve
+          if (!curve) return null
           const inForward = forwardEdges.has(edgeId)
           const inReverse = reverseEdges.has(edgeId)
-          return (
-            <g key={edgeId} {...focusAttributes(edgeId)}>
-              <path className="aznet-edge-path" d={curve.d} fill="none"
-                stroke={inForward ? 'var(--forward)' : inReverse ? 'var(--return)' : 'var(--info)'}
-                strokeWidth={inForward || inReverse ? 4 : 2.5}
-                strokeDasharray={inReverse && !inForward ? '7 4' : undefined}
-              />
-            </g>
-          )
+          const entity = { kind: 'vnet' as const, vnetId: vnet.id }
+          const activate = () => {
+            if (!readOnly && onOpenVnetConnection) onOpenVnetConnection(vnet.id)
+            else onSelect(entity)
+          }
+          return <DiagramButton key={edgeId} {...focusAttributes(edgeId)}
+            className="aznet-edge-group" data-testid={`aznet-vnet-connection-${vnet.id}`}
+            role="button" tabIndex={0} aria-label={t('Configure virtual hub connection') + ` ${vnet.name}`}
+            aria-pressed={selected?.kind === 'vnet' && selected.vnetId === vnet.id}
+            onClick={(event) => { event.stopPropagation(); activate() }}
+            onKeyDown={(event) => openKeyboardContext(event, entity, activate)}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              onContextMenu?.({ kind: 'entity', entity, x: event.clientX, y: event.clientY })
+            }}>
+            <CanvasEdgeSelection selected={selected?.kind === 'vnet' && selected.vnetId === vnet.id} path={curve.d} />
+            <path className="aznet-edge-path" d={curve.d} fill="none"
+              stroke={inForward ? 'var(--forward)' : inReverse ? 'var(--return)' : 'var(--info)'}
+              strokeWidth={inForward || inReverse ? 4 : 2.5}
+              strokeDasharray={!att.enabled ? '6 5' : inReverse && !inForward ? '7 4' : undefined} />
+            <rect x={curve.label.x - 62} y={curve.label.y - 11} width={124} height={22} rx={6}
+              fill="var(--surface)" stroke="var(--info)" />
+            <text x={curve.label.x} y={curve.label.y + 4} textAnchor="middle" fontSize={10} fill="var(--text)">
+              {t('VNet connection')}{!att.enabled ? t(' (down)') : ''}
+            </text>
+          </DiagramButton>
         })}
 
         {/* 3. ExpressRoute Links (via MSEE Locations) */}
@@ -1154,7 +1202,9 @@ export function AzureNetDiagram({
           const inReverse = reverseEdges.has(conn.id)
           const isSelected =
             selected?.kind === 'vpn-connection' && selected.connectionId === conn.id
-          const stroke = !conn.enabled
+          const underlay = vpnUnderlays?.[conn.id]
+          const unavailable = underlay && underlay.state !== 'available'
+          const stroke = !conn.enabled || unavailable
             ? 'var(--link)'
             : inForward
                 ? 'var(--forward)'
@@ -1169,7 +1219,7 @@ export function AzureNetDiagram({
               data-testid={`aznet-vpnconn-${conn.id}`}
               role="button"
               tabIndex={0}
-              aria-label={`Select ${conn.transport === 'SDWAN' ? 'SD-WAN' : 'VPN'} connection ${conn.name}`}
+              aria-label={`Select ${conn.underlay || conn.useLocalAzureIpAddress ? 'VPN over ER' : conn.transport === 'SDWAN' ? 'SD-WAN' : 'VPN'} connection ${conn.name}`}
               aria-pressed={isSelected}
               onKeyDown={(event) => openKeyboardContext(event, { kind: 'vpn-connection', connectionId: conn.id })}
               onClick={(e) => {
@@ -1204,9 +1254,9 @@ export function AzureNetDiagram({
                 strokeDasharray="6 4"
               />
               <rect
-                x={midX - 42}
+                x={midX - (unavailable ? 96 : conn.underlay ? 66 : 42)}
                 y={midY - 9}
-                width={84}
+                width={unavailable ? 192 : conn.underlay ? 132 : 84}
                 height={18}
                 rx={5}
                 fill="var(--surface-muted)"
@@ -1221,8 +1271,9 @@ export function AzureNetDiagram({
                 fontWeight={600}
                 fill="var(--purple)"
               >
-                {conn.transport === 'SDWAN' ? 'SD-WAN' : 'VPN'} · {conn.bgpEnabled ? 'BGP' : 'Static'}
+                {conn.underlay || conn.useLocalAzureIpAddress ? 'VPN over ER' : conn.transport === 'SDWAN' ? 'SD-WAN' : 'VPN'} · {conn.bgpEnabled ? 'BGP' : 'Static'}
                 {!conn.enabled ? ' · OFF' : ''}
+                {conn.enabled && unavailable ? underlay.state === 'not-assessed' ? ' · NOT ASSESSED' : ' · UNDERLAY OFF' : ''}
               </text>
             </DiagramButton>
           )
@@ -1313,12 +1364,12 @@ export function AzureNetDiagram({
           if (!box) return null
           const isVnetSelected = selected?.kind === 'vnet' && selected.vnetId === vnet.id
           const vnetFindings = findingsForNode('vnet', vnet.id)
-          const hasError = vnetFindings.some((f) => f.severity === 'error')
+          const addressError = vnetAddressError(vnet)
+          const hasError = !!addressError || vnetFindings.some((f) => f.severity === 'error')
           const hasWarning = vnetFindings.some((f) => f.severity === 'warning')
 
           const chips = deviceChips(vnet, box.width)
           const controlStripH = chips.length ? chips[chips.length - 1].y + 30 : 0
-          const roleWidth = Math.min(104, Math.max(58, vnet.role.length * 6 + 12))
           const arsLinks = mappedArsLinks(vnet, topology)
           const subnetStartY = box.y + 44 + controlStripH + arsLinks.length * 44 + 6
 
@@ -1404,9 +1455,10 @@ export function AzureNetDiagram({
                 }
               />
               <NetworkNodeIcon kind="spoke" x={box.x + 23} y={box.y + 17} size={22} />
-              <DiagramNodeText text={vnet.name} x={box.x + 40} y={box.y + 18} width={box.width - roleWidth - 60} weight={700} />
-              <DiagramNodeText text={`${vnet.prefixes.join(', ')} · ${vnet.region}`} x={box.x + 12} y={box.y + 34} width={box.width - 24} fontSize={10.5} weight={400} />
-              <DiagramNodeBadge label={vnet.role.toUpperCase()} x={box.x + box.width - roleWidth - 10} y={box.y + 6} width={roleWidth} tone={isHubVnetRole(vnet.role) ? 'info' : 'muted'} />
+              <DiagramNodeText text={vnet.name} x={box.x + 40} y={box.y + 18} width={box.width - 52} weight={700} />
+              <DiagramNodeText className="aznet-vnet-prefix" fill={addressError ? 'var(--error)' : undefined}
+                text={`${vnet.prefixes.join(', ')} · ${vnet.region}`} title={addressError ? t(addressError) : undefined}
+                x={box.x + 12} y={box.y + 34} width={box.width - 24} fontSize={10.5} weight={400} />
             </DiagramButton>
 
               {/* Control Plane / Appliances Strip */}
@@ -1462,6 +1514,7 @@ export function AzureNetDiagram({
 
               {/* Clickable Subnet Rows */}
               {vnet.subnets.map((subnet, sIdx) => {
+                const addressError = subnetAddressError(vnet.prefixes, subnet.prefix)
                 const rowY = subnetStartY + sIdx * 28
                 const isSubSelected =
                   selected?.kind === 'subnet' && selected.subnetId === subnet.id
@@ -1474,6 +1527,9 @@ export function AzureNetDiagram({
                 const badgeText = rt ? `RT: ${rt.name.length > 10 ? `${rt.name.slice(0, 9)}…` : rt.name}` : ''
                 const inventory = inventoryCounts(topology, { kind: 'vnet', id: vnet.id }, subnet.id)
                 const hasNat = inventory.natGateways > 0 || subnet.internetEgressStatus === 'unknown'
+                const visibleSubnetLabel = [subnet.name, hasNat ? subnet.internetEgressStatus ? 'NAT?' : 'NAT' : '',
+                  inventory.nsgs ? `NSG ${inventory.nsgs}` : '', inventory.loadBalancers ? `LB ${inventory.loadBalancers}` : '',
+                  inventory.nics ? `VM ${inventory.workloads} · NIC ${inventory.nics}` : '', badgeText, hasPe ? 'PE' : ''].filter(Boolean).join('')
                 const inventoryWidth = (inventory.nics ? 90 : 0) + (hasNat ? 38 : 0) + (inventory.nsgs ? 42 : 0) + (inventory.loadBalancers ? 38 : 0)
                 const badgeW = rt ? Math.min(88, Math.max(42, badgeText.length * 4.8 + 10)) : 0
                 const badgeX = box.x + box.width - (hasPe ? 42 : 12) - badgeW - inventoryWidth
@@ -1503,9 +1559,10 @@ export function AzureNetDiagram({
                     key={subnet.id}
                     aria-pressed={isSubSelected}
                     data-testid={`aznet-subnet-${subnet.id}`}
+                    data-address-invalid={!!addressError}
                     tabIndex={0}
                     role="button"
-                    aria-label={`Subnet ${vnet.name} / ${subnet.name} (${subnet.prefix})${inventory.nics ? ` · VM ${inventory.workloads} · NIC ${inventory.nics} · Public IP ${inventory.publicIps}` : ''}${inventory.natGateways ? ` · NAT Gateway ${inventory.natGateways}` : ''}${inventory.loadBalancers ? ` · LB ${inventory.loadBalancers}` : ''}`}
+                    aria-label={readOnly ? `${visibleSubnetLabel} · Subnet ${vnet.name} (${subnet.prefix})` : `Subnet ${vnet.name} / ${subnet.name} (${subnet.prefix})${inventory.nics ? ` · VM ${inventory.workloads} · NIC ${inventory.nics} · Public IP ${inventory.publicIps}` : ''}${inventory.natGateways ? ` · NAT Gateway ${inventory.natGateways}` : ''}${inventory.loadBalancers ? ` · LB ${inventory.loadBalancers}` : ''}`}
                     aria-describedby={hoverPopover?.kind === 'subnet' && hoverPopover.subnetId === subnet.id ? tooltipId : undefined}
                     onMouseEnter={(e) => showSubnet(e.clientX, e.clientY)}
                     onMouseLeave={scheduleClosePopover}
@@ -1545,7 +1602,7 @@ export function AzureNetDiagram({
                       height={24}
                       rx={6}
                       fill={rowFill}
-                      stroke={rowStroke}
+                      stroke={addressError ? 'var(--error)' : rowStroke}
                       strokeWidth={isSubSelected || inFwd || inRev ? 1.8 : 1}
                     />
                     <defs><clipPath id={labelClipId}><rect x={box.x + 15} y={rowY} width={Math.max(0, badgeX - box.x - 22)} height={24} /></clipPath></defs>
@@ -1555,7 +1612,7 @@ export function AzureNetDiagram({
                       y={rowY + 15}
                       fontSize={10.5}
                       fontWeight={isSubSelected ? 700 : 600}
-                      fill="var(--text)"
+                      fill={addressError ? 'var(--error)' : 'var(--text)'}
                     >
                       {subnet.name}
                     </text>
@@ -1763,7 +1820,10 @@ export function AzureNetDiagram({
               <title>{inspected ? t('Selected route traverses the local Firewall; this is not delivery or policy proof.') : hub.name}</title>
               <NetworkNodeIcon kind="hub" secured={Boolean(hub.firewall) || hub.routingIntent.private || hub.routingIntent.internet} x={box.x + 25} y={box.y + 20} size={24} />
               <DiagramNodeText text={hub.name} x={box.x + 43} y={box.y + 24} width={box.width - 55} weight={700} />
-              <DiagramNodeText text={`vWAN Hub${hub.prefix ? ` (${hub.prefix})` : ''} · Pref: ${hub.preference}`} x={box.x + 14} y={box.y + 42} width={box.width - 28} fontSize={10.5} weight={400} />
+              <DiagramNodeText className="aznet-hub-region"
+                text={`${normalizeAzureRegionName(hub.region) || t('Unknown region')}${hub.prefix ? ` · ${hub.prefix}` : ''}`}
+                title={`${t('Azure Region')}: ${normalizeAzureRegionName(hub.region) || t('Unknown region')}${hub.prefix ? ` · ${hub.prefix}` : ''}`}
+                x={box.x + 14} y={box.y + 42} width={box.width - 28} fontSize={10.5} weight={500} />
               <DiagramNodeText text={`Private: ${hub.routingIntent.private ? 'On' : 'Off'} · Internet: ${hub.routingIntent.internet ? 'On' : 'Off'}`} title={`Routing Intent: Private ${hub.routingIntent.private ? 'On' : 'Off'} / Internet ${hub.routingIntent.internet ? 'On' : 'Off'}`} x={box.x + 14} y={box.y + 60} width={box.width - 28} fontSize={10} fill="var(--info)" />
               <DiagramNodeText text={hubGatewayLabel(azHubGatewayConnections(topology, hub.id))} title={t('Enabled/defined modeled connections')} x={box.x + 14} y={box.y + 75} width={box.width - 28} fontSize={9} weight={400} />
               {hub.label?.trim() ? (
@@ -2038,10 +2098,12 @@ export function AzureNetDiagram({
       {hoverPopover?.kind === 'subnet' && (() => {
         const vnet = topology.vnets.find((entry) => entry.id === hoverPopover.vnetId)
         const subnet = vnet?.subnets.find((entry) => entry.id === hoverPopover.subnetId)
-        if (!subnet) return null
+        if (!vnet || !subnet) return null
+        const addressError = subnetAddressError(vnet.prefixes, subnet.prefix)
         return <div id={tooltipId} role="tooltip" className="aznet-hover-popover aznet-subnet-tooltip"
           data-testid="aznet-subnet-hover-card" style={{ left: hoverPopover.x, top: hoverPopover.y }}>
-          <strong>{subnet.name}</strong><p><code>{subnet.prefix}</code></p>
+          <strong>{subnet.name}</strong><p><code style={{ color: addressError ? 'var(--error)' : undefined }}>{subnet.prefix}</code></p>
+          {addressError && <p style={{ color: 'var(--error)' }}>{t(addressError)}</p>}
         </div>
       })()}
 
@@ -2071,6 +2133,7 @@ export function AzureNetDiagram({
                 <input
                   type="checkbox"
                   checked={peering.enabled}
+                  disabled={!onTogglePeeringEnabled}
                   onChange={(e) => onTogglePeeringEnabled?.(peering.id, e.target.checked)}
                 />
                 Enabled
@@ -2105,7 +2168,7 @@ export function AzureNetDiagram({
                       <input
                         type="checkbox"
                         checked={peering.aToB[flag]}
-                        disabled={Boolean(disabledReason)}
+                        disabled={!onUpdatePeeringFlag || Boolean(disabledReason)}
                         onChange={(e) =>
                           onUpdatePeeringFlag?.(peering.id, 'aToB', flag, e.target.checked)
                         }
@@ -2143,7 +2206,7 @@ export function AzureNetDiagram({
                       <input
                         type="checkbox"
                         checked={peering.bToA[flag]}
-                        disabled={Boolean(disabledReason)}
+                        disabled={!onUpdatePeeringFlag || Boolean(disabledReason)}
                         onChange={(e) =>
                           onUpdatePeeringFlag?.(peering.id, 'bToA', flag, e.target.checked)
                         }
@@ -2158,6 +2221,7 @@ export function AzureNetDiagram({
               <button
                 type="button"
                 className="aznet-mini-btn"
+                disabled={!onOpenEditorForEntity}
                 onClick={() => {
                   const entity: AzSelectedEntity = { kind: 'peering', peeringId: peering.id }
                   onSelect(entity)
@@ -2204,6 +2268,7 @@ export function AzureNetDiagram({
                 <input
                   type="checkbox"
                   checked={!rt.disableBgpRoutePropagation}
+                  disabled={!onUpdateRouteTable}
                   onChange={(e) =>
                     onUpdateRouteTable?.(rt.id, {
                       disableBgpRoutePropagation: !e.target.checked,
@@ -2216,6 +2281,7 @@ export function AzureNetDiagram({
                 <input
                   type="checkbox"
                   checked={!rt.disablePeeringRoutePropagation}
+                  disabled={!onUpdateRouteTable}
                   onChange={(e) =>
                     onUpdateRouteTable?.(rt.id, {
                       disablePeeringRoutePropagation: !e.target.checked,
@@ -2247,6 +2313,7 @@ export function AzureNetDiagram({
               <button
                 type="button"
                 className="aznet-mini-btn"
+                disabled={!onOpenEditorForEntity}
                 onClick={() => {
                   const entity: AzSelectedEntity = {
                     kind: 'subnet',
@@ -2263,6 +2330,7 @@ export function AzureNetDiagram({
               <button
                 type="button"
                 className="aznet-mini-btn aznet-danger-btn"
+                disabled={!onAssociateSubnetRouteTable}
                 onClick={() => {
                   onAssociateSubnetRouteTable?.(vnet.id, subnet.id, undefined)
                   setHoverPopover(null)
@@ -2275,7 +2343,7 @@ export function AzureNetDiagram({
         )
       })()}
 
-      <CanvasControls zoom={zoom} onZoom={setZoom} {...zoomLimits}
+      <CanvasControls zoom={zoom} onZoom={setZoom} {...availableZoomLimits}
         status={focusSelection && <div className="connection-focus-status" role="status" data-testid="connection-focus-status">
           <p>{focusTarget
             ? t('Focus: {0}. {1} rendered connections: {2} emphasized, {3} dimmed, 0 hidden.',
@@ -2284,8 +2352,7 @@ export function AzureNetDiagram({
           <p>{t('View only, not a routed path. Inactive, failed and highlighted links stay prominent. Labels and policies stay visible; hover or focus a dimmed link to emphasize it.')}</p>
         </div>}
         onFitView={() => {
-          const bounds = fitDiagram([...motionBoxes.values()], 1180 / 790)
-          setZoom(1180 / bounds.width); setPan({ x: bounds.x, y: bounds.y })
+          setZoom(fitZoom); setPan({ x: fitBounds.x, y: fitBounds.y })
         }}
         onResetView={() => { setZoom(1); setPan({ x: 0, y: 0 }) }}>
         <button type="button" disabled={!focusCandidate} onClick={() => setFocusSelection(selected)}

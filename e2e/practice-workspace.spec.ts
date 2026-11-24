@@ -2,7 +2,10 @@ import { expect, test, type Page } from '@playwright/test'
 import { exercises } from '../src/learning/exercises'
 import { practiceWorkspaceKey, type PracticeWorkspace } from '../src/learning/practice-workspace'
 import { progressKey } from '../src/learning/progress'
-import { learningOptions } from './learning-helpers'
+import { archivedScenarioStorageState, openLearning, learningOptions } from './learning-helpers'
+import { hubFirewallTopology, azHubFirewallTopology } from '../tests/fixtures/hub-firewall'
+
+test.use({ storageState: archivedScenarioStorageState() })
 
 const normalKeys = ['vwan-visual-topology:v1', 'aznet-visual-topology:v1']
 const stored = (page: Page) => page.evaluate((keys) => keys.map((key) => localStorage.getItem(key)), normalKeys)
@@ -28,7 +31,7 @@ async function seed(page: Page, vwan: boolean) {
 
 async function start(page: Page) {
   const dialog = page.getByTestId('learning-sidebar')
-  if (!await dialog.isVisible()) await page.getByTestId('learning-open').click()
+  if (!await dialog.isVisible()) await openLearning(page)
   await dialog.getByRole('button', { name: 'Load practice network', exact: true }).click()
   return dialog
 }
@@ -54,6 +57,92 @@ async function move(page: Page, vwan: boolean) {
 }
 
 for (const vwan of [true, false]) {
+  test(`${vwan ? 'VWAN' : 'mixed'} final design closure preserves protected practice and its independent return document`, async ({ page }) => {
+    await seed(page, vwan)
+    const original = await page.evaluate(() => {
+      const id = JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!).activeId
+      return { id, raw: localStorage.getItem(`network-simulator:workspace-tab:v1:${id}:topology`) }
+    })
+    await confirmStart(page, vwan ? 'vwan-connect' : 'peering-connect')
+    await move(page, vwan)
+    await bar(page).getByRole('button', { name: 'Return to my design', exact: true }).click()
+    const protectedCopy = await practice(page)
+    await page.getByRole('button', { name: 'Close topology: My original design', exact: true }).click()
+    await page.getByRole('dialog', { name: 'Save changes before closing?', exact: true }).getByRole('button', { name: 'Discard and close', exact: true }).click()
+    await expect(page.getByRole('tab')).toHaveCount(1)
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!).activeId)).not.toBe(original.id)
+    const replacementId = await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!).activeId)
+    expect(await practice(page)).toEqual(protectedCopy)
+    await bar(page).getByRole('button', { name: 'Resume practice', exact: true }).click()
+    await expect(bar(page)).toContainText('your normal design is kept separately')
+    expect((await practice(page)).document).toEqual(protectedCopy.document)
+    await page.reload()
+    await expect(bar(page)).toContainText('your normal design is kept separately')
+    await bar(page).getByRole('button', { name: 'Return to my design', exact: true }).click()
+    await expect(node(page, vwan)).toHaveCount(0)
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!).activeId)).toBe(replacementId)
+    expect(await page.evaluate(id => localStorage.getItem(`network-simulator:workspace-tab:v1:${id}:topology`), original.id)).toBe(original.raw)
+  })
+
+  test(`${vwan ? 'VWAN' : 'mixed'} connection edits and undo remain in the protected practice document`, async ({ page }) => {
+    await seed(page, vwan)
+    const original = await stored(page)
+    await confirmStart(page, vwan ? 'vwan-connect' : 'peering-connect')
+    await page.locator('input[type="file"]').first().setInputFiles({
+      name: 'practice-connections.json', mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify(vwan ? hubFirewallTopology() : azHubFirewallTopology())),
+    })
+    const edge = page.getByTestId(`${vwan ? 'spoke' : 'aznet-vnet'}-connection-trusted-a`)
+    await edge.focus()
+    await page.keyboard.press('Enter')
+    const panel = page.getByTestId('vwan-vnet-connection-panel')
+    const flag = panel.getByLabel('Propagate default route (0.0.0.0/0)', { exact: true })
+    await flag.check()
+    const document = (await practice(page)).document
+    expect(document.mode === 'vwan' ? document.topology.spokes[0].propagateDefaultRoute
+      : document.topology.vnets[0].vwanHubAttachment!.propagateDefaultRoute).toBe(true)
+    expect(await stored(page)).toEqual(original)
+    await undo(page).click()
+    await expect(flag).not.toBeChecked()
+    await redo(page).click()
+    await expect(flag).toBeChecked()
+    await bar(page).getByRole('button', { name: 'Return to my design', exact: true }).click()
+    await expect(panel).toHaveCount(0)
+    expect(await stored(page)).toEqual(original)
+    await bar(page).getByRole('button', { name: 'Resume practice', exact: true }).click()
+    await expect(flag).toBeChecked()
+    expect(await stored(page)).toEqual(original)
+  })
+}
+
+for (const vwan of [true, false]) {
+  test(`${vwan ? 'VWAN' : 'mixed'} selection and canvas view stay with their own editor`, async ({ page }) => {
+    await seed(page, vwan)
+    const selectedDesign = vwan ? page.locator('[data-node-id="b"]') : page.getByTestId('aznet-select-vnet-b')
+    await selectedDesign.focus()
+    await page.keyboard.press('Enter')
+    await expect(selectedDesign).toHaveAttribute('aria-pressed', 'true')
+    await page.getByRole('button', { name: 'Zoom in', exact: true }).click()
+    const designZoom = await page.getByLabel('Canvas zoom', { exact: true }).inputValue()
+    expect(designZoom).not.toBe('1')
+
+    await confirmStart(page, vwan ? 'vwan-connect' : 'peering-connect')
+    await expect(page.getByLabel('Canvas zoom', { exact: true })).toHaveValue('1')
+    await expect(selectedDesign).toHaveAttribute('aria-pressed', 'false')
+    const selectedPractice = vwan ? node(page, true) : page.getByTestId('aznet-select-vnet-a')
+    await selectedPractice.focus()
+    await page.keyboard.press('Enter')
+    await page.getByRole('button', { name: 'Zoom out', exact: true }).click()
+    const practiceZoom = await page.getByLabel('Canvas zoom', { exact: true }).inputValue()
+    await bar(page).getByRole('button', { name: 'Return to my design', exact: true }).click()
+    await expect(selectedDesign).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByLabel('Canvas zoom', { exact: true })).toHaveValue(designZoom)
+    await bar(page).getByRole('button', { name: 'Resume practice', exact: true }).click()
+    await expect(selectedPractice).toHaveAttribute('aria-pressed', 'true')
+    await expect(selectedDesign).toHaveAttribute('aria-pressed', 'false')
+    await expect(page.getByLabel('Canvas zoom', { exact: true })).toHaveValue(practiceZoom)
+  })
+
   test(`${vwan ? 'VWAN' : 'mixed'} design/practice histories, layout and reload are isolated`, async ({ page }) => {
     await seed(page, vwan)
     await move(page, vwan)
@@ -75,7 +164,7 @@ for (const vwan of [true, false]) {
     }).toBe(true)
     const practicePosition = await position(page, vwan)
     const edited = (await practice(page)).document
-    await page.getByTestId('learning-open').click()
+    await openLearning(page)
     const reopened = page.getByTestId('learning-sidebar')
     await learningOptions(page)
     await reopened.getByText('Learning path and completed-task review', { exact: true }).click()
@@ -238,25 +327,23 @@ test('a known other-tab update is not overwritten by edits, return, resume or di
   expect(await stored(page)).toEqual(originals)
 })
 
-test('live shared snapshots use normal admission without importing into saved practice', async ({ page }) => {
+test('live legacy shares use read-only admission without replacing or leaving practice', async ({ page }) => {
   await seed(page, false)
   await confirmStart(page, 'vwan-connect')
   const original = (await practice(page)).document
+  const originals = await stored(page)
   await page.evaluate(() => { location.hash = 's=not-valid-json' })
-  await expect(page.getByRole('alert').filter({ hasText: 'Shared snapshot rejected' })).toBeVisible()
-  await expect(bar(page)).toContainText('your normal design is kept separately')
+  await expect(page.getByRole('alert').filter({ hasText: 'Shared topology unavailable' })).toBeVisible()
   const incoming = structuredClone(exercises[1].starter.topology)
   incoming.name = 'Explicit incoming snapshot'
   const snapshot = Buffer.from(JSON.stringify(incoming)).toString('base64url')
   await page.evaluate((snapshot) => { location.hash = `retained&s=${snapshot}` }, snapshot)
-  await expect(page.getByTestId('aznet-app')).toBeVisible()
-  await expect(bar(page).getByRole('button', { name: 'Resume practice', exact: true })).toBeVisible()
-  await expect.poll(() => new URL(page.url()).hash).toBe('#retained')
-  expect(JSON.parse((await stored(page))[1]!).topology.name).toBe(incoming.name)
+  await expect(page.getByRole('heading', { name: incoming.name, exact: true })).toBeVisible()
+  expect(await stored(page)).toEqual(originals)
   expect((await practice(page)).document).toEqual(original)
-  expect((await practice(page)).active).toBe(false)
-  await page.reload()
-  await expect(bar(page).getByRole('button', { name: 'Resume practice', exact: true })).toBeVisible()
+  expect((await practice(page)).active).toBe(true)
+  await page.getByRole('button', { name: 'Return to workspace', exact: true }).click()
+  await expect(bar(page)).toContainText('your normal design is kept separately')
 })
 
 test('cross-provider file imports while practising remain in practice, not normal saves', async ({ page }) => {
@@ -310,12 +397,12 @@ test('practice can resume from an ambiguous design library and return to a safe 
   }, { saved, normal: exercises[1].starter })
   await page.goto('/')
   const library = page.getByRole('dialog', { name: 'Workspace', exact: true })
-  await expect(library).toContainText('Neither saved family has been selected')
+  await expect(library).toContainText('Saved topologies are not opened or overwritten automatically')
   const originals = await stored(page)
   await library.getByRole('button', { name: 'Resume practice', exact: true }).click()
   await expect(node(page, true)).toBeVisible()
   await bar(page).getByRole('button', { name: 'Return to my design', exact: true }).click()
-  await expect(library).toContainText('Neither saved family has been selected')
+  await expect(library).toContainText('Saved topologies are not opened or overwritten automatically')
   expect(await stored(page)).toEqual(originals)
 })
 
@@ -325,7 +412,7 @@ test('resuming after a normal provider change remembers the current return desig
   await bar(page).getByRole('button', { name: 'Return to my design', exact: true }).click()
   await page.getByTestId('workspace-library-open').click()
   await page.getByRole('dialog', { name: 'Workspace', exact: true })
-    .getByRole('button', { name: 'New mixed-network workspace', exact: true }).click()
+    .getByRole('button', { name: 'New topology', exact: true }).click()
   await expect(page.getByTestId('aznet-app')).toBeVisible()
   const originals = await stored(page)
   await bar(page).getByRole('button', { name: 'Resume practice', exact: true }).click()
@@ -343,17 +430,21 @@ test('returning to an unsaved normal VWAN design retains its edit and storage wa
   await page.evaluate(() => {
     const original = Storage.prototype.setItem
     Storage.prototype.setItem = function (key, value) {
-      if (key === 'vwan-visual-topology:v1') throw new Error('Normal document exceeds quota')
+      if (key === 'vwan-visual-topology:v1' || /^network-simulator:workspace-tab:v1:.*:topology$/.test(key)) {
+        throw new Error('Normal document exceeds quota')
+      }
       return original.call(this, key, value)
     }
   })
   await move(page, true)
   const editedPosition = await position(page, true)
-  const warning = page.getByText('Browser storage is unavailable or full. Export JSON to preserve your topology.', { exact: true })
-  await expect(warning).toBeVisible()
+  const warning = page.getByTestId('document-save-state')
+  await expect(warning).toHaveText('Not saved')
+  await expect(warning).toHaveAttribute('title', /Profile recovery unavailable/)
   await confirmStart(page, 'vwan-connect')
   await bar(page).getByRole('button', { name: 'Return to my design', exact: true }).click()
-  await expect(warning).toBeVisible()
+  await expect(warning).toHaveText('Not saved')
+  await expect(warning).toHaveAttribute('title', /Profile recovery unavailable/)
   expect(await position(page, true)).toBe(editedPosition)
   expect(await stored(page)).toEqual(originals)
 })

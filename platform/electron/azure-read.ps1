@@ -21,7 +21,7 @@ function Read-Az([string[]]$Arguments) {
 }
 if ($Operation -eq 'accounts') {
     $cloud = Read-Az @('cloud','show','--query','{name:name,resourceManager:endpoints.resourceManager}')
-    $accounts = @(Read-Az @('account','list','--query','[].{id:id,name:name,tenantId:tenantId,state:state}'))
+    $accounts = @(Read-Az @('account','list','--query','[].{id:id,name:name,tenantId:tenantId,state:state,isDefault:isDefault}'))
     @{cloud=$cloud; accounts=$accounts} | ConvertTo-Json -Depth 10 -Compress
     exit
 }
@@ -39,10 +39,10 @@ if ($Operation -eq 'targets') {
 if (!$OutputFile -or !$CollectorRoot) { throw 'Internal output/collector paths required.' }
 if ($Mode -eq 'vwan') {
     if ($Target -notmatch "^/subscriptions/$SubscriptionId/resourceGroups/[^/?#`r`n]+/providers/Microsoft.Network/virtualWans/[^/?#`r`n]+$") { throw 'Selected WAN must belong to the selected subscription.' }
-    & (Join-Path $CollectorRoot 'collect-azure-vwan.ps1') -VirtualWanId $Target -OutputFile $OutputFile 6>$null | Out-Null
+    & (Join-Path $CollectorRoot 'collect-azure-vwan.ps1') -VirtualWanId $Target -IncludeEffectiveRoutes -OutputFile $OutputFile 6>$null | Out-Null
 } else {
     if ($Target -notmatch '^[a-zA-Z0-9_.() -]{1,90}$') { throw 'Invalid resource-group name.' }
-    & (Join-Path $CollectorRoot 'collect-azure-network.ps1') -ResourceGroupName $Target -SubscriptionId $SubscriptionId -OutputFile $OutputFile 6>$null | Out-Null
+    & (Join-Path $CollectorRoot 'collect-azure-network.ps1') -ResourceGroupName $Target -SubscriptionId $SubscriptionId -IncludeEffectiveRoutes -OutputFile $OutputFile 6>$null | Out-Null
 }
 if (!(Test-Path -LiteralPath $OutputFile)) { throw 'Collector did not produce a capture.' }
 '{"captured":true}'

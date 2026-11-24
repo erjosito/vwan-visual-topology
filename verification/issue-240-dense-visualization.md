@@ -212,3 +212,162 @@ existing `ErLocationInfoModal` warning). No simulation code, saved schema,
 production layout, desktop integration or application entry point changes.
 The comparative research is ready for review; human validation and any
 production visualization choice remain explicitly pending.
+
+## Semantic alternatives follow-up (2026-11-23)
+
+### Critique before implementation
+
+Repeating the ring/lane experiment would not resolve the previously observed
+text and overlapping-stroke problems. Connection focus is already in production
+and leaves label geometry unchanged. Instead, this follow-up tests genuinely
+different representations against saved coordinates and existing focus:
+
+| Candidate | Intended task | Why it is not an automatic replacement |
+| --- | --- | --- |
+| Configured relationship matrix | Find an absent hub peering or a local/remote configured ARS appliance reference | Loses geography, transport and policy context; repeated symmetric cells are not extra links, and configured references are not BGP-session or forwarding evidence |
+| Collapsible regional inventory | Locate devices and directional policy attachments without a full mesh drawing | Readability comes from disclosure, not fitting all detail; counts and OFF state must remain explicit, and expansion/selection must retain original identities |
+| Native neighborhood framing | Inspect a selected hub in the original renderer without moving nodes | Improves local scale by moving other objects offscreen; it does not solve global layout or guarantee readable text |
+
+The matrix offers separate peering and ARS-reference tables. Absent/self cells
+are not actions; unresolved appliance references are labeled. Selecting a remote
+reference returns its original owning VNet/appliance, not the ARS owner.
+Regional cards retain original subnet, gateway, appliance, ARS, ER, shared-site
+and peering selection plus policy owner/connection/IN-OUT direction. The OFF ER
+attachment remains actionable while its region is collapsed.
+
+All three alternatives use unchanged presentation clones and preserve the
+original native JSON. The native canvas remains mounted but hidden for the
+matrix/cards. **Restore saved overview** returns to the original-coordinate
+canvas in one activation; **Fit view** can still be needed to reframe the whole
+document. This is not a promise to retain or automatically restore every pan/
+zoom state. Existing production connection-focus behavior is unchanged.
+
+### Reproducible comparison and limits
+
+Use the same dev-only page and synthetic fixtures described above, captured
+locally on Windows/Chromium. Four new cases compare
+saved/focus/matrix/regions/neighborhood at 1600 x 1100, both themes
+and both fixture sizes. Each measurement resets page scrolling to the top;
+collapsed HTML content is excluded rather than counted from cached boxes.
+SVG font sizes account for the screen transform. HTML samples are table headers,
+buttons, regional headings and disclosure summaries, not every displayed word.
+These views expose different quantities of detail, so their label counts and
+font medians are **not an apples-to-apples usability score**. The 12 px field is
+a descriptive heuristic, not an agreed readability or accessibility threshold.
+These samples also do not measure occlusion or distinguish a fully legible
+label from one partly clipped at the viewport edge.
+
+The sampled geometry agrees between themes. The collapsed regional sample is
+mostly headings/summaries; its median does not describe all inventory text.
+
+| Workload | View | Sampled viewport labels | Median screen font | Samples at least 12 px |
+| --- | --- | ---: | ---: | ---: |
+| Eight regions | Saved / focus | 255 | 3.1 px | 0 |
+| Eight regions | Peering matrix | 73 | 13 px | 73 |
+| Eight regions | Collapsed regional cards | 18 | 16 px | 18 |
+| Eight regions | Neighborhood | 68 | 9.9 px | 4 |
+| Two-region control | Saved / focus | 60 | 3.1 px | 0 |
+| Two-region control | Peering matrix | 7 | 13 px | 7 |
+| Two-region control | Collapsed regional cards | 6 | 16 px | 6 |
+| Two-region control | Neighborhood | 30 | 9.9 px | 2 |
+
+Raw results are in `issue-228-240-observations.json`. The new contact sheets
+below are reduced-size overviews; use the interactive page or full-size
+Playwright attachments for text inspection. Existing screenshots and observations
+above remain the historical geometry comparison.
+Each new sheet also includes a supplemental configured-ARS-reference matrix
+capture at the same workload/theme/viewport. Its horizontally scrollable table
+shows the context/navigation tradeoff; that supplemental capture has no paired
+timing or font measurements.
+
+![Light-theme semantic comparison: saved, focus, matrix, regions and neighborhood](issue-240-semantic-light.png)
+
+![Dark-theme semantic comparison: saved, focus, matrix, regions and neighborhood](issue-240-semantic-dark.png)
+
+```powershell
+npx playwright test dense-visualization.spec.ts -g "semantic alternatives" --workers=1 --retries=0
+```
+
+The cases check original peering/appliance selection, keyboard activation of a
+peering and directional policy, collapsed OFF visibility, absent-peering
+non-actions, exact JSON across alternatives/restore, whole-page axe for the
+matrix and expanded region, and no whole-page overflow at 390 px. The matrix
+uses a separately scrollable, keyboard-focusable table, not cropped relationship
+data. Automated axe and keyboard activation do not establish manual screen-reader
+or touch-device usability.
+
+One alternative-switch/settle sample per condition includes dev-server,
+automation and rendering work, including the retained hidden native renderer.
+It is neither a production responsiveness benchmark nor human task time. The
+new long comparisons use the existing research-comparison 120-second budget;
+no existing production timeout, byte ceiling or performance gate is increased.
+
+### Bounded recommendation
+
+Keep the matrix as the next candidate for **configured relationship completeness**
+tasks and regional cards as a separate **inventory/policy lookup** candidate.
+Do not select a global layout winner from font sizes or fewer exposed objects.
+Neighborhood framing is a useful comparison/control, not a dense whole-design
+replacement. None is promoted into production by this contribution.
+
+Before production integration, use counterbalanced first-time/experienced
+engineer trials with the five tasks above, plus restoration and table navigation.
+Compare the small control to avoid optimizing only for the eight-region mesh.
+Specify real diagnostics, simulated faults, OFF/access-disabled peerings,
+unsupported/unknown modeling boundaries and policy visibility at every
+disclosure level. This lab passes empty diagnostics: it does **not** validate
+those production semantics, live Azure outages, peer limits or forwarding paths.
+Add EN/JA, narrow/touch and manual screen-reader trials before selection.
+
+**Human participants remain zero.** #240 remains open for that comparison and a
+reviewed production choice. No production default/layout, topology schema,
+routing engine, saved coordinates, release version or deployment changes.
+
+Validation for this contribution: the 13-case native/focus/historical/new-view/
+current-UI source run passed. The six corrected comparisons/audits were rerun
+with one worker and zero retries; final semantic captures additionally move the
+pointer outside the canvas to avoid incidental hover popups. Application and
+research-component type checking, lint, configured production build, four static
+asset checks and all three production startup/optional-panel/first-switch cases
+pass. Lint retains one existing `ErLocationInfoModal` warning. Research entry/
+component strings are absent from production output; startup ceilings remain
+300,000 local gzip bytes and 1,200,000 raw bytes.
+
+After integrating main `2c6a959`, native preservation and both current-UI
+walkthroughs pass with exactly matching observations. The combined configured
+build and four static checks pass. Hub-spoke/full startup cases pass initially;
+the VWAN case exhausts the unchanged 30-second whole-test deadline after slow
+initial navigation, then passes in 10 seconds on an unchanged-artifact,
+zero-retry rerun. The trace does not establish the cause of that slow navigation.
+No production source fix, timeout increase or byte-budget relaxation is retained.
+
+## Maintainer formative review (2026-11-23)
+
+This review supersedes the provisional matrix/regional production-candidate
+ranking above. One maintainer reviewed the live prototype: matrix and regions
+are rejected because the representation should remain a conventional diagram.
+Geographic and neighborhood views are acceptable but look close to saved;
+lanes currently look cleanest. Any follow-up should therefore prioritize an
+**opt-in lane-based diagram**, not replace the saved-coordinate default.
+The measured overlapping lane strokes remain a material caveat: individual
+connections, policy direction and OFF/unknown context must remain inspectable.
+Visual preference alone does not demonstrate task efficiency.
+
+This is one formative reviewer, not a structured participant study. No measured
+completion rates, task times or perceived-complexity scores were collected.
+Historical zero-participant measurements and screenshots remain unchanged.
+
+The review also found that Focus scope did nothing in other alternatives.
+It is now disabled outside `focus`, with an explanation; in focus, status names
+the scope and the chain changes stroke dashing/opacity without moving nodes.
+Manual zoom's 65% floor versus Fit view's roughly 31%, and browser scrolling
+in the main app, are tracked in #450 and fixed separately in production by #451.
+The maintainer explicitly deprioritized comparison-page scrolling; its layout
+is not changed by this feedback update.
+
+The review integration passes 14 source browser cases with one worker and zero
+retries: native graph/focus preservation, the new scope regression, historical
+geometry, semantic inspection and both current-UI audits. Application/research
+type checks, lint, configured build, four static-artifact checks and all three
+startup/optional-panel/first-switch cases pass with unchanged byte ceilings.
+These checks do not replace the human study still required above.

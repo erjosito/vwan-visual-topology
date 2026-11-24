@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { incompletePlatformResult, validateRequest } from '../src/platform/service'
 import { platformLimits } from '../src/platform/contract'
 import type { PlatformRequest, PlatformResult } from '../src/platform/contract'
+import { validatePlatformResult } from '../src/platform/result'
 
 type Job = { expires: number; cancel: () => void; result?: PlatformResult; done: Promise<PlatformResult> }
 
@@ -35,9 +36,12 @@ export class PlatformJobs {
       job.result = result
       void worker.terminate().then(() => { this.active--; resolve(result) })
     }
-    worker.once('message', (result: PlatformResult) => {
-      const bytes = Buffer.byteLength(JSON.stringify(result))
-      finish(bytes > (request.budget?.maxOutputBytes ?? platformLimits.maxOutputBytes) ? this.incomplete(request, 'OUTPUT_LIMIT') : result)
+    worker.once('message', (result: unknown) => {
+      try {
+        const bytes = Buffer.byteLength(JSON.stringify(result))
+        finish(bytes > (request.budget?.maxOutputBytes ?? platformLimits.maxOutputBytes)
+          ? this.incomplete(request, 'OUTPUT_LIMIT') : validatePlatformResult(result, request))
+      } catch { finish(this.incomplete(request, 'INVALID_WORKER_RESULT')) }
     })
     worker.once('error', () => finish(this.incomplete(request, 'WORKER_FAILURE')))
     worker.once('exit', () => { if (!settled) finish(this.incomplete(request, 'WORKER_EXIT')) })

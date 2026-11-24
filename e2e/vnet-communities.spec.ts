@@ -1,3 +1,4 @@
+import { downloadTopologyCopy } from './document-action-helpers'
 import { expect, test, type Page } from '@playwright/test'
 import { createEmptyAzNetTopology } from '../src/azure-net/model'
 import { example } from '../src/model'
@@ -45,7 +46,7 @@ for (const mode of ['hub-spoke', 'full']) {
     await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology.vnets[0].bgpCommunities))
       .toEqual({ virtualNetworkCommunity: '12076:20001', regionalCommunity: '12076:50004' })
     const downloaded = page.waitForEvent('download')
-    await page.getByRole('button', { name: /Export JSON/ }).click()
+    await downloadTopologyCopy(page)
     const chunks: Buffer[] = []
     for await (const chunk of (await (await downloaded).createReadStream())!) chunks.push(chunk)
     expect(JSON.parse(Buffer.concat(chunks).toString()).vnets[0].bgpCommunities)

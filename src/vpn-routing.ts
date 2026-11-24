@@ -1,15 +1,10 @@
-import type { Connection, Topology } from './model'
+import type { Connection, Topology, VpnRoutingMode } from './model'
 import { propagateSites } from './bgp'
 import { cidr, validateTopology } from './validation'
 
-export type VpnRoutingMode = 'static' | 'bgp'
+export { vpnRoutingMode } from './model'
+export type { VpnRoutingMode } from './model'
 export interface VpnRouteDraft { prefix: string; asPath: number[] }
-
-export function vpnRoutingMode(topology: Topology, connection: Connection): VpnRoutingMode | 'mixed' {
-  const statics = topology.sites.find((site) => site.id === connection.siteId)?.vpnStaticRoutes?.some((route) => route.connectionId === connection.id)
-  const bgp = connection.learnSiteRoutes
-  return statics ? bgp ? 'mixed' : 'static' : 'bgp'
-}
 
 export function suggestVpnRoutes(topology: Topology, connection: Connection): VpnRouteDraft[] {
   const site = topology.sites.find((site) => site.id === connection.siteId)!

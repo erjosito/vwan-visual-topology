@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FlowRequirement, PlatformDocument } from './platform/contract'
 import type { FlowExportOptions } from './flow-export'
+import { createPlatformRequest } from './platform/request'
 import { t } from './i18n'
 
 type Props = { document: PlatformDocument; flow: FlowRequirement }
@@ -23,8 +24,7 @@ function FlowExportContent({ document, flow }: Props) {
     const timer = setTimeout(() => current.abort(), 30000)
     try {
       const [{ runBrowserSimulation }, { renderBrowserFlow }] = await Promise.all([import('./platform/browser'), import('./flow-export-browser')])
-      // UI projections carry optional undefined fields; the platform admits native JSON only.
-      const request = JSON.parse(JSON.stringify({ contractVersion: 1, operation: 'evaluate', document, requirements: [flow] }))
+      const request = createPlatformRequest({ contractVersion: 1, operation: 'evaluate', document, requirements: [flow] })
       const result = await runBrowserSimulation(request, current.signal)
       const options: FlowExportOptions = { format, durationMs }
       const blob = await renderBrowserFlow(result, flow.id, options, current.signal)

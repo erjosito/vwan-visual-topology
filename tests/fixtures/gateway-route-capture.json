@@ -1,0 +1,42 @@
+{
+  "kind": "azure-network-capture",
+  "version": 2,
+  "fixture": "Synthetic test data, not recorded Azure evidence.",
+  "resourceGroup": "gateway-routes-test",
+  "capturedAt": "2026-11-18T00:00:00Z",
+  "collectorVersion": "test",
+  "vnets": [],
+  "routeTables": [],
+  "vnetGateways": [],
+  "localNetworkGateways": [],
+  "vpnConnections": [],
+  "routeServers": [],
+  "networkInterfaces": [],
+  "vngBgpPeerStatus": {
+    "er-gateway": [
+      { "localAddress": "10.1.0.4", "neighbor": "192.0.2.9", "asn": 65001, "state": "Connected", "routesReceived": 0 },
+      { "localAddress": "10.1.0.5", "neighbor": "192.0.2.10", "asn": 65002, "state": "Unknown" }
+    ]
+  },
+  "vngLearnedRoutes": {
+    "er-gateway": [
+      { "localAddress": "10.1.0.4", "network": "203.0.113.0/24", "sourcePeer": "192.0.2.9", "nextHop": "198.51.100.1", "asPath": "65515-65001", "origin": "EBgp", "weight": 0 },
+      { "localAddress": "10.1.0.4", "network": "203.0.113.0/24", "sourcePeer": "192.0.2.11", "nextHop": "198.51.100.2", "asPath": "" },
+      { "localAddress": "10.1.0.4", "network": "198.18.0.0/24", "nextHop": "192.0.2.9" },
+      { "localAddress": "10.1.0.5", "network": "198.51.100.0/24", "sourcePeer": "192.0.2.10" },
+      { "network": "192.0.2.0/24" }
+    ],
+    "vpn-routes-only": [
+      { "localAddress": "10.2.0.4", "network": "172.16.0.0/16", "sourcePeer": "192.0.2.20", "asPath": "65004" }
+    ],
+    "vpn-empty": []
+  },
+  "observationVersion": 1,
+  "sections": {
+    "vngLearnedRoutes:er-gateway": { "state": "truncated", "complete": false },
+    "vngLearnedRoutes:vpn-routes-only": { "state": "succeeded", "complete": true },
+    "vngLearnedRoutes:vpn-empty": { "state": "empty", "complete": true },
+    "vngBgpPeerStatus:er-gateway": { "state": "succeeded", "complete": true },
+    "vngLearnedRoutes:z-denied": { "state": "denied", "complete": false }
+  }
+}

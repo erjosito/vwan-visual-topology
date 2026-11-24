@@ -1,7 +1,7 @@
 import { cloneAzNetTopology, type AzNetTopology } from './model'
+export { routingDisplayResult as azDisplayResult } from '../routing-display'
 
 const infrastructureSubnets = new Set(['GatewaySubnet', 'AzureFirewallSubnet', 'RouteServerSubnet', 'VirtualNetworkApplianceSubnet'])
-const tokenPattern = /(.)aznet-name:(\d+)(.)/gs
 
 /**
  * Routing runs against stable display tokens. Rebinding the resulting plain data to current
@@ -22,6 +22,7 @@ export function azRoutingInput(topology: AzNetTopology) {
   name(routing)
   delete routing.subtitle
   delete routing.layout
+  delete routing.warningAcknowledgements
   for (const vnet of routing.vnets) {
     node(vnet)
     for (const subnet of vnet.subnets) {
@@ -52,15 +53,4 @@ export function azRoutingInput(topology: AzNetTopology) {
   routing.vpnConnections.forEach(name)
   routing.siteLinks.forEach(name)
   return { routing, revision: JSON.stringify(routing), names, nameRevision: JSON.stringify(names) }
-}
-
-export function azDisplayResult<T>(value: T, names: string[]): T {
-  const visit = (entry: unknown): unknown => {
-    if (typeof entry === 'string') return entry.replace(tokenPattern, (token, before: string, index: string, after: string) =>
-      before === '\0' && after === '\0' ? names[Number(index)] ?? '' : token)
-    if (Array.isArray(entry)) return entry.map(visit)
-    if (entry && typeof entry === 'object') return Object.fromEntries(Object.entries(entry).map(([key, child]) => [key, visit(child)]))
-    return entry
-  }
-  return visit(value) as T
 }

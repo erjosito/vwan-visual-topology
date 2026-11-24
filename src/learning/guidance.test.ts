@@ -1,10 +1,111 @@
 import { describe, expect, it } from 'vitest'
 import { exampleCourse } from './course-examples'
 import { guidanceAnchor, resolveGuidance } from './guidance'
+import { selectPrimaryGuidance } from './task-guidance'
 import type { CourseGuidance } from './course-contract'
 import { scenarioBundle } from './scenario-course'
+import { hybridLessonTopology } from './hybrid-scenario'
+import { haLessonTopology } from './ha-scenario'
+import { curriculumV2Bundle } from './curriculum-v2'
+import { curriculumV2Topologies } from './curriculum-v2-topologies'
 
 describe('semantic guidance admission', () => {
+  it('reveals only the original peering without changing directional gateway settings', () => {
+    const input = { mode: 'full' as const, topology: hybridLessonTopology() }
+    const before = structuredClone(input)
+    const peeringId = input.topology.vnetPeerings[0].id
+    const cue: CourseGuidance = { id: 'peering-guide', action: 'peering.configure', params: { peeringId },
+      instruction: { en: 'Inspect the original peering', ja: '元のピアリングを確認' } }
+    expect(resolveGuidance(input, cue)).toEqual({ anchors: [guidanceAnchor('peering-editor', peeringId)] })
+    expect(input).toEqual(before)
+    expect(resolveGuidance(input, { ...cue, params: { peeringId: 'missing' } })).toEqual({ reason: 'entity' })
+  })
+  it('reveals the original Load Balancer health editor only in its owned VNet', () => {
+    const input = { mode: 'full' as const, topology: haLessonTopology() }
+    const before = structuredClone(input)
+    const cue: CourseGuidance = { id: 'ha-health-guide', action: 'load-balancer.configure',
+      params: { vnetId: 'hub', loadBalancerId: 'transit-lb' },
+      instruction: { en: 'Edit declared health for the prepared NVAs', ja: '準備済み NVA の宣言された正常性を編集' } }
+    expect(resolveGuidance(input, cue)).toEqual({ anchors: [guidanceAnchor('load-balancer-health', 'hub', 'transit-lb')] })
+    expect(input).toEqual(before)
+    expect(resolveGuidance(input, { ...cue, params: { ...cue.params, vnetId: 'application' } })).toEqual({ reason: 'entity' })
+  })
+  it('scopes gateway and aggregate MSEE navigation to their original owners without changing routing', () => {
+    const input = { mode: 'full' as const, topology: hybridLessonTopology() }
+    const before = structuredClone(input)
+    const gateway: CourseGuidance = { id: 'gateway-guide', action: 'gateway-routes.open',
+      params: { vnetId: 'hybrid-hub', gatewayId: 'primary-er', prefix: '172.28.0.0/16' },
+      instruction: { en: 'Inspect the gateway routes', ja: 'ゲートウェイのルートを確認' } }
+    const msee: CourseGuidance = { id: 'msee-guide', action: 'er-routes.open',
+      params: { locationId: 'hybrid-location', prefix: '10.91.0.0/16' },
+      instruction: { en: 'Inspect aggregate location routes', ja: '拠点の集約ルートを確認' } }
+    expect(resolveGuidance(input, gateway)).toEqual({ anchors: [
+      guidanceAnchor('gateway-effective-prefix', 'hybrid-hub', 'primary-er', '172.28.0.0/16'),
+      guidanceAnchor('gateway-effective-table', 'hybrid-hub', 'primary-er'),
+    ] })
+    expect(resolveGuidance(input, msee)).toEqual({ anchors: [
+      guidanceAnchor('er-effective-prefix', 'hybrid-location', '10.91.0.0/16'),
+      guidanceAnchor('er-effective-table', 'hybrid-location'),
+    ] })
+    expect(input).toEqual(before)
+    expect(resolveGuidance(input, { ...gateway, params: { ...gateway.params, vnetId: 'hybrid-app' } })).toEqual({ reason: 'entity' })
+    expect(resolveGuidance(input, { ...msee, params: { ...msee.params, locationId: 'missing' } })).toEqual({ reason: 'entity' })
+  })
+  it('moves staged peering guidance to the next unfinished pair without editing or granting evidence', () => {
+    const input = structuredClone(scenarioBundle.scenarios.find((scenario) => scenario.id === 'inspection-bypass')!.document)
+    if (input.mode === 'vwan') throw new Error('Mixed topology required')
+    const check = scenarioBundle.checks.find((entry) => entry.id === 'inspection-bypass.connect-check')!
+    const cues = ['a', 'b'].map((side) => scenarioBundle.guidance.find((cue) => cue.id === `inspection-bypass.peer-${side}`)!)
+    expect(selectPrimaryGuidance(input, check, cues)).toBe(cues[0])
+    const flags = { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: false }
+    input.topology.vnetPeerings.push({ id: 'learner', name: 'Learner', vnetAId: 'hub', vnetBId: 'a', enabled: true, aToB: { ...flags }, bToA: { ...flags } })
+    const before = structuredClone(input)
+    expect(selectPrimaryGuidance(input, check, cues)).toBe(cues[1])
+    expect(input).toEqual(before)
+    input.topology.vnetPeerings.at(-1)!.bToA.allowVirtualNetworkAccess = false
+    expect(selectPrimaryGuidance(input, check, cues)).toBe(cues[0])
+  })
+  it('guides both direct peerings before the original Application route inspection, including after undo', () => {
+    const input = { mode: 'full' as const, topology: structuredClone(curriculumV2Topologies['v2-peering']) }
+    const task = curriculumV2Bundle.lessons[0].tasks.find((task) => task.id === 'v2-peering.connect')!
+    const check = curriculumV2Bundle.checks.find((check) => check.id === task.checkId)!
+    const cues = task.guidanceIds.map((id) => curriculumV2Bundle.guidance.find((cue) => cue.id === id)!)
+    const flags = { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: false }
+    for (const [index, [a, b]] of [['app', 'partner'], ['tenant', 'partner']].entries()) {
+      expect(selectPrimaryGuidance(input, check, cues)).toBe(cues[index])
+      input.topology.vnetPeerings.push({ id: `native-${index}`, name: 'Learner', vnetAId: a, vnetBId: b,
+        enabled: true, aToB: { ...flags }, bToA: { ...flags } })
+    }
+    const before = structuredClone(input)
+    expect(selectPrimaryGuidance(input, check, cues)).toBe(cues[2])
+    expect(input).toEqual(before)
+    input.topology.vnetPeerings.pop()
+    expect(selectPrimaryGuidance(input, check, cues)).toBe(cues[1])
+    input.topology.vnetPeerings[0].aToB.allowVirtualNetworkAccess = false
+    expect(selectPrimaryGuidance(input, check, cues)).toBe(cues[0])
+  })
+  it('moves staged UDR guidance only for an enabled matching rule on the actual subnet table', () => {
+    const input = structuredClone(scenarioBundle.scenarios.find((scenario) => scenario.id === 'inspection-bypass')!.document)
+    if (input.mode === 'vwan') throw new Error('Mixed topology required')
+    const check = scenarioBundle.checks.find((entry) => entry.id === 'inspection-bypass.summary-check')!
+    const cues = ['a', 'b'].map((side) => scenarioBundle.guidance.find((cue) => cue.id === `inspection-bypass.table-${side}-work`)!)
+    const rule = { id: 'learner', name: 'Learner', enabled: false, prefix: '10.0.0.0/8', nextHopType: 'VirtualAppliance' as const, nextHopIp: '10.20.1.4' }
+    input.topology.udrTables[0].routes.push(rule)
+    expect(selectPrimaryGuidance(input, check, cues)).toBe(cues[0])
+    rule.enabled = true
+    const before = structuredClone(input)
+    expect(selectPrimaryGuidance(input, check, cues)).toBe(cues[1])
+    expect(input).toEqual(before)
+    input.topology.vnets[0].subnets[0].routeTableId = 'unrelated'
+    expect(selectPrimaryGuidance(input, check, cues)).toBe(cues[0])
+  })
+  it('retains authored guidance order for outcome-based repairs instead of choosing a solution', () => {
+    const input = scenarioBundle.scenarios.find((scenario) => scenario.id === 'tiered-incident')!.document
+    const check = scenarioBundle.checks.find((entry) => entry.id === 'tiered-incident.repair-check')!
+    const cues = scenarioBundle.guidance.filter((cue) => cue.id.startsWith('tiered-incident.table-'))
+    expect(selectPrimaryGuidance(input, check, cues)).toBe(cues[0])
+    expect(selectPrimaryGuidance(input, check, [])).toBeUndefined()
+  })
   it('scopes every hub prefix candidate before its exact table, and rejects missing or uncaptured tables', () => {
     const input = structuredClone(exampleCourse.scenarios.find((scenario) => scenario.id === 'secured-wan')!.document)
     if (input.mode === 'vwan') throw new Error('Mixed topology required')

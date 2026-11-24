@@ -97,8 +97,8 @@ for (const mode of ['vwan', 'full'] as const) {
     const hubNode = mode === 'vwan' ? page.locator('[data-node-id="hub-local"]') : page.getByTestId('aznet-vwanhub-hub-local')
     await hubNode.focus()
     await page.keyboard.press('Shift+F10')
-    await page.getByRole('menuitem', { name: mode === 'vwan' ? 'BGP table' : 'Inspect Virtual WAN Hub Effective RIB', exact: true }).click()
-    const routes = page.getByRole('dialog', { name: mode === 'vwan' ? /^(BGP table|Firewall forwarding table) · Local secure hub$/ : 'Effective routes', exact: true })
+    await page.getByRole('menuitem', { name: mode === 'vwan' ? 'BGP table' : 'Inspect Virtual WAN Hub BGP table', exact: true }).click()
+    const routes = page.getByRole('dialog', { name: mode === 'vwan' ? /^(BGP table|Firewall forwarding table) · Local secure hub$/ : 'BGP table', exact: true })
     await expect(routes.locator('tr[data-prefix="10.0.0.0/8"][data-preferred="true"]')).toContainText('Original local Firewall')
     if (mode === 'vwan') await routes.getByLabel('Route view', { exact: true }).selectOption('firewall')
     else await routes.getByLabel('Hub routing table', { exact: true }).selectOption('')
@@ -117,6 +117,7 @@ for (const mode of ['vwan', 'full'] as const) {
     await page.reload()
     expect(await saved()).toEqual(topology)
     await page.getByRole('combobox', { name: 'Language / 言語', exact: true }).selectOption('ja')
+    await expect(page.getByRole('combobox', { name: '言語 / Language', exact: true })).toBeVisible()
     if (mode === 'vwan') {
       await page.locator('[data-node-id="hub-local"]').focus()
       await page.keyboard.press('Shift+F10')

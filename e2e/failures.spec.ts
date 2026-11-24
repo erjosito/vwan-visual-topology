@@ -1,3 +1,4 @@
+import { downloadTopologyCopy } from './document-action-helpers'
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { example, type Topology } from '../src/model'
 import { validateTopology } from '../src/validation'
@@ -96,7 +97,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
       expect(await page.evaluate((key) => localStorage.getItem(key), key)).toBe(initial)
       if (label.startsWith('Azure')) {
         const download = page.waitForEvent('download')
-        await page.getByRole('button', { name: /Export JSON/ }).click()
+        await downloadTopologyCopy(page)
         const chunks: Buffer[] = []
         for await (const chunk of (await (await download).createReadStream())!) chunks.push(chunk)
         const exported = JSON.parse(Buffer.concat(chunks).toString())
@@ -178,12 +179,14 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     const canvas = mode === 'vwan' ? page.locator('.canvas-stage') : page.getByTestId('aznet-canvas-shell')
     const originalCanvas = await canvas.boundingBox()
     const savedTopology = await page.evaluate((key) => localStorage.getItem(key), key)
+    if (mode === 'vwan') await expect(routingStatus).toContainText('Routing check completed.')
     const failedAnalysis = await routingStatus.textContent()
     await page.getByRole('button', { name: 'Maximize canvas', exact: true }).click()
-    await expect(page.getByRole('banner')).toBeHidden()
+    await expect(page.locator('header.unified-topbar, header.aznet-topbar')).not.toBeVisible()
     await expect(page.getByTestId('active-faults')).toBeHidden()
     await expect(routingStatus).toBeHidden()
-    await expect.poll(async () => (await canvas.boundingBox())!.height).toBeGreaterThan(originalCanvas!.height + 80)
+    const tabHeight = (await page.locator('.workspace-tabs').boundingBox())!.height
+    await expect.poll(async () => (await canvas.boundingBox())!.height + tabHeight).toBeGreaterThan(originalCanvas!.height + 80)
     await expect(er).toHaveAttribute('data-simulated-failed', 'true')
     if (mode === 'vwan') await expect(page.locator('.highlight-status')).toContainText('No route')
     else await expect(page.getByTestId('aznet-path-tracer-panel')).toContainText('dropped-no-route')

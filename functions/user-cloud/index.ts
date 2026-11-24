@@ -1,4 +1,5 @@
 import { app } from '@azure/functions'
+import { randomUUID } from 'node:crypto'
 import { ManagedIdentityCredential } from '@azure/identity'
 import { BlobServiceClient, type ContainerClient } from '@azure/storage-blob'
 import { cloudLimits } from '../../src/cloud/contracts'
@@ -26,15 +27,20 @@ export function blobStore(container: ContainerClient): CloudStore {
           if (length > cloudLimits.bytes) { result.readableStreamBody?.destroy(); throw new CloudError(413, 'Cloud document exceeds the supported size.') }
           chunks.push(Buffer.from(chunk))
         }
-        return { raw: Buffer.concat(chunks).toString('utf8'), etag: result.etag }
+        return { raw: Buffer.concat(chunks).toString('utf8'), etag: result.etag, generation: result.metadata?.generation }
       } catch (error) { if ((error as { statusCode?: number }).statusCode === 404) return undefined; return storageError(error) }
     },
-    async put(key, raw, etag, name) {
+    async put(key, raw, etag, name, description) {
       try {
-        const result = await container.getBlockBlobClient(key).uploadData(Buffer.from(raw), {
+        const blob = container.getBlockBlobClient(key)
+        const previous = etag === null ? undefined : await blob.getProperties({ conditions: { ifMatch: etag } })
+        const result = await blob.uploadData(Buffer.from(raw), {
           conditions: etag === null ? { ifNoneMatch: '*' } : { ifMatch: etag },
           blobHTTPHeaders: { blobContentType: 'application/json; charset=utf-8', blobCacheControl: 'no-store' },
-          metadata: name ? { name: encodeURIComponent(name) } : undefined,
+          metadata: { ...(name ? { name: encodeURIComponent(name) } : {}),
+            ...(description === undefined ? previous?.metadata?.description ? { description: previous.metadata.description } : {}
+              : description ? { description: Buffer.from(description, 'utf8').toString('base64') } : {}),
+            generation: previous?.metadata?.generation ?? randomUUID() },
         })
         if (!result.etag) throw new Error('Cloud version unavailable.')
         return result.etag
@@ -50,6 +56,7 @@ export function blobStore(container: ContainerClient): CloudStore {
         const id = blob.name.slice(prefix.length).replace(/\.json$/, '')
         if (!/^[0-9a-f-]{36}$/.test(id)) continue
         entries.push({ id, name: decodeURIComponent(blob.metadata?.name ?? 'Saved topology').slice(0, cloudLimits.name),
+          ...(blob.metadata?.description ? { description: Buffer.from(blob.metadata.description, 'base64').toString('utf8').slice(0, cloudLimits.description) } : {}),
           etag: blob.properties.etag!, updatedAt: blob.properties.lastModified?.toISOString() ?? '' })
       }
       return entries
@@ -59,7 +66,7 @@ export function blobStore(container: ContainerClient): CloudStore {
 
 let handler: ReturnType<typeof createCloudHandler> | undefined
 app.http('userCloud', {
-  methods: ['GET', 'PUT', 'DELETE', 'OPTIONS'], authLevel: 'anonymous', route: 'cloud/{resource}/{id?}',
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], authLevel: 'anonymous', route: 'cloud/{resource}/{id?}',
   handler: async request => {
     try {
       if (!handler) {
@@ -69,7 +76,10 @@ app.http('userCloud', {
         const service = new BlobServiceClient(url, new ManagedIdentityCredential(process.env.CLOUD_RUNTIME_CLIENT_ID
           ? { clientId: process.env.CLOUD_RUNTIME_CLIENT_ID } : {}), { retryOptions: { maxTries: 3, tryTimeoutInMs: 10000 } })
         handler = createCloudHandler({
-          authenticate: createAuthenticator(process.env.CLOUD_API_AUDIENCE ?? '', process.env.CLOUD_CLIENT_ID ?? ''),
+          authenticate: createAuthenticator(process.env.CLOUD_API_AUDIENCE ?? '', [
+            process.env.CLOUD_CLIENT_ID ?? '',
+            ...(process.env.CLOUD_DESKTOP_CLIENT_ID ? [process.env.CLOUD_DESKTOP_CLIENT_ID] : []),
+          ]),
           store: blobStore(service.getContainerClient('user-cloud')), origins,
         })
       }

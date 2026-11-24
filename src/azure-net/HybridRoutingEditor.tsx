@@ -6,34 +6,44 @@ import { PeerRouteAttributes } from './RouteMapsPanel'
 import { VpnNatConnectionEditor } from '../VpnNatEditor'
 import { saveManagedVnra, vnraSubnetName } from './vnra-authoring'
 import { guidanceAnchor } from '../learning/guidance'
+import { ApplianceAvailability } from './VnetRoutingSettings'
+import type { AzSimulationResult } from './engine'
+import './vpn-er-messages-ja'
 
-type Props = { topology: AzNetTopology; commit: (edit: (draft: AzNetTopology) => void) => void }
+type Props = { topology: AzNetTopology; commit: (edit: (draft: AzNetTopology) => void) => boolean | void }
 const prefixes = (text: string) => {
   const values = text.split(/[,\s]+/).filter(Boolean)
   if (values.some((prefix) => !cidr(prefix))) throw new Error(t('Enter valid IPv4 CIDR prefixes.'))
   return values
 }
 
-export function HybridConnectionEditor({ topology, connectionId, commit }: Props & { connectionId: string }) {
+export function HybridConnectionEditor({ topology, connectionId, commit, simulation }: Props & { connectionId: string; simulation?: AzSimulationResult }) {
   const [error, setError] = useState('')
   const vpn = topology.vpnConnections.find((connection) => connection.id === connectionId)
   const er = topology.erLinks.find((connection) => connection.id === connectionId)
   const connection = vpn ?? er
   const [transport, setTransport] = useState(vpn?.transport ?? 'VPN')
   const [bgp, setBgp] = useState(vpn?.bgpEnabled ?? true)
+  const [privateEr, setPrivateEr] = useState(!!(vpn?.underlay || vpn?.useLocalAzureIpAddress))
+  const [restrict, setRestrict] = useState(connection?.advertisedPrefixes !== undefined)
   if (!connection) return null
   const hub = connection.targetKind === 'vwan-hub'
+  const owner = topology.vnets.find((vnet) => vnet.gateways.some((gateway) => gateway.id === vpn?.targetId))
+  const gateway = owner?.gateways.find((gateway) => gateway.id === vpn?.targetId)
+  const underlay = simulation?.vpnUnderlays?.[connectionId]
   return <><section className="aznet-card" data-testid="aznet-hybrid-connection-editor"
     data-learning-anchor={guidanceAnchor('connection-editor', vpn ? 'vpn-connection' : 'er-link', connectionId)}>
     <h3>{t('Hybrid connection routing')}</h3>
     <p className="muted">{connection.id}</p>
-    <form onSubmit={(event) => {
+    <form data-configuration-pending={transport !== (vpn?.transport ?? 'VPN') || bgp !== (vpn?.bgpEnabled ?? true)
+      || privateEr !== !!(vpn?.underlay || vpn?.useLocalAzureIpAddress) || restrict !== (connection.advertisedPrefixes !== undefined)} onSubmit={(event) => {
       event.preventDefault()
       try {
         const data = new FormData(event.currentTarget)
         const inbound = parseAsPath(String(data.get('inbound') ?? ''))
         const outbound = parseAsPath(String(data.get('outbound') ?? ''))
         const staticPrefixes = prefixes(String(data.get('prefixes') ?? ''))
+        const advertised = restrict ? prefixes(String(data.get('advertised') ?? '')) : undefined
         commit((draft) => {
           const target = draft.vpnConnections.find((connection) => connection.id === connectionId)
           if (target) {
@@ -43,6 +53,27 @@ export function HybridConnectionEditor({ topology, connectionId, commit }: Props
             target.outboundPrepend = outbound
             target.staticPrefixes = staticPrefixes
             target.bgpEnabled = data.has('bgp')
+            if (advertised === undefined) delete target.advertisedPrefixes
+            else target.advertisedPrefixes = advertised
+            if (privateEr) {
+              target.useLocalAzureIpAddress = true
+              target.underlay = {
+                kind: 'express-route', azureLinkId: String(data.get('azureLink')),
+                siteLinkId: String(data.get('siteLink')), azureEndpoint: String(data.get('azureEndpoint')),
+                onPremEndpoint: String(data.get('onPremEndpoint')),
+              }
+              const gateway = draft.vnets.flatMap((vnet) => vnet.gateways).find((gateway) => gateway.id === target.targetId)
+              if (gateway) {
+                gateway.enablePrivateIpAddress = data.has('privateIps')
+                const publicIpSku = data.get('publicIpSku')
+                if (publicIpSku === 'Standard' || publicIpSku === 'Basic') gateway.publicIpSku = publicIpSku
+                else delete gateway.publicIpSku
+                gateway.privateIpAddresses = String(data.get('privateEndpoints') ?? '').split(/[,\s]+/).filter(Boolean)
+              }
+            } else {
+              delete target.useLocalAzureIpAddress
+              delete target.underlay
+            }
             if (hub) {
               target.transport = data.get('transport') === 'SDWAN' ? 'SDWAN' : 'VPN'
               if (target.transport === 'SDWAN') target.bgpEnabled = true
@@ -54,6 +85,10 @@ export function HybridConnectionEditor({ topology, connectionId, commit }: Props
             link.name = String(data.get('name'))
             link.enabled = data.has('enabled')
             link.prepend = inbound
+            if (link.targetKind === 'site') {
+              if (advertised === undefined) delete link.advertisedPrefixes
+              else link.advertisedPrefixes = advertised
+            }
             if (hub) {
               link.learnSiteRoutes = data.has('learn')
               link.propagateDefaultRoute = data.has('default')
@@ -66,12 +101,41 @@ export function HybridConnectionEditor({ topology, connectionId, commit }: Props
       <label className="field"><span>{t('Connection name')}</span><input name="name" required maxLength={120} defaultValue={connection.name} /></label>
       <label><input type="checkbox" name="enabled" defaultChecked={connection.enabled} />{t('Enabled')}</label>
       {vpn && <>
+        <label><input type="checkbox" checked={privateEr} onChange={(event) => setPrivateEr(event.target.checked)} />{t('VPN over ER private peering')}</label>
+        {privateEr && <fieldset><legend>{t('ER underlay and private tunnel endpoints')}</legend>
+          <p>{t('Classic active/standby RouteBased VPN gateway only. Static routing, active/active, NAT, NVA and Virtual WAN private overlays are not assessed. BGP is not an Azure prerequisite.')}</p>
+          <label className="field"><span>{t('Azure ER link')}</span><select name="azureLink" required defaultValue={vpn.underlay?.azureLinkId ?? ''}>
+            <option value="">{t('Select')}</option>{topology.erLinks.filter((link) => link.targetKind === 'vnet-gateway'
+              && owner?.gateways.some((gateway) => gateway.id === link.targetId && gateway.kind === 'ExpressRoute')).map((link) =>
+              <option key={link.id} value={link.id}>{link.name}</option>)}
+          </select></label>
+          <label className="field"><span>{t('Site ER link')}</span><select name="siteLink" required defaultValue={vpn.underlay?.siteLinkId ?? ''}>
+            <option value="">{t('Select')}</option>{topology.erLinks.filter((link) => link.targetKind === 'site' && link.targetId === vpn.siteId).map((link) =>
+              <option key={link.id} value={link.id}>{link.name}</option>)}
+          </select></label>
+          <label className="field"><span>{t('Azure private tunnel endpoint')}</span><input name="azureEndpoint" required defaultValue={vpn.underlay?.azureEndpoint ?? ''} /></label>
+          <label className="field"><span>{t('On-premises private tunnel endpoint')}</span><input name="onPremEndpoint" required defaultValue={vpn.underlay?.onPremEndpoint ?? ''} /></label>
+          <label><input name="privateIps" type="checkbox" defaultChecked={gateway?.enablePrivateIpAddress === true} />{t('Gateway private IPs enabled')}</label>
+          <label className="field"><span>{t('Gateway public IP SKU (explicit capability)')}</span><select name="publicIpSku" defaultValue={gateway?.publicIpSku ?? ''}>
+            <option value="">{t('Unknown')}</option><option value="Basic">Basic</option><option value="Standard">Standard</option>
+          </select></label>
+          <label className="field"><span>{t('Gateway owned private tunnel IPs')}</span><input name="privateEndpoints" defaultValue={gateway?.privateIpAddresses?.join(' ') ?? ''} /></label>
+          {underlay && <p role="status">{underlay.state}: {underlay.reason} {underlay.onPremEndpoint} &lt;-&gt; {underlay.azureEndpoint}. {t('ER links')}: {underlay.siteLinkId} / {underlay.azureLinkId}</p>}
+          <p>{t('Prefer the VPN overlay for Azure workload prefixes using the site inbound route map local preference. Direct ER may otherwise win without IPsec. Intended IPsec path is not verification of IKE/SAs or packet delivery.')}</p>
+        </fieldset>}
         {hub && <label className="field"><span>{t('Transport')}</span><select name="transport" value={transport} onChange={(event) => {
           setTransport(event.target.value as 'VPN' | 'SDWAN')
           if (event.target.value === 'SDWAN') setBgp(true)
         }}><option value="VPN">VPN</option><option value="SDWAN">SD-WAN</option></select></label>}
-        <label><input type="checkbox" name="bgp" disabled={transport === 'SDWAN'} checked={bgp} onChange={(event) => setBgp(event.target.checked)} />{t('BGP enabled (required for SD-WAN)')}</label>
+        <label><input type="checkbox" name="bgp" disabled={transport === 'SDWAN'} checked={bgp}
+          data-configuration-pending={bgp !== (vpn?.bgpEnabled ?? true)} onChange={(event) => setBgp(event.target.checked)} />{t('BGP enabled (required for SD-WAN)')}</label>
         <label className="field"><span>{t('Static VPN prefixes (BGP disabled)')}</span><textarea name="prefixes" defaultValue={vpn.staticPrefixes?.join('\n') ?? ''} /></label>
+      </>}
+      {(vpn || er?.targetKind === 'site') && <>
+        <label><input type="checkbox" checked={restrict} onChange={(event) => setRestrict(event.target.checked)} />{t('Select site prefixes advertised on this transport')}</label>
+        {restrict && <label className="field"><span>{t('Advertised prefixes (empty withdraws all)')}</span><textarea name="advertised"
+          defaultValue={connection.advertisedPrefixes?.join('\n') ?? topology.sites.find((site) => site.id === (vpn?.siteId ?? er?.targetId))?.prefixes.join('\n') ?? ''} /></label>}
+        <p className="muted">{t('Exact selection from site routes, before outbound route maps. Use separate endpoint and workload prefixes on the same logical site. Static VPN routing uses its static-prefix field instead.')}</p>
       </>}
       <label className="field"><span>{t('Inbound AS-path prepend')}</span><input name="inbound" defaultValue={(vpn?.inboundPrepend ?? er?.prepend)?.join(' ') ?? ''} /></label>
       {vpn && <label className="field"><span>{t('Outbound AS-path prepend')}</span><input name="outbound" defaultValue={vpn.outboundPrepend?.join(' ') ?? ''} /></label>}
@@ -94,7 +158,11 @@ export function HybridNvaEditor({ topology, applianceId, commit }: Props & { app
   const app = vnet?.appliances.find((app) => app.id === applianceId)
   if (!app || !vnet) return null
   if (app.kind === 'vnra') return <ManagedVnraEditor key={app.subnetId} topology={topology} vnetId={vnet.id} applianceId={app.id} commit={commit} />
+  if (app.kind === 'azure-firewall') return <section className="aznet-card" data-testid="aznet-firewall-availability">
+    <h3>{app.name}</h3><ApplianceAvailability kind="azure-firewall" />
+  </section>
   return <section className="aznet-card" data-testid="aznet-hybrid-nva-editor">
+    <ApplianceAvailability kind="nva-vm" />
     <h3>{t('NVA BGP advertisements')}</h3>
     <form onSubmit={(event) => {
       event.preventDefault()
@@ -116,7 +184,7 @@ export function HybridNvaEditor({ topology, applianceId, commit }: Props & { app
     }}>
       <label className="field"><span>{t('Peer ASN')}</span><input type="number" min={1} max={4294967294} name="asn" defaultValue={app.asn ?? 65501} /></label>
       <label><input type="checkbox" name="bgp" defaultChecked={app.bgpEnabled === true} />{t('BGP enabled')}</label>
-      <label><input type="checkbox" name="hub" disabled={!vnet.vwanHubAttachment?.enabled || app.kind === 'azure-firewall'} defaultChecked={app.vwanBgpEnabled === true} />{t('Peer with the attached Virtual WAN hub')}</label>
+      <label><input type="checkbox" name="hub" disabled={!vnet.vwanHubAttachment?.enabled} defaultChecked={app.vwanBgpEnabled === true} />{t('Peer with the attached Virtual WAN hub')}</label>
       <label className="field"><span>{t('Advertised prefixes')}</span><textarea name="prefixes" defaultValue={app.advertisedPrefixes?.join('\n') ?? ''} /></label>
       <p className="muted">{t('Uses this original appliance and VNet connection. Requires BGP and IP forwarding; hub policies apply on the hosting VNet connection. Advertisements do not create data-plane reachability.')}</p>
       <button type="submit">{t('Save NVA BGP routing')}</button>
@@ -143,7 +211,8 @@ export function ManagedVnraEditor({ topology, vnetId, applianceId, commit, onSav
     <h3>{t(app ? 'Configure Managed VNRA' : 'Add Managed VNRA')}</h3>
     <p>{t('Original VNet')}: {vnet.name} (<code>{vnet.id}</code>){app && <> · <code>{app.id}</code></>}</p>
     <p>{t('Use a dedicated VirtualNetworkApplianceSubnet and UDRs targeting the VNRA private IP. Configure peering access, forwarded traffic and return routes separately; this action does not change peerings or routes.')}</p>
-    <form key={app ? JSON.stringify([app.name, app.privateIp, app.subnetId]) : vnet.id} onSubmit={(event) => {
+    <form key={app ? JSON.stringify([app.name, app.privateIp, app.subnetId]) : vnet.id}
+      data-configuration-pending={subnetId !== (app?.subnetId ?? vnet.subnets.find(entry => entry.name === vnraSubnetName)?.id ?? '')} onSubmit={(event) => {
       event.preventDefault()
       try {
         const data = new FormData(event.currentTarget)
@@ -153,7 +222,7 @@ export function ManagedVnraEditor({ topology, vnetId, applianceId, commit, onSav
           newSubnetPrefix: subnetId ? undefined : String(data.get('prefix')),
         }
         saveManagedVnra(structuredClone(topology), vnet.id, input)
-        commit((draft) => saveManagedVnra(draft, vnet.id, input))
+        if (commit((draft) => saveManagedVnra(draft, vnet.id, input)) === false) return
         setError('')
         onSaved?.(input.id)
       } catch (error) { setError(t(error instanceof Error ? error.message : 'Inventory edit failed.')) }

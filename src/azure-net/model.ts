@@ -5,9 +5,11 @@ import { cidr, contains, ipv4 } from '../validation'
 import { validateAzSiteRouteMaps } from './route-maps'
 import { validateAzArsRouteMaps } from './ars-route-maps'
 import { parseAzNetTopology } from './admission'
+import { subnetAddressError, usableSubnetAddress } from './addressing'
 import type { ClassicVpnNatGateway, VpnNat, VwanVpnNatGateway } from '../vpn-nat'
 import { parseVnetBgpCommunities, type VnetBgpCommunities } from '../vnet-communities'
 import { indirectFirewallTopology } from './indirect-firewall-sample'
+import { udrAssociationFindings, udrRegionKey } from './udr-regions'
 
 export type AzVnetRole =
   | 'hub-vnet'
@@ -63,6 +65,8 @@ export interface AzUdrRoute {
 export interface AzUdrTable {
   id: string
   name: string
+  /** Omitted in legacy JSON; infer only from unambiguous existing subnet associations. */
+  region?: string
   disableBgpRoutePropagation: boolean
   disablePeeringRoutePropagation?: boolean
   routes: AzUdrRoute[]
@@ -76,6 +80,12 @@ export interface AzVnetGateway {
   asn: number
   bgpEnabled: boolean
   activeActive?: boolean
+  publicIpSku?: 'Basic' | 'Standard'
+  enablePrivateIpAddress?: boolean
+  privateIpAddresses?: string[]
+  vpnType?: 'RouteBased' | 'PolicyBased'
+  vpnGatewayGeneration?: 'Generation1' | 'Generation2'
+  sku?: string
   enabled: boolean
 }
 
@@ -170,7 +180,7 @@ export interface AzVwanHub {
   id: string
   name: string
   label?: string
-  region: string
+  region?: string
   prefix?: string
   preference: Preference
   routeTables?: HubRouteTable[]
@@ -220,6 +230,7 @@ export interface AzErGlobalReachLink {
 }
 
 export interface AzErLink {
+  advertisedPrefixes?: string[]
   id: string
   name: string
   locationId: string
@@ -234,6 +245,15 @@ export interface AzErLink {
 }
 
 export interface AzVpnConnection {
+  advertisedPrefixes?: string[]
+  useLocalAzureIpAddress?: boolean
+  underlay?: {
+    kind: 'express-route'
+    azureLinkId: string
+    siteLinkId: string
+    azureEndpoint: string
+    onPremEndpoint: string
+  }
   nat?: VpnNat
   id: string
   name: string
@@ -263,6 +283,7 @@ export interface AzNetTopology {
   version: 2
   kind: 'azure-network-topology'
   name: string
+  warningAcknowledgements?: string[]
   subtitle?: string
   vnets: AzVNet[]
   vnetPeerings: AzVnetPeering[]
@@ -469,7 +490,7 @@ export const sampleArsSdwanNvaCoexistence: AzNetTopology = {
       ],
       gateways: [
         { id: 'vng-ars-er', name: 'ER-GW-Transit', kind: 'ExpressRoute', asn: 65515, bgpEnabled: true, enabled: true },
-        { id: 'vng-ars-vpn', name: 'VPN-GW-Transit', kind: 'Vpn', asn: 65515, bgpEnabled: true, enabled: true },
+        { id: 'vng-ars-vpn', name: 'VPN-GW-Transit', kind: 'Vpn', asn: 65515, bgpEnabled: true, activeActive: true, vpnType: 'RouteBased', sku: 'VpnGw1AZ', vpnGatewayGeneration: 'Generation1', enabled: true },
       ],
       routeServer: {
         id: 'ars-hub-neu',
@@ -1247,11 +1268,53 @@ export function validateAdvertisedGatewayPrefixes(value: unknown): string[] {
   return errors
 }
 
+export function coexistenceChecks(topology: AzNetTopology) {
+  return topology.vnets.flatMap((vnet) => {
+    const gateways = vnet.gateways.filter((gateway) => gateway.enabled)
+    if (!gateways.some((gateway) => gateway.kind === 'Vpn') || !gateways.some((gateway) => gateway.kind === 'ExpressRoute')) return []
+    const findings: { id: string; code: 'gateway' | 'generation' | 'subnet' | 'udr'; severity: 'error' | 'warning'; summary: string; vnetId: string; subnetId?: string }[] = []
+    const add = (key: string, code: typeof findings[number]['code'], summary: string, subnetId?: string, severity: 'error' | 'warning' = 'error') =>
+      findings.push({ id: `coexistence:${vnet.id}:${key}`, code, severity, summary, vnetId: vnet.id, subnetId })
+    for (const gateway of gateways) {
+      if (gateway.sku?.trim().toLowerCase() === 'basic') add(`sku:${gateway.id}`, 'gateway',
+        `Gateway "${gateway.name}" uses Basic, which does not support ER/VPN coexistence.`)
+      if (gateway.kind !== 'Vpn') continue
+      if (gateway.vpnType === 'PolicyBased') add(`type:${gateway.id}`, 'gateway',
+        `VPN gateway "${gateway.name}" is PolicyBased; coexistence requires RouteBased (not connection traffic selectors).`)
+      if (gateway.vpnGatewayGeneration &&
+        (/^VpnGw1(AZ)?$/.test(gateway.sku ?? '') && gateway.vpnGatewayGeneration !== 'Generation1' ||
+          /^VpnGw[45](AZ)?$/.test(gateway.sku ?? '') && gateway.vpnGatewayGeneration !== 'Generation2'))
+        add(`generation:${gateway.id}`, 'generation',
+          `VPN gateway "${gateway.name}" pairs ${gateway.sku} with unsupported ${gateway.vpnGatewayGeneration}.`)
+    }
+    const subnet = vnet.subnets.find((candidate) => candidate.name === 'GatewaySubnet')
+    const range = subnet && cidr(subnet.prefix)
+    if (!range || range.length > 27) add('subnet', 'subnet',
+      `Coexistence in "${vnet.name}" requires GatewaySubnet /27 or shorter, not ${subnet?.prefix ?? 'a missing subnet'}.`, subnet?.id)
+    if (subnet && range) {
+      const table = topology.udrTables.find((candidate) => candidate.id === subnet.routeTableId)
+      const localLength = Math.max(0, ...vnet.prefixes.filter((prefix) => cidr(prefix) && contains(prefix, range.network))
+        .map((prefix) => cidr(prefix)!.length))
+      for (const route of table?.routes ?? []) {
+        const destination = route.enabled && cidr(route.prefix)
+        if (!destination || !(contains(route.prefix, range.network) || contains(subnet.prefix, destination.network))) continue
+        if (destination.length !== 0 && destination.length < localLength) continue
+        add(`udr:${route.id}`, 'udr',
+          `UDR "${table!.name}/${route.name}" (${route.prefix}, ${route.nextHopType}${route.nextHopIp ? ` ${route.nextHopIp}` : ''}) overlaps GatewaySubnet ${subnet.prefix} for ${gateways.map((gateway) => gateway.name).join(', ')}; BGP communication is at risk.`,
+          subnet.id, destination.length <= range.length ? 'error' : 'warning')
+      }
+    }
+    return findings
+  })
+}
+
 export function validateAzNetTopology(input: unknown): string[] {
   let topology: AzNetTopology
   try { topology = parseAzNetTopology(input) }
   catch (error) { return [error instanceof Error ? error.message : 'Invalid topology.'] }
-  const errors: string[] = []
+  const errors: string[] = coexistenceChecks(topology).filter((finding) => finding.severity === 'error')
+    .map((finding) => finding.summary)
+  errors.push(...udrAssociationFindings(topology).map((finding) => finding.summary))
   if (!input || typeof input !== 'object') {
     return ['Topology must be a JSON object.']
   }
@@ -1267,6 +1330,9 @@ export function validateAzNetTopology(input: unknown): string[] {
     return errors
   }
   for (const vnet of candidate.vnets) {
+    if (vnet.appliances?.filter((app) => app.kind === 'azure-firewall').length > 1) {
+      errors.push(`VNet "${vnet.name}" supports only one Azure Firewall.`)
+    }
     try { parseVnetBgpCommunities(vnet.bgpCommunities) }
     catch (error) { errors.push(`VNet "${vnet.name}": ${(error as Error).message}`) }
     if (!vnet.id || !vnet.name) errors.push('Every VNet must have an id and name.')
@@ -1283,20 +1349,30 @@ export function validateAzNetTopology(input: unknown): string[] {
     for (const subnet of vnet.subnets ?? []) {
       if (!cidr(subnet.prefix)) {
         errors.push(`Subnet "${subnet.name}" in "${vnet.name}" has invalid CIDR "${subnet.prefix}".`)
+      } else if (subnetAddressError(vnet.prefixes, subnet.prefix)) {
+        errors.push(`Subnet "${subnet.name}" prefix "${subnet.prefix}" is outside VNet "${vnet.name}" address spaces.`)
       }
       for (const pe of subnet.privateEndpoints ?? []) {
         if (ipv4(pe.ipAddress) === undefined) {
           errors.push(`Private Endpoint "${pe.name}" has invalid IPv4 address "${pe.ipAddress}".`)
+        } else if (cidr(subnet.prefix) && !usableSubnetAddress(subnet.prefix, pe.ipAddress)) {
+          errors.push(`Private Endpoint "${pe.name}" must use an available non-reserved address in subnet "${subnet.name}".`)
         }
       }
     }
     for (const app of vnet.appliances ?? []) {
       if (ipv4(app.privateIp) === undefined) {
         errors.push(`Appliance "${app.name}" in "${vnet.name}" has invalid IPv4 address "${app.privateIp}".`)
+      } else {
+        const subnet = vnet.subnets.find((subnet) => subnet.id === app.subnetId)
+        if (subnet && cidr(subnet.prefix) && !usableSubnetAddress(subnet.prefix, app.privateIp)) {
+          errors.push(`Appliance "${app.name}" IP "${app.privateIp}" must be in subnet "${subnet.name}", excluding reserved addresses.`)
+        }
       }
     }
   }
   for (const table of candidate.udrTables ?? []) {
+    if (table.region !== undefined && !udrRegionKey(table.region)) errors.push(`Route table "${table.name}" has an invalid region.`)
     for (const route of table.routes ?? []) {
       if (!cidr(route.prefix)) {
         errors.push(`UDR route "${route.name}" in "${table.name}" has invalid CIDR "${route.prefix}".`)

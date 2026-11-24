@@ -12,7 +12,7 @@ registerJapaneseMessages({
   'NVA learned BGP routes': 'NVA が学習した BGP ルート',
   'ARS to NVA received candidates only. NVA advertisements and hosting-subnet effective routes are separate views.': 'ARS から NVA が受信する候補のみを表示します。NVA の広告とホストサブネットの有効ルートは別のビューです。',
   'ARS selects before export. NVA best-path selection and forwarding from these candidates are not modeled.': 'ARS はエクスポート前にルートを選択します。NVA の最適パス選択と、これらの候補による転送はモデル化されていません。',
-  'ARS neighbor IPs, per-instance sessions, live adjacency and vendor-specific neighbor configuration are not modeled.': 'ARS のネイバー IP、インスタンス別セッション、実際の隣接関係、ベンダー固有のネイバー設定はモデル化されていません。',
+  'BGP neighbors shows modeled speaker relationships separately. Physical ARS instance mappings, endpoint IPs and live adjacency are not inferred.': 'BGP ネイバーでモデルのスピーカー関係を別に表示します。ARS の物理インスタンス対応、エンドポイント IP、実際の隣接関係は推測しません。',
   'NVA no longer exists. No received-route evidence is available.': 'NVA は存在しません。受信ルートの証跡はありません。',
   'ARS peers': 'ARS ピア',
   'Edit ARS peers': 'ARS ピアを編集',
@@ -42,6 +42,10 @@ registerJapaneseMessages({
   'Selected by ARS': 'ARS が選択',
   'ARS selection not indicated': 'ARS の選択情報なし',
   'IP not modeled': 'IP はモデル化されていません',
+  'Wire next-hop IP not assessed': 'ワイヤ上のネクスト ホップ IP は未評価です',
+  'ARS-learned source route (not receiver wire attributes)': 'ARS が学習した送信元ルート（受信側のワイヤ属性ではありません）',
+  'Different-VNet NVA reflection requires branch-to-branch exchange. Same-VNet flag behavior and wire attributes are not assessed. Source learning and local NIC routes are separate.': '異なる VNet 間の NVA ルート反映にはブランチ間の交換が必要です。同一 VNet のフラグ動作とワイヤ属性は未評価です。送信元の学習とローカル NIC ルートは別です。',
+  'Branch-to-branch NVA reflection disabled for different VNets; VNet advertisements and peer availability remain.': '異なる VNet 間の NVA ルート反映は無効です。VNet の広告とピアの可用性は維持されます。',
   'Empty AS path': '空の AS パス',
   'None modeled': 'モデル上はなし',
   'No received candidates in this scope. Check peer availability and ARS export policies.': 'このスコープには受信候補がありません。ピアの可用性と ARS エクスポートポリシーを確認してください。',
@@ -87,7 +91,8 @@ export default function NvaBgpPanel({ topology, simulation, vnetId, applianceId,
     {!app ? <p role="status">{t('NVA no longer exists. No received-route evidence is available.')}</p> : <>
       <p>{t('ARS to NVA received candidates only. NVA advertisements and hosting-subnet effective routes are separate views.')}</p>
       <p className="muted">{t('ARS selects before export. NVA best-path selection and forwarding from these candidates are not modeled.')}</p>
-      <p className="muted">{t('ARS neighbor IPs, per-instance sessions, live adjacency and vendor-specific neighbor configuration are not modeled.')}</p>
+      <p className="muted">{t('BGP neighbors shows modeled speaker relationships separately. Physical ARS instance mappings, endpoint IPs and live adjacency are not inferred.')}</p>
+      <p className="muted">{t('Different-VNet NVA reflection requires branch-to-branch exchange. Same-VNet flag behavior and wire attributes are not assessed. Source learning and local NIC routes are separate.')}</p>
       <h3>{t('ARS peers')}</h3>
       <button onClick={() => setEditing(!editing)}>{t(editing ? 'Finish editing peers' : 'Edit ARS peers')}</button>
       {editing && <p>{t('Changing membership affects only that ARS. BGP peering does not enable gateway transit, subnet route injection or packet forwarding.')}</p>}
@@ -123,6 +128,9 @@ export default function NvaBgpPanel({ topology, simulation, vnetId, applianceId,
       <label className="field"><span>{t('Filter by prefix')}</span><input type="search" aria-label={t('Filter by prefix')}
         value={prefixFilter} onChange={(event) => setPrefixFilter(event.target.value)} /></label>
       <h3>{t('Received candidates')} ({rows.length})</h3>
+      {peers.filter((peer) => (!filter || peer.routeServerId === filter) && peer.state === 'available' && peer.nvaReflection?.branchToBranch === false).map((peer) => <p role="status" key={peer.routeServerId} data-testid="nva-reflection-boundary">
+        {peer.routeServerId}: {t('Branch-to-branch NVA reflection disabled for different VNets; VNet advertisements and peer availability remain.')}
+      </p>)}
       {peers.filter((peer) => (!filter || peer.routeServerId === filter) && peer.gatewaySummaryAssessment).map((peer) => <p role="status" key={peer.routeServerId} data-testid="nva-gateway-summary-boundary">
         <strong>{peer.routeServerId}: {t('Configured gateway summaries (not assessed)')}</strong>
         {' '}{peer.gatewaySummaryAssessment!.configuredPrefixes.join(', ')}<br />
@@ -136,16 +144,18 @@ export default function NvaBgpPanel({ topology, simulation, vnetId, applianceId,
           status: route.selectedByArs ? '*' : '?',
           statusLabel: t(route.selectedByArs ? 'Selected by ARS' : 'ARS selection not indicated'),
           neighbor: `${arsHosts.find((host) => host.id === peer.routeServerVnetId)?.routeServer?.name ?? peer.routeServerId} (${peer.routeServerId})`,
-          nextHop: route.nextHopIp && !route.nextHopName.includes(route.nextHopIp) ? `${route.nextHopName} (${route.nextHopIp})` : route.nextHopName,
+          nextHop: route.wireAttributes?.nextHop === 'not-assessed' ? t('Wire next-hop IP not assessed')
+            : route.nextHopIp && !route.nextHopName.includes(route.nextHopIp) ? `${route.nextHopName} (${route.nextHopIp})` : route.nextHopName,
           asPath: route.asPath,
           textEvidence: JSON.stringify({ routeServerId: peer.routeServerId, connectionId: peer.connectionId, policyConnectionId: peer.policyConnectionId, route }),
           details: <>
             <p>{t('ARS selection / policy evidence')}: {t(route.selectedByArs ? 'Selected by ARS' : 'ARS selection not indicated')}</p>
             <p>{peer.routeServerId} · {peer.connectionId} · {peer.policyConnectionId}</p>
             <p>{route.id} · {route.nextHopId} · {route.originProtocol}</p>
-            <p>{t('Next hop')}: {route.nextHopIp ?? t('IP not modeled')}</p>
+            <p>{t('Next hop')}: {route.nextHopIp ?? t('Wire next-hop IP not assessed')}</p>
             <p>{t('Communities')}: {route.communities?.join(', ') || t('None modeled')}</p>
             <p>{route.explanation}</p>{route.routeMapTrace?.map((trace, index) => <p key={index}>{trace}</p>)}
+            {route.sourceRoute && <details><summary>{t('ARS-learned source route (not receiver wire attributes)')}</summary><pre>{JSON.stringify(route.sourceRoute, null, 2)}</pre></details>}
             <details><summary>{t('Azure provenance and selection evidence')}</summary><pre>{JSON.stringify(route, null, 2)}</pre></details>
           </>,
         }))} />

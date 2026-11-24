@@ -1,5 +1,15 @@
 // Presentation-only equivalents of engine diagnostics. The engine's English API is unchanged.
 export const diagnosticJa: Record<string, string> = {
+  'Could not load warning triage. Reopen diagnostics to retry.': '警告の確認機能を読み込めませんでした。診断を開き直して再試行してください。',
+  'Acknowledge warning': '警告を確認済みにする',
+  'Restore attention': '要確認に戻す',
+  'Restore all warning attention': 'すべての警告を要確認に戻す',
+  'Acknowledged warnings': '確認済みの警告',
+  'Acknowledged warning — not fixed': '確認済みの警告 — 修正済みではありません',
+  '{0} findings need attention · {1} acknowledged · {2} total': '要確認 {0} 件 · 確認済み {1} 件 · 合計 {2} 件',
+  'Acknowledgement is saved with this design. It does not fix a warning or change routing checks; changed evidence needs attention again.': '確認済みの状態はこの設計とともに保存されます。警告の修正やルーティング診断の変更ではありません。根拠が変わると再び要確認になります。',
+  'Invalid warning acknowledgements.': '警告の確認済みデータが無効です。',
+  'Warning acknowledgement limit reached. Restore attention for an acknowledged warning before adding another.': '確認済みの警告の上限に達しました。新たに確認済みにする前に、確認済みの警告を要確認に戻してください。',
   'WAN branch-to-branch traffic must be a boolean.': 'WAN のブランチ間通信には真偽値を指定してください。',
   'Attribute modifications are supported only on Azure Route Server route maps.': '属性変更は Azure Route Server のルート マップでのみサポートされます。',
   'Unknown route-map match-condition fields.': 'ルート マップの一致条件に不明なフィールドがあります。',

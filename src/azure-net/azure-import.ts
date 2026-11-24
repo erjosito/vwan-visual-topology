@@ -76,6 +76,14 @@ export interface AzCapturedBgpNeighbor {
   messagesReceived?: number
 }
 
+export interface AzCapturedVpnBgpEndpoint {
+  gatewayResourceId: string
+  ipConfigurationId: string
+  defaultBgpIpAddresses: string[]
+  customBgpIpAddresses: string[]
+  tunnelIpAddresses: string[]
+}
+
 export interface AzCapturedObservations {
   capturedAt: string
   collectorVersion: string
@@ -84,10 +92,12 @@ export interface AzCapturedObservations {
   nicEffectiveRoutes: AzCapturedNicObservation[]
   arsLearnedRoutes?: Record<string, AzCapturedBgpPeerRoute[]>
   vngLearnedRoutes?: Record<string, AzCapturedBgpPeerRoute[]>
+  vngAdvertisedRoutes?: Record<string, Record<string, AzCapturedBgpPeerRoute[]>>
   arsAdvertisedRoutes?: Record<string, AzCapturedBgpPeerRoute[]>
   gatewayLearnedRoutes?: Record<string, AzCapturedBgpPeerRoute[]>
   gatewayAdvertisedRoutes?: Record<string, AzCapturedBgpPeerRoute[]>
   vngBgpPeerStatus?: Record<string, AzCapturedBgpNeighbor[]>
+  vngBgpEndpoints?: Record<string, AzCapturedVpnBgpEndpoint[]>
   observationVersion?: 1
   configurationComplete?: boolean
   sections?: Record<string, AzCaptureSection>
@@ -274,7 +284,7 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
   const configurationComplete = sections
     ? root.configurationComplete === true && asObject(root.context, 'Capture context').cloud === 'AzureCloud' &&
       ['account', 'vnets', 'routeTables', 'vnetGateways', 'localNetworkGateways', 'vpnConnections', 'routeServers', 'privateEndpoints', 'networkInterfaces'].every((key) => sections[key]?.complete)
-      && Object.entries(sections).filter(([key]) => !/^(nicEffectiveRoutes|arsLearnedRoutes|arsAdvertisedRoutes|vngLearnedRoutes|vngBgpPeerStatus)(:|$)/.test(key)).every(([, section]) => section.complete)
+      && Object.entries(sections).filter(([key]) => !/^(nicEffectiveRoutes|arsLearnedRoutes|arsAdvertisedRoutes|vngLearnedRoutes|vngAdvertisedRoutes|vngBgpPeerStatus)(:|$)/.test(key)).every(([, section]) => section.complete)
     : undefined
   if (!sections) warnings.push('Legacy v2 capture has unknown observation coverage. Present routes can be compared; absence is not evidence of a mismatch.')
   else if (!configurationComplete) warnings.push('Configuration capture is incomplete or unsupported; route comparisons cannot establish a mismatch or complete agreement.')
@@ -320,6 +330,7 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
     udrTables.push({
       id,
       name,
+      region: asString(rt.location) || undefined,
       disableBgpRoutePropagation: disableBgp,
       routes,
     })
@@ -356,6 +367,7 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
 
   // 3. Parse Gateways by VNet name / subnet ARM ID
   const gatewaysByVnetName = new Map<string, AzVnetGateway[]>()
+  const vngBgpEndpoints = Object.create(null) as Record<string, AzCapturedVpnBgpEndpoint[]>
   for (const rawGw of asArray(root.vnetGateways)) {
     const gw = asObject(rawGw, 'VirtualNetworkGateway')
     const name = asString(gw.name, 'vng')
@@ -370,6 +382,41 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
     const bgpEnabled = Boolean(props.enableBgp ?? gw.enableBgp ?? true)
     const activeActive = props.activeActive ?? gw.activeActive
     if (activeActive !== undefined && typeof activeActive !== 'boolean') throw new Error('Invalid VPN gateway activeActive mode.')
+    const vpnType = props.vpnType ?? gw.vpnType
+    if (vpnType !== undefined && vpnType !== 'RouteBased' && vpnType !== 'PolicyBased') throw new Error('Invalid VPN gateway vpnType.')
+    const skuObject = props.sku ?? gw.sku
+    if (skuObject !== undefined && (Array.isArray(skuObject) || skuObject === null || !['object', 'string'].includes(typeof skuObject))) throw new Error('Invalid gateway SKU.')
+    const sku = typeof skuObject === 'object' && skuObject !== null ? (skuObject as Record<string, unknown>).name : skuObject
+    if (sku !== undefined && typeof sku !== 'string') throw new Error('Invalid gateway SKU.')
+    const generation = props.vpnGatewayGeneration ?? gw.vpnGatewayGeneration
+    if (generation !== undefined && (typeof generation !== 'string' || !['None', 'Generation1', 'Generation2'].includes(generation))) throw new Error('Invalid VPN gateway generation.')
+    if (kind === 'Vpn' && bgpSettings?.bgpPeeringAddresses !== undefined) {
+      const gatewayResourceId = asString(gw.id)
+      const configs = asArray(props.ipConfigurations)
+      const entries = asArray(bgpSettings.bgpPeeringAddresses)
+      if (!Array.isArray(bgpSettings.bgpPeeringAddresses) || entries.length > 64) {
+        unknown(gatewayResourceId, name, 'native VPN BGP endpoint association')
+      } else for (const entry of entries) {
+        const endpoint = entry && typeof entry === 'object' && !Array.isArray(entry) ? entry as Record<string, unknown> : {}
+        const ipConfigurationId = asString(endpoint.ipconfigurationId ?? endpoint.ipConfigurationId)
+        const fields = ['defaultBgpIpAddresses', 'customBgpIpAddresses', 'tunnelIpAddresses'] as const
+        if (!gatewayResourceId || gatewayResourceId.length > 512 || !ipConfigurationId || ipConfigurationId.length > 512 ||
+            !ipConfigurationId.toLowerCase().startsWith(`${gatewayResourceId.toLowerCase()}/ipconfigurations/`) ||
+            !configs.some((config) => config && typeof config === 'object' &&
+              asString((config as Record<string, unknown>).id).toLowerCase() === ipConfigurationId.toLowerCase()) ||
+            fields.some((field) => endpoint[field] !== undefined && (!Array.isArray(endpoint[field]) ||
+              (endpoint[field] as unknown[]).length > 64 ||
+              (endpoint[field] as unknown[]).some((address) => typeof address !== 'string' || ipv4(address) === undefined)))) {
+          unknown(gatewayResourceId, name, 'native VPN BGP endpoint association')
+          continue
+        }
+        const rows = Object.hasOwn(vngBgpEndpoints, name) ? vngBgpEndpoints[name] : (vngBgpEndpoints[name] = [])
+        rows.push({ gatewayResourceId, ipConfigurationId,
+          defaultBgpIpAddresses: asArray(endpoint.defaultBgpIpAddresses).slice() as string[],
+          customBgpIpAddresses: asArray(endpoint.customBgpIpAddresses).slice() as string[],
+          tunnelIpAddresses: asArray(endpoint.tunnelIpAddresses).slice() as string[] })
+      }
+    }
 
     // Determine parent VNet from ipConfigurations[0].subnet.id
     let vnetName = asString(gw.vnetName)
@@ -397,6 +444,10 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
       asn,
       bgpEnabled,
       ...(activeActive !== undefined ? { activeActive } : {}),
+      ...(typeof props.enablePrivateIpAddress === 'boolean' ? { enablePrivateIpAddress: props.enablePrivateIpAddress } : {}),
+      ...(vpnType !== undefined ? { vpnType } : {}),
+      ...(sku !== undefined ? { sku } : {}),
+      ...(generation === 'Generation1' || generation === 'Generation2' ? { vpnGatewayGeneration: generation } : {}),
       enabled: true,
     })
     gatewaysByVnetName.set(vnetName.toLowerCase(), list)
@@ -870,14 +921,17 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
       targetKind: 'vnet-gateway',
       targetId: vngId,
       bgpEnabled: Boolean(props.enableBgp ?? conn.enableBgp ?? true),
+      ...(props.useLocalAzureIpAddress === true ? { useLocalAzureIpAddress: true } : {}),
       enabled: true,
     })
   }
 
   const vngBgpPeerStatus = capturedBgpNeighbors(root.vngBgpPeerStatus)
+  const vngAdvertised = root.vngAdvertisedRoutes && typeof root.vngAdvertisedRoutes === 'object'
+    ? root.vngAdvertisedRoutes as Record<string, Record<string, AzCapturedBgpPeerRoute[]>> : undefined
   let observations: AzCapturedObservations | undefined
   if (Array.isArray(root.nicEffectiveRoutes) || vngBgpPeerStatus !== undefined ||
-      arsLearned !== undefined || vngLearned !== undefined || arsAdvertised !== undefined) {
+      arsLearned !== undefined || vngLearned !== undefined || vngAdvertised !== undefined || arsAdvertised !== undefined || Object.keys(vngBgpEndpoints).length > 0) {
     const nicEffectiveRoutes: AzCapturedNicObservation[] = asArray(root.nicEffectiveRoutes).map(
       (rawObs) => {
         const o = asObject(rawObs, 'NicObservation')
@@ -912,8 +966,10 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
       nicEffectiveRoutes,
       arsLearnedRoutes: arsLearned,
       vngLearnedRoutes: vngLearned,
+      ...(vngAdvertised !== undefined ? { vngAdvertisedRoutes: vngAdvertised } : {}),
       arsAdvertisedRoutes: arsAdvertised,
       ...(vngBgpPeerStatus !== undefined ? { vngBgpPeerStatus } : {}),
+      ...(Object.keys(vngBgpEndpoints).length > 0 ? { vngBgpEndpoints } : {}),
       ...(sections ? { observationVersion: 1, configurationComplete, sections } : {}),
       unknownAddressing,
     }

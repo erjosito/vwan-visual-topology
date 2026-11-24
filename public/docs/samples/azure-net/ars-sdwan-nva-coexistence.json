@@ -41,6 +41,10 @@
           "id": "vng-ars-vpn",
           "name": "VPN-GW-Transit",
           "kind": "Vpn",
+          "activeActive": true,
+          "vpnType": "RouteBased",
+          "sku": "VpnGw1AZ",
+          "vpnGatewayGeneration": "Generation1",
           "asn": 65515,
           "bgpEnabled": true,
           "enabled": true

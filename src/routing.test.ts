@@ -949,6 +949,14 @@ describe('topology and input validation', () => {
     expect(contains('255.255.255.255/32', ipv4('255.255.255.254')!)).toBe(false)
     expect(cidr('255.255.255.255/32')).toEqual({ network: 4294967295, length: 32 })
   })
+  it('preserves strict octets and final-line-terminator rejection', () => {
+    for (const ending of ['\n', '\r', '\r\n', '\u2028', '\u2029']) {
+      expect(ipv4(`255.255.255.255${ending}`)).toBeUndefined()
+    }
+    for (const value of ['256.1.2.3', '1.2.3.256', '01.2.3.4', '1.2.3.04', '1.2.3.4 ', '1.2.3.4\n\n']) {
+      expect(ipv4(value)).toBeUndefined()
+    }
+  })
   it('rejects dangling references and duplicate identifiers', () => {
     const t = structuredClone(example)
     t.connections[0].hubId = 'missing'

@@ -1,0 +1,37 @@
+.belt-achievement-dialog {
+  position: fixed; box-sizing: border-box; width: min(460px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px); overflow: auto; margin: auto; padding: 24px;
+  color: var(--text); background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; box-shadow: 0 12px 36px var(--shadow); overflow-wrap: anywhere;
+}
+.belt-achievement-dialog::backdrop { background: rgb(0 0 0 / 35%); }
+.belt-achievement-dialog > svg { display: block; margin: 0 auto; }
+.belt-achievement-dialog h2 { margin: 12px 0; text-align: center; }
+.belt-achievement-dialog li { margin-block: 8px; }
+.belt-achievement-dialog button { display: block; min-height: 44px; margin: 20px auto 0; }
+.belt-confetti { position: absolute; top: 12px; left: 10%; width: 80%; height: 160px; overflow: hidden; pointer-events: none; }
+.belt-confetti i { position: absolute; left: 10%; width: 4px; height: 7px; opacity: 0; background: #2563eb; animation: belt-confetti-fall 2.4s ease-out 1; }
+.belt-confetti i:nth-child(3n) { background: #eab308; }
+.belt-confetti i:nth-child(3n + 1) { background: #15803d; }
+.belt-confetti i:nth-child(2n) { animation-delay: .15s; }
+.belt-confetti i:nth-child(4n) { animation-delay: .3s; }
+.belt-confetti i:nth-child(2) { left: 18%; }
+.belt-confetti i:nth-child(3) { left: 26%; }
+.belt-confetti i:nth-child(4) { left: 34%; }
+.belt-confetti i:nth-child(5) { left: 42%; }
+.belt-confetti i:nth-child(6) { left: 50%; }
+.belt-confetti i:nth-child(7) { left: 58%; }
+.belt-confetti i:nth-child(8) { left: 66%; }
+.belt-confetti i:nth-child(9) { left: 74%; }
+.belt-confetti i:nth-child(10) { left: 82%; }
+.belt-confetti i:nth-child(11) { left: 90%; }
+.belt-confetti i:nth-child(12) { left: 95%; }
+@keyframes belt-confetti-fall {
+  0% { opacity: 0; transform: translateY(-8px) rotate(0deg); }
+  15% { opacity: .65; }
+  100% { opacity: 0; transform: translateY(150px) rotate(180deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .belt-confetti { display: none; }
+  .belt-confetti i { animation: none; }
+}

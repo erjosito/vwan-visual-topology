@@ -1,0 +1,4861 @@
+{
+  "schema": 1,
+  "measuredAt": "2026-11-22T22:08:14.318Z",
+  "source": {
+    "sha": "37a36dd53bc3c2159d74c35f9bf5e24aaf93923f",
+    "dirty": false,
+    "diffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "untracked": {}
+  },
+  "environment": {
+    "node": "v22.23.5",
+    "platform": "win32",
+    "cpu": "Intel(R) Core(TM) Ultra 7 165H",
+    "logicalCpus": 22,
+    "totalMemory": 33983225856,
+    "availableMemoryBefore": 5522206720,
+    "browser": "156.0.8078.4",
+    "availableMemoryAfter": 4016939008
+  },
+  "iterations": 20,
+  "excludedWarmupIterations": 1,
+  "selectedModes": [
+    "vwan"
+  ],
+  "selectedTiers": [
+    "dense"
+  ],
+  "methodology": "Synthetic native documents on local production Chromium, English new UI, 1440x1000. Event capture to two requestAnimationFrame callbacks includes scheduling, handlers, React work and rendering opportunity, not physical paint or Azure latency. Phase spans can overlap and must not be added; render-to-layout is inclusive, not exclusive React CPU. Opt-in bounded local metrics only, no telemetry. Sparse mixed 1000-VNet case measures structural retention, not dense transit or platform qualification; native measurements do not certify the public 512-node/15-second/8MB envelope. Five-sample p95 is a coarse nearest-rank maximum, not fleet evidence. Ambient machine load is uncontrolled.",
+  "builtFiles": {
+    "assets/AddressPrefixEditors-BgwvBR_x.js": "b4d8f9e9a1af8c35dc46ce008a92ca09e2d20844a430976bbe214a9cea411ccf",
+    "assets/App-jLBi4kuq.js": "b8b571b68bf8728a20327fa7e5529388e956676f375a741d05d77da89b63062e",
+    "assets/AzBicepExport-CbwVicaS.js": "fdbbfa757f914e28b0bf34bc323e4784fe6ff4389855a4701c3f51526713733f",
+    "assets/AzureFilesPanel-ChqL90Of.js": "eabc2c6d0ee5121a91eec1c024e8c883a22a90cffa2389c7d486cedc05a94b60",
+    "assets/AzureNetApp-B9acHLJe.js": "e0addea48ff698c070eff6cf85c6890494ae82695dc94b7b2af6cbc7e56e1c6f",
+    "assets/AzureNetDiagram-G2HsRTMU.js": "736f27839a789195d2a459fa7c799290b3d995aecdb9049e725ec6210ed5af72",
+    "assets/BgpNeighborsPanel-BULdVkWS.js": "ed7d8e6ec6352aaed784082d3736bc27c4c9e005344c8d57848f6eb866ce201e",
+    "assets/BgpRouteTable-D5HFlwyl.js": "765cbc4cc6305b9a666c3e570390cb47c550328c549eca1166ca4f96f0a6c5ee",
+    "assets/CapturedArsRoutesPanel-zrrlIuQ4.js": "985b468e8a22fc8e749ae47428c0812cdc824f30b7b191b67e5bd9d6e3499738",
+    "assets/ClearTopologyDialog-Cv7lZ1f_.js": "853d264de67aa43bed3f18771d35b8db54403c4402e29ba17a5f0d1df1792e49",
+    "assets/CloneVnetDialog-DS4uGND4.js": "5c87fd884de0ae2fa109e1d186ccf6c6e8d2474f3ae9fb3cdd024ad14a97e6d7",
+    "assets/CloseDocumentsDialog-CUJXCheT.js": "07da1e1ee7b327947da0b241fcc3ad6c8f6a245e24b9150d216c062faec3e55d",
+    "assets/CloudDocumentSaveStatus-CZ0SI-Pi.js": "7b898733e83ccb805b955d8b4f2df351180e316b44360fa9391d51e57ecc893e",
+    "assets/CloudPanel-CI4Wh1Q9.css": "724c0e805b5a661af26936a283af66dbaf23a6ac4a453ee4bcbcbabc3ce71bea",
+    "assets/CloudPanel-gKiAHoF6.js": "2f984c058bf869a4e4f569c50fcb14004f00495f1d533209d0538f48090a513f",
+    "assets/CompactBgpTable-Byp0cCsu.css": "57cc8b10309edf0a335a7e9267d5e26ff9dab6ff1adae1031a227a55324c957f",
+    "assets/CompactBgpTable-C_i-zPA2.js": "01c8117be14e2c24ff4e970cfe6e40636c3ab2d8804c16ca564d3c063f78fa8e",
+    "assets/ConfigurationEditStatus-27EClTLa.js": "f17d90ba0cec446a642b8968536a12d3e9781d1c59ec0f7326b0d34451fac60e",
+    "assets/DesktopTools-CmaUE8mD.js": "9c9c00d108b11b2301552a59f72cddd6f0275ae3c11b9781b6aef2b645b70edb",
+    "assets/DocumentActions-Bf-T2AMu.css": "3339d8c8c589bfe7920e485de5a29b2afa9fb7006a57d53ed67434b97d4375cc",
+    "assets/DocumentActions-D17NTcaP.js": "c65411d8b188d1405749f4db71cd71c02f838942d863942b7a6d0534a0c8f13a",
+    "assets/DocumentDialogs-CQSl5AOP.js": "85fc34b5a11b45f79e01acc479881e3eafc7dd835461b4c5876e50be2585065b",
+    "assets/ErLocationInfoModal-BaSdLRDE.js": "16363fbcc701fdf0a653d9841240b649968b2433a948387ab9e6cb755b95cca8",
+    "assets/Explain-B4XvCNP-.js": "d1602aa6a7cadb2af2af1244cd196db7ac596e5c9c2435b1a2659b0a0386d49d",
+    "assets/Explain-Bhw1i82v.css": "fb313a0df523367445ba94418edd8dd305cdfb3a9c427c43d7442ff07845f55b",
+    "assets/FailurePanel-D8jO2HyT.css": "e9ec308c082bb3057a74c64113bf1f240286de7b0ebad2d121f1f533afa83633",
+    "assets/FailurePanel-MxZ4G-iu.js": "54067a778500da61f2c9f86a9f944d0f777b01db4446fd1f3fa6f7f5f688c74b",
+    "assets/FeedbackDialog-D78Q6Hev.js": "97b104172cd2e8179365cfa320039431f154b5ac013c42d48f54b3fb4521a5b3",
+    "assets/FindingEvidence-6arVEzfY.js": "7603def6c8f6aa0051002fb377a2c879f1f47470e06f70cbb85a955e9c11b55d",
+    "assets/FlowExportControls-CQfFVQJM.js": "67b9671de912b7fbad93e85b5d6c47e15e9c6d728cc5e509ef3197101619a87c",
+    "assets/GatewayBgpNeighborsPanel-CAQ19trs.js": "19d855ade04db8c5cf4f31655de8873770562dac8c2d7dd7149d27ebad25d089",
+    "assets/HubCapabilitiesDialog-BQMok_J0.js": "62ad9c1620193d147544a6585ad30445406cc57b99b589431a6514c1aad6a39b",
+    "assets/HubStaticRoutesEditor-Ddu6aU_Z.js": "67a4ec78329b6f782b776702f553085b12827766eaae9107cf3d269e0288bbbf",
+    "assets/HubTablesEditor-D_NaO3Je.js": "cc35755468555c06fe9a5e45502ce8d20706bb39927eb35cbd82aaf2ca1d23fa",
+    "assets/HybridRoutingEditor-CiFlHqyY.js": "7764e0b50e54cf221d8788010dd5af46820547bf4dc4679cd4fd5d75c9b1d172",
+    "assets/LearningDialog-BArVMlnf.css": "fcba386744dc99dc1bd760b2b7cbb42bf1f0c189b86cd3fa417266178c58503e",
+    "assets/LearningDialog-tPTzfxMd.js": "948e9a0343058422a8f4e8fad372e1df01d4bb34f8457410cdd4d782bf5e3684",
+    "assets/LearningInspection-DTk-Q2GU.js": "eb9c4a45ae2686fbe2bd1534724c54f6cb7bf285d0b0d119dfc319b93b9cbe9a",
+    "assets/LearningStatusDetails-C0FJJDAV.css": "62fe3afa3431541997b3fa4468e0adb48d7270b680e2326fe0e6cf71a229005d",
+    "assets/LearningStatusDetails-DU2q3xgt.js": "0d9a0a8a1ff7eb71cfa11ce6268283d804acb324a66ca3489839af7b673c0150",
+    "assets/NetworkDetail-BkFTEBQW.js": "b1756cbefc68443e72377393fef9eaf927138065dd3b100bf3edfe921d3ea9e5",
+    "assets/NetworkDetail-BsY7dleg.css": "ce734b5d3a0b451078449d6df69e78a2225fbbe4ec352a623369234aaf2c0999",
+    "assets/NvaBgpPanel-BlHXNhoW.js": "891d9ea94770c089d11dac58e27f682af953b774cd181532fe51f0e3401c294d",
+    "assets/PathMotion-DfmeGyvj.js": "bc5e6d18afd0034a1b05a97415b345c4ed69bae8ddd66d3edde265f12f112f6e",
+    "assets/PeeringScopeEditor-B36Vq3dE.js": "0dbbf11ee661c2c85adee2341db450fd2d7180d685dcd8ec72a2905bd53b0e15",
+    "assets/PracticeWorkspaceBar-BRpV5n5D.js": "56c353ded0c6cddee88864d7663193cac1b6efd52fbdea649940e53786b00a34",
+    "assets/PracticeWorkspaceBar-SxLE8x4V.css": "ae97ce76ce98cb009fd7e045d28d21f3c6081e6cdbaf4ba8e578067c25a0a31a",
+    "assets/ResilienceResults-Bacm6ViN.js": "e987763fa59919e2d4f993f181f91b985f587980f53bdeb7de170021b3939ac6",
+    "assets/RouteMapsPanel-BQaDxOrP.js": "e7a5ed36b9e05fe7b1e655adc4e6e3e57f2f9aa3cf8a8ae6be793d51a0c41be0",
+    "assets/RouteMapsPanel-DIIbZhaw.js": "ef19eb895d6abdeab5ae38f981f24a7879624dade648b446f526e9c10d1d4331",
+    "assets/RouterSnatEditor-CedtMg0r.js": "9c72995d80def9e69b96605f21466acee71dd3c1a9481cb0acff3bfca8c86243",
+    "assets/SampleGallery-BFbvKiMy.css": "88c8934b10601901581df1ec997af91417c9514ace460bcbd4ea8a5532057440",
+    "assets/SampleGallery-BS3vmQsS.js": "efd4429f5b58f38e765014b722b2ec0e7b241eebd30562e3230612cc1a6f39f1",
+    "assets/SharedDiagram-WCoOhiN6.js": "8dd8a890be993546bfc8ab67c5797aa91d245c1e5113e2aa5e62bc2ba7ebfbe5",
+    "assets/SharedTopology-lerq18O_.js": "33f9dae0235bccf5d89d1ff4d07f2a184a8b39d74188fd80ce8ea888bf709667",
+    "assets/ThemeSelector-DcA2dHLY.js": "c946103b5160f3b6e39840d749e61a0cd32f0b33b4ec72b6b266a6f85677c664",
+    "assets/TopologyContextMenu-DLwx6RV_.js": "b438ff3b6c0b28a44f1329ab233962e5c14d0084d3773fa52f57df58702c4a51",
+    "assets/TopologyDiagram-CgzctQ9R.js": "0e0e6421e323f3897eff5081a5cbc2b167512b175d455b85c6fea1b0d528c2f0",
+    "assets/TopologyObjectEditor-B486llKj.js": "3bb086a99095504da1ee823e229740bbfaec0e29e420d59ff6ec40dcfcdcb02f",
+    "assets/TrackOverview-CSOUpHX-.css": "2afe20229acf260270a43e04ca85958da05d2e5cfa0dc25fa6614552e2e1e9ca",
+    "assets/TrackOverview-Ce0sx1kt.js": "11c44d156629cfc198588266fc0a5a25820b885eac745d504e2d4d785d10d6c2",
+    "assets/UdrTableEditor-C2PlHk_Y.js": "b7d2865c16001168c14bad298d57cc083fe96b278354acb93154421671a8210d",
+    "assets/UdrTableEditor-CrKuOSQ3.css": "1e49bafb3757c2807249dbb10f4731d0eb38837da2050db32118023ec51f3dec",
+    "assets/UdrTableManager-DMLLkSwJ.js": "41d11dd718cfe6451ae5958d3a4ab54762d8c08f6985f36eb96a4e03a943cfb1",
+    "assets/VnetCommunityEditor-BkWBDVeu.js": "213d641aae3d6a85209f3218728a509ef1c3ad93325301923a6f842b5c1e2636",
+    "assets/VnetRoutingSettings-P3BPMev-.js": "0ecb3502972e392ddabbbd56738b0ac20b3360d01347d1b4f6f3cefbec38101a",
+    "assets/VpnNatEditor-BQPJH0SM.js": "897370b058289bc032bdbab7d8e958a39d53e92993a7ec417e07b30bfc19b8ae",
+    "assets/VpnRoutingWizard-Cra7APl-.js": "086d9e7a5256bbb899a0d8e510c642136b9210dd785c1642f8c1e13479cbbce5",
+    "assets/WarningAcknowledgement-BcDN00jP.js": "a8c51cb4b9e0c9c20d4597e6bcfb79b1351a23a0dc9e4f5d93634ef629e889b1",
+    "assets/WarningAcknowledgement-DX__Poje.css": "ce115ee9d268eb8df218b323353e769101a49121a865bc0a79c5ff8740810309",
+    "assets/WorkspaceLibrary-BzIDQn1P.js": "bc73078662e10c36fbb4b30561c2d77e7caad59a8d12ca06194829b09c154407",
+    "assets/WorkspaceRoot-ZfLVB5R4.js": "104e58e1b89e90684aa1cec2b1a9beee15d25b69f4e73a86e8f7934a79b797ad",
+    "assets/WorkspaceRoot-pajXnouB.css": "bbbc368e6f9cab90c4b04114151ce18b6192bf5da3af4540aaecacd368a4b95c",
+    "assets/admission-BieKahqq.js": "3ea2755aab5ac0f630dd8c6b52ff267192483d1cf97ff61112886e88ed508b29",
+    "assets/auth-redirect-DdJXiBc7.js": "5239ce086160b50ab58dd20642d8bdf595faae0ac0c244a7fff94783f00f68ae",
+    "assets/azure-import-Bdz8VQBD.js": "48727c53fe18bd7e41794a04c267b9802b9d3044a96bf1e20c5edd1632386af9",
+    "assets/azure-import-ChV2tO-2.js": "8891cee31cb59ec0162a3285508a457e9c32405f346fdaaa84e3b42cf323177c",
+    "assets/belt-stages-D0ujCxCh.js": "6f71ff01a2f3a85555cbad6a093b708762cf80f4f42dc04c458e7ff88a29105d",
+    "assets/browser-document-store-W2v1NLRg.js": "73badac3a2d48f326d055ef8aa34c2c43e6db8dfcc9498786c16e1b60e614557",
+    "assets/browser-document-writer-_V7IxuYq.js": "23b8f7cc6bf6114375351f6e300369b7e5160db7da1222c47714059cda93a06b",
+    "assets/browser-hvdNjD0E.js": "6355b1eb7bbe26da79a128062868c6783a09bf406c0190d26af5a9a7672e4cad",
+    "assets/browser-worker-CcrTOA5X.js": "34b4ae91b817b1d3025b5f0957b69a4d6b448fd111e28feaabb38e8fc3220ca2",
+    "assets/captured-ars-routes-bDoifbKg.js": "d40e91115a1dc8e7ea3b79b50a10d1bd3f2882fe539907a8316c731d5d86363d",
+    "assets/client-QORSBz5-.js": "baaddcecd7dd51973aa4c3af0c5d342e04d15549a0b8218b0647e9c8ea08333b",
+    "assets/coexistence-CbfFL9Io.js": "0160474ec8fbf65b5c8bf48740305d7896aa8fe44e4c61da75d243eefda37329",
+    "assets/collect-azure-vwan-C_1RNxFV.ps1": "1916defd355ba333d8ea6a85fe8f5e067269d675f9547cf486f25449ba0da7d2",
+    "assets/concept-bodies-B1IMxsng.js": "b35852f9867b6f142c676724a5382cb084683dc0fdc0b47b343102f176c900af",
+    "assets/connectivity-bicep-CZrJDeiL.js": "24da7ad634b2c124b94a06349f7e5656e700c776b8f7f0a3de64dd19e955cd65",
+    "assets/content-B5_TlclH.js": "6dd8fd5a512eb09be8406c58abe5ebf27dfe54f56c728e07dbb715e609aa7c39",
+    "assets/contract-D5-eLFpl.js": "4525609e3779f74f076c833d747958eedc7348b417f641d488a99f27ed5f350d",
+    "assets/contracts-0NtuVuJd.js": "e471de39a4b5c43e469197e27c354b865d31c3eabbf42636db7c56a7af6670ce",
+    "assets/desktop-document-writer-DNtVwjWB.js": "d0fa5753a9a608bdb27f04d9a977d1c1fd81e7f3e623fb5217dfa78f0875cb37",
+    "assets/diagnostics-BlkHHrxa.js": "92c6a6150a5224dffe7eea52d4a076a345863b479875049a0e58eff8cfbd017c",
+    "assets/diagnostics-worker-7bkWd8aU.js": "132babc795db67348b523235526c934f604b79766bff1b6bf6af5b2dbb7a1f2f",
+    "assets/diagnostics-worker-B36sig2A.js": "1a1a35d67b9525a41763c05893962ccfdc4a43d91f83448476bd38ae818c3a07",
+    "assets/document-writer-CTXMSup8.js": "c82f5ccd1ebc794b838940ea2d6611e48075b5b1f9e7afe9604728f46409fad7",
+    "assets/endpoints-Bd1ife2s.js": "a29065237361017836107dceb58aedf36ac16b45bd5ec85887f9289539d16910",
+    "assets/flow-export-browser-9eJYg-HV.js": "159ce070b3d38a1b4c5f40da6f1cb2d76afccc8be3b4fc3e0ad5541667dec413",
+    "assets/flow-export-gif-D1_xrfP9.js": "8fc04d635b728c09070a37783695588a5e05c065290c590dfcbe2887876a8483",
+    "assets/flow-export-options-D35_Srzl.js": "9d8857d65f7e7ddacaa84d87e57a21614a661d0fef441b8255fcfb17b4ec1e11",
+    "assets/flow-gif-codec-YfoZ2njj.js": "8ce451ccf3c15e6c314a220c539d9ef141033371ba40112e8e77020120b54aee",
+    "assets/guidance-DUvMGHp9.js": "4373df66c692a8738bbc72ab2dc9cc1e4062c2b97ae91eec323e0bb0481c48fc",
+    "assets/guidance-anchors-DhSCaHWf.js": "fcea37180fbe3910c8e5e394c750200340febb1db03154a49adb8b266ecc6fc1",
+    "assets/hub-dialog-messages-ja-C43aZIRS.js": "6ef223e8d2d497510acbc48bf96f327f647fa4b7dfe3a5d4a1a4f5fc80fd4aa3",
+    "assets/japanese-catalog-Cys1L4_a.js": "23eb00a1bb550ac9c9240f40d9393f2408e469ee791b3990687087b4fe500970",
+    "assets/learning-session-CoRlKrRe.js": "c8da0cb3f196fdb71a7dbf037d4b66b178e4d25b5f4b00d7765c1d4768eb0bcf",
+    "assets/main-Dt2B1GO_.css": "c9559e1bac6eaec92d7c8d8c9a07b49f80067e965ba8d31942a154f0a996bb90",
+    "assets/main-bkvc6EYz.js": "11951ceb93b9acd09571622bc50f86d452af0de137a97974774989509fc72696",
+    "assets/messages-jE8Ni-G8.js": "15f626866842bc29ce5de673de6b295ebcac976b729a1ad95c667e5104f658e5",
+    "assets/microsoft-CPndczvu.js": "3a384f373da1f57c8626b51252f6a09e489e71d8c23f6c1a017c353ae2cf727b",
+    "assets/microsoft-auth-S1CL--1q.js": "d53309587e176c2391703655d3054def1f7947c3f3ca8024d74f4fd262574487",
+    "assets/model-8wOqGUDM.js": "0d50f996ffff5b236866051c89de44117233c5d29e35b72c6317ebcfd625be47",
+    "assets/modulepreload-polyfill-P2Xu9kJm.js": "418c206484b89b68ef5f067277831e583fc9193a62aadf4de269acaaeb12a85f",
+    "assets/packet-flow-BaIrsOJK.js": "b5321f4e5ec90a76ecb39244ed11bbd3bc037a5696851df06f5eb2f50c6409c3",
+    "assets/practice-content-CvVWK_AP.js": "5edd92a625d16f8d5f1c1131584dc54d64710deafb84ce97a9d80c6fb41874c3",
+    "assets/practice-ownership-D8F8nToZ.js": "1b511479a40e73e2f0559ae902409cf2fe8df3a081ac55865f472df22be267de",
+    "assets/practice-session-BoLqliWR.js": "f01a6c14be185da9ad3de8ae87fc5a815d89d79d785d2f845ee94058c145c63c",
+    "assets/preload-helper-CRzLMJPS.js": "bcc465e3e61dc3878a69ffa95ccb53cb82d95b1639ada223420b281ebd150048",
+    "assets/progress-status-BNLKoL2H.js": "b6b5d6a4e1d921bf83c7c0209719fcfb43f5884f11a33e60d0ef2a43ffd0b6a8",
+    "assets/progress-sync-HKTq_5Ca.js": "6a7230e9cc4a1aaac529aeb67642aa182fc221a640a9989eca93cefebf6cc613",
+    "assets/random-id-Bd7_jZUn.js": "b18bbb4e90dbb01e6b2207c23569c67d9ab40789762c61789b9145d769bd2aaa",
+    "assets/request-D33LdsLS.js": "2b513176a17b6feb8ea55640d70e0c01924efb617d3a5f255c56edb51175d30d",
+    "assets/rolldown-runtime-XKyaHtl9.js": "548d1dbf321e7d2ae804fcc158b588706a7c52f8ca175de1490c6ccb4dbe55b7",
+    "assets/runner-CAv5PdU5.js": "9b1ca01fd50174cf8a834ff0384d108d983c9a76dd6f6989575005b2f5912cf8",
+    "assets/sample-catalog-D_Wcy6Kz.js": "8206b1f7b832a51092505c42afaf7f5f8eef88e506796505d5ed6c5be1ee6936",
+    "assets/secured-virtual-hub-BSLrVhZu.png": "2b32f4067ea53873591c6ce123c3d88fcfae8791feaf6837da644b1e75e6b0a2",
+    "assets/sharing-DYwAgx88.css": "495682b72e8497e0c632feb5667ed9d727ea71bef7bebb17c64d4d9c35272ffc",
+    "assets/subnet-allocation-vYsEz4Sy.js": "909501df1c8f2858a8130ab65172880854aa380f635fbcba0db62dcac46ca8c9",
+    "assets/validation-iQy9tOXV.js": "0f89d67dd6a84d2971384f4bce629584c998f3456d6f80caca68d7b6d45c57cd",
+    "assets/vendor-C1iE8mnY.js": "da12a137fe3f1fd2470fbf431f134ee9c9c4fad70dc30193ddd4a7195ce196cf",
+    "assets/vnet-appliance--NMb-NQr.svg": "4c8925dc7ebaaa0316b15a0c1a7762ac910fa2dd6683c9ad68bce47664574975",
+    "assets/vnet-communities-D9OHv26o.js": "53c74663772c7617ddf97f0720dce9b3502c0815b01181fc76df9d1d7f0d540c",
+    "assets/vpn-nat-messages-ja-Dd2VnmDO.js": "8b11a8e657a0dd6a5ed6c19ba9e17050ad4945bff29d4606a52d41f408087db6",
+    "assets/vpn-nat-packet-DDSaZS7p.js": "b31dd557fe14d0fe11c2b8c5ca70e01aa8a75c5f845ce58a24d51b6636bb83c1",
+    "assets/warning-evidence-B-VWJJCc.js": "5de5f9bfd19c24470a73deb5a2a0fcfd7b60c3d3eaa6158f3d4b6059845ac271",
+    "assets/warning-triage-CnSD6C0x.js": "95b43a86f84d3a9c452b91952bccb5db3593cc92d27e46e034578ed3156f382d",
+    "assets/workspace-DMwVEJlz.js": "0e2acf00bc2f2fcda00aa6fe5a2253365b009d0cf7e95c3e858a228f83f64a16",
+    "assets/workspace-capabilities-0BOfsiqP.js": "f57c2ad6ae973bc71157a7d0addceb359ad95fc8d6df2f209d930d451a5a0024",
+    "assets/workspace-tabs-B-iZ9Irq.js": "f980eaace03cb99b4b5d4313ac44eb78a26435c60077761b91c74faafba91036",
+    "auth-redirect.html": "df2158da34fa48c9e171d6368cc29f8079bead58535d3042be765f982d28dd7a",
+    "desktop-icon.ico": "8b8669d67f294b1c9056738bc13db9a3efbea652abf50d1e752150d1255f2e31",
+    "desktop-icon.png": "103c77f1cb09107d725ae0d812b4584dc242d8078089a472c843d3aefc9e6f00",
+    "docs/images/01-hub-routing-preferences.png": "30f2401d027d3c08b0f406b2c320fa10bb920ce4e9c07150c63bef34bbbc421c",
+    "docs/images/02-secured-hub-routing-intent.png": "6db6e184e24c24e480b9d84a114ec7ccf47e511353adf1509bfdc7e08a35bfdb",
+    "docs/images/03-spoke-bgp-nva-transit.png": "e80fc11578ccaefe55155c7183f576a48a58388297f81efed21f1db7029b9fd0",
+    "docs/images/04-three-hub-all-features.png": "5a1238e76746d2a3092602e16bb6e2ba1b5337c2eab30db5d0739c79c34daa1b",
+    "docs/images/05-effective-routes-modal.png": "abc2a6a4aab2eb26a598fe081c1edb0b5a4ee5ed4b56ae0b2df77760a4989c8e",
+    "docs/images/06-routing-diagnostics-asymmetric.png": "a423467e48176edc4caf209c1a8519afd981894457a72707be59e9f0c4f511fb",
+    "docs/images/07-trace-flow-canvas.png": "88aaeb40266ec2d1e4566bc4e13e6cd4e45b58f895a7c3998ce707884dcdf556",
+    "docs/images/08-azure-files-export-import.png": "b1dae4d3b99c26c32818baa9029fe8eae55ef7fadfb54041b304a92afe481d74",
+    "docs/index.html": "696786e2e43fa10259d4cd968ded0108b00eb5a0a5b0b52ae2f491f5017addb6",
+    "docs/language.js": "fd4a86b4a62ae3f1637e8afc651dc76f03b1d5ee267f351a978e72882307ee54",
+    "docs/samples/azure-net/ars-sdwan-nva-coexistence.json": "220077b27d26f09b1230215227aa44a0c397be45e3ff9e22194ba5b00b7b164d",
+    "docs/samples/azure-net/azure-vnet-indirect-firewall.json": "8acd9a38c03d26edbf1d97840946636f06cc9726569846fe5fc4f5fe8d68438a",
+    "docs/samples/azure-net/dual-hub-vnra-global-peering.json": "693dd05d216c76e558c37597f1fe00ed8546b8697431827ad1288b1dd1b2332d",
+    "docs/samples/azure-net/enterprise-vnet-all-features-showcase.json": "a1e23ccb8116c726913f13b58302ec7c5ebadfeee188bb6829f9d27030577d33",
+    "docs/samples/azure-net/hub-spoke-firewall-udr.json": "a8fa71ea1f98de5e6b027be21453d96f91bc863ed5a1ae13522fa6e5f940ee7c",
+    "docs/samples/azure-net/hybrid-vwan-and-hub-spoke.json": "f9961d2d236b53b0d9905fe7b32204383699908ee39355e17b27ebb47b2fbf70",
+    "docs/samples/azure-net/subnet-peering.json": "9bc894c226911c51a3de2690e2373cf0ac7b8699768229b9ef68afe4e2a14efe",
+    "docs/samples/azure-net/uc1-hub-spoke-nva-ars-baseline.json": "f9571fce36f4232a6543f0b2010e273c217b0bf32a3a007f7b0b3b2b5c4c9d99",
+    "docs/samples/azure-net/uc2-gateway-subnet-missing-udr-asymmetry.json": "414533ea01ff1326468db68b77becc2e590284b7b442a4d71e6388ab747c8eda",
+    "docs/samples/azure-net/uc3-bgp-propagation-and-peering-gates.json": "d6f10284d66f4c19657bc9f7dbbfb846cfeb857ae26d6d591e288012840e8519",
+    "docs/samples/azure-net/uc4-private-endpoint-udr-override.json": "7629d38d83b5cb170fab9bcac120c404f183b2bed53b70cdc5f0866b9f4b6e7e",
+    "docs/samples/azure-net/uc5-ars-branch-to-branch-and-bgp-selection.json": "58b585506351e915ac7821d8f7de6605a370f903ef6673e86f8ca2d66819b0e3",
+    "docs/samples/azure-net/uc6-ars-default-route-self-blackhole.json": "f76710cc5705e0078f6d9524df4c8ed5827bfd83e7e8209a63248ac67cf133b9",
+    "docs/samples/azure-net/uc7-bgp-lpm-bypasses-summary-udr.json": "0a3283194d7a8ceeefdf52f9d31be882cfb813581f7608c41ed97b7420663f8b",
+    "docs/samples/azure-net/uc8-udr-next-hop-types-and-vng-transit-trap.json": "b55c61f60d6133d68966e37732601f3a70b61669d78174465f70601f4d83b991",
+    "docs/samples/azure-net/uc9-expressroute-hairpin-two-vnets.json": "ea91b5d4cb462edf4c6d91702dfcdee631ec0cd5c49cca3ce6dbb18036023f51",
+    "docs/samples/hub-routing-preferences.json": "515a16058f1ebcf88a75c10d00cbba3a4003440e97f3e341172426b93e0888a0",
+    "docs/samples/secured-hub-routing-intent.json": "ddcd840e869f52b5627fb05380b0a0d062639cdb17191fdc146d4f0df160db4d",
+    "docs/samples/spoke-bgp-nva-transit.json": "21b0e60c55382e7bfd670f55b2b21815f799af063a3372ea9432cdd34f8b7c87",
+    "docs/samples/three-hub-all-features-asymmetric.json": "8672fb8fd087b4ec4d5309ed57e8e485cba9e567429156b038f448d1f2f024d6",
+    "favicon-aznet.svg": "39aa654b2889398ce46bf19caddce26fb238a9a68d64e2aaf3e6d24171437df6",
+    "favicon.svg": "6c6b7aac71fad9c33309207ae333104dfe675a15891a3a062776176a312aa517",
+    "index.html": "f0e897ba02e5f5276fa83ba61b89f78955cfc99646a3f314b4664ca8300756c7",
+    "og-image-aznet.png": "b693ab4fc73997bf1f284365a4b0235e435fd07f2e5dafe75ef9cc0be2253501",
+    "og-image.png": "b693ab4fc73997bf1f284365a4b0235e435fd07f2e5dafe75ef9cc0be2253501",
+    "og-image.svg": "e51feecd795a5ee3193405fd622ab4214e009cfd2fc9b4b96fe5bc6c40782f9d",
+    "scripts/collect-azure-network.ps1": "d2f3af0186f6b33bbbddd843dc0f6fd63901a3acfcde651e73c5d6b87ba90435",
+    "scripts/collect-azure-vwan.ps1": "1916defd355ba333d8ea6a85fe8f5e067269d675f9547cf486f25449ba0da7d2",
+    "staticwebapp.config.json": "5750e18ef3170dd57d36b9e697d048d2f676d7f02435d6e3467e47cfdc85126a",
+    "theme-bootstrap.js": "6f6b73e1f7a10989399f33b626982b47e2ea68fdc19a9ffe3215b63decd3d0e2"
+  },
+  "cases": [
+    {
+      "mode": "vwan",
+      "tier": "dense",
+      "status": "measured",
+      "workloadSha256": "968c9de78be4352887fd0c25e689464c5dba90db2073c06d69da0764bc91191c",
+      "nativeReferences": 200,
+      "prefixes": 800,
+      "topologyBytes": 255000,
+      "samples": [
+        {
+          "iteration": 1,
+          "operation": "display-edit",
+          "eventToTwoRafMillis": 184.30000001192093,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                1.300000011920929
+              ],
+              "history-clone": [
+                3
+              ],
+              "persist": [
+                5.099999964237213
+              ],
+              "editor-submit": [
+                16.19999998807907
+              ],
+              "routing-projection": [
+                3.400000035762787,
+                1.800000011920929
+              ],
+              "simulation": [
+                81
+              ],
+              "trace": [
+                3.899999976158142
+              ],
+              "render-to-layout": [
+                143.5
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 1,
+          "operation": "undo-display-edit",
+          "eventToTwoRafMillis": 177.69999998807907,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                3.399999976158142
+              ],
+              "persist": [
+                2.099999964237213
+              ],
+              "undo": [
+                5.699999988079071
+              ],
+              "routing-projection": [
+                2.400000035762787,
+                3.400000035762787
+              ],
+              "simulation": [
+                82.69999998807907
+              ],
+              "trace": [
+                4.299999952316284
+              ],
+              "render-to-layout": [
+                142.80000001192093
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 1,
+          "operation": "semantic-edit",
+          "eventToTwoRafMillis": 172.10000002384186,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                2.199999988079071
+              ],
+              "history-clone": [
+                2.700000047683716
+              ],
+              "persist": [
+                2.599999964237213
+              ],
+              "editor-submit": [
+                14.100000023841858
+              ],
+              "routing-projection": [
+                2.100000023841858,
+                2
+              ],
+              "simulation": [
+                84.10000002384186
+              ],
+              "trace": [
+                3.699999988079071
+              ],
+              "render-to-layout": [
+                134.19999998807907
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 1,
+          "operation": "undo-semantic-edit",
+          "eventToTwoRafMillis": 141.89999997615814,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                2.099999964237213
+              ],
+              "persist": [
+                2.100000023841858
+              ],
+              "undo": [
+                4.199999988079071
+              ],
+              "routing-projection": [
+                2.100000023841858,
+                1.800000011920929
+              ],
+              "simulation": [
+                76.89999997615814
+              ],
+              "trace": [
+                2.5
+              ],
+              "render-to-layout": [
+                118.79999995231628
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 1,
+          "operation": "trace",
+          "eventToTwoRafMillis": 68.09999996423721,
+          "metrics": {
+            "counts": {
+              "routing-projection": 1,
+              "trace": 1
+            },
+            "durations": {
+              "routing-projection": [
+                1.9000000357627869
+              ],
+              "trace": [
+                2.800000011920929
+              ],
+              "render-to-layout": [
+                42.59999996423721
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 2,
+          "operation": "display-edit",
+          "eventToTwoRafMillis": 176.79999995231628,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                1.7999999523162842
+              ],
+              "history-clone": [
+                2.200000047683716
+              ],
+              "persist": [
+                3.800000011920929
+              ],
+              "editor-submit": [
+                15.800000011920929
+              ],
+              "routing-projection": [
+                3,
+                2
+              ],
+              "simulation": [
+                82.20000004768372
+              ],
+              "trace": [
+                2.5
+              ],
+              "render-to-layout": [
+                136.0999999642372
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 2,
+          "operation": "undo-display-edit",
+          "eventToTwoRafMillis": 153.79999995231628,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                2.199999988079071
+              ],
+              "persist": [
+                2
+              ],
+              "undo": [
+                4.5
+              ],
+              "routing-projection": [
+                2.100000023841858,
+                1.800000011920929
+              ],
+              "simulation": [
+                71
+              ],
+              "trace": [
+                2.799999952316284
+              ],
+              "render-to-layout": [
+                122.30000001192093
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 2,
+          "operation": "semantic-edit",
+          "eventToTwoRafMillis": 139.89999997615814,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                2.599999964237213
+              ],
+              "history-clone": [
+                4.100000023841858
+              ],
+              "persist": [
+                3.699999988079071
+              ],
+              "editor-submit": [
+                17.099999964237213
+              ],
+              "routing-projection": [
+                2.299999952316284,
+                1.9000000357627869
+              ],
+              "simulation": [
+                69.5
+              ],
+              "trace": [
+                2.5
+              ],
+              "render-to-layout": [
+                102.5
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 2,
+          "operation": "undo-semantic-edit",
+          "eventToTwoRafMillis": 146.80000001192093,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                3.300000011920929
+              ],
+              "persist": [
+                2.200000047683716
+              ],
+              "undo": [
+                5.699999988079071
+              ],
+              "routing-projection": [
+                2.100000023841858,
+                1.699999988079071
+              ],
+              "simulation": [
+                75.20000004768372
+              ],
+              "trace": [
+                2.5
+              ],
+              "render-to-layout": [
+                118.80000001192093
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 2,
+          "operation": "trace",
+          "eventToTwoRafMillis": 116.30000001192093,
+          "metrics": {
+            "counts": {
+              "routing-projection": 1,
+              "trace": 1
+            },
+            "durations": {
+              "routing-projection": [
+                2.100000023841858
+              ],
+              "trace": [
+                2.399999976158142
+              ],
+              "render-to-layout": [
+                38
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 3,
+          "operation": "display-edit",
+          "eventToTwoRafMillis": 157.19999998807907,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                1.699999988079071
+              ],
+              "history-clone": [
+                2.199999988079071
+              ],
+              "persist": [
+                3
+              ],
+              "editor-submit": [
+                16.600000023841858
+              ],
+              "routing-projection": [
+                1.800000011920929,
+                1.7000000476837158
+              ],
+              "simulation": [
+                74.09999996423721
+              ],
+              "trace": [
+                3.100000023841858
+              ],
+              "render-to-layout": [
+                119.5
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 3,
+          "operation": "undo-display-edit",
+          "eventToTwoRafMillis": 148.20000004768372,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                2.800000011920929
+              ],
+              "persist": [
+                2.100000023841858
+              ],
+              "undo": [
+                5.200000047683716
+              ],
+              "routing-projection": [
+                2.700000047683716,
+                1.800000011920929
+              ],
+              "simulation": [
+                68.5
+              ],
+              "trace": [
+                2.300000011920929
+              ],
+              "render-to-layout": [
+                118.59999996423721
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 3,
+          "operation": "semantic-edit",
+          "eventToTwoRafMillis": 143.60000002384186,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                2
+              ],
+              "history-clone": [
+                2.699999988079071
+              ],
+              "persist": [
+                2.199999988079071
+              ],
+              "editor-submit": [
+                13.699999988079071
+              ],
+              "routing-projection": [
+                1.899999976158142,
+                1.699999988079071
+              ],
+              "simulation": [
+                66.80000001192093
+              ],
+              "trace": [
+                3.100000023841858
+              ],
+              "render-to-layout": [
+                107.19999998807907
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 3,
+          "operation": "undo-semantic-edit",
+          "eventToTwoRafMillis": 117.30000001192093,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                1.699999988079071
+              ],
+              "persist": [
+                1.5999999642372131
+              ],
+              "undo": [
+                3.399999976158142
+              ],
+              "routing-projection": [
+                2.199999988079071,
+                1.5
+              ],
+              "simulation": [
+                57.299999952316284
+              ],
+              "trace": [
+                3.399999976158142
+              ],
+              "render-to-layout": [
+                93.39999997615814
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 3,
+          "operation": "trace",
+          "eventToTwoRafMillis": 62.69999998807907,
+          "metrics": {
+            "counts": {
+              "routing-projection": 1,
+              "trace": 1
+            },
+            "durations": {
+              "routing-projection": [
+                2.5
+              ],
+              "trace": [
+                2.800000011920929
+              ],
+              "render-to-layout": [
+                38.69999998807907
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 4,
+          "operation": "display-edit",
+          "eventToTwoRafMillis": 172.89999997615814,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                1.899999976158142
+              ],
+              "history-clone": [
+                3.300000011920929
+              ],
+              "persist": [
+                2.699999988079071
+              ],
+              "editor-submit": [
+                14.5
+              ],
+              "routing-projection": [
+                3.900000035762787,
+                1.699999988079071
+              ],
+              "simulation": [
+                73.59999996423721
+              ],
+              "trace": [
+                3.199999988079071
+              ],
+              "render-to-layout": [
+                128.9000000357628
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 4,
+          "operation": "undo-display-edit",
+          "eventToTwoRafMillis": 135,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                2.099999964237213
+              ],
+              "persist": [
+                2
+              ],
+              "undo": [
+                4.199999988079071
+              ],
+              "routing-projection": [
+                2,
+                2.199999988079071
+              ],
+              "simulation": [
+                55.80000001192093
+              ],
+              "trace": [
+                1.9000000357627869
+              ],
+              "render-to-layout": [
+                104.80000001192093
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 4,
+          "operation": "semantic-edit",
+          "eventToTwoRafMillis": 152.30000001192093,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                2.099999964237213
+              ],
+              "history-clone": [
+                2.5
+              ],
+              "persist": [
+                2.5
+              ],
+              "editor-submit": [
+                13.800000011920929
+              ],
+              "routing-projection": [
+                2.5,
+                2.800000011920929
+              ],
+              "simulation": [
+                65.69999998807907
+              ],
+              "trace": [
+                2.799999952316284
+              ],
+              "render-to-layout": [
+                113.09999996423721
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 4,
+          "operation": "undo-semantic-edit",
+          "eventToTwoRafMillis": 147.79999995231628,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                2.100000023841858
+              ],
+              "persist": [
+                1.800000011920929
+              ],
+              "undo": [
+                4.199999988079071
+              ],
+              "routing-projection": [
+                1.800000011920929,
+                2.300000011920929
+              ],
+              "simulation": [
+                74
+              ],
+              "trace": [
+                3
+              ],
+              "render-to-layout": [
+                122.70000004768372
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 4,
+          "operation": "trace",
+          "eventToTwoRafMillis": 61.80000001192093,
+          "metrics": {
+            "counts": {
+              "routing-projection": 1,
+              "trace": 1
+            },
+            "durations": {
+              "routing-projection": [
+                2
+              ],
+              "trace": [
+                2.400000035762787
+              ],
+              "render-to-layout": [
+                36.80000001192093
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 5,
+          "operation": "display-edit",
+          "eventToTwoRafMillis": 150.5,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                2.199999988079071
+              ],
+              "history-clone": [
+                3.900000035762787
+              ],
+              "persist": [
+                3.5
+              ],
+              "editor-submit": [
+                17.80000001192093
+              ],
+              "routing-projection": [
+                1.399999976158142,
+                1.399999976158142
+              ],
+              "simulation": [
+                66.69999998807907
+              ],
+              "trace": [
+                2.5
+              ],
+              "render-to-layout": [
+                117.89999997615814
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 5,
+          "operation": "undo-display-edit",
+          "eventToTwoRafMillis": 124.5,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                1.9000000357627869
+              ],
+              "persist": [
+                1.5
+              ],
+              "undo": [
+                3.400000035762787
+              ],
+              "routing-projection": [
+                2.199999988079071,
+                1.7999999523162842
+              ],
+              "simulation": [
+                60.39999997615814
+              ],
+              "trace": [
+                2.299999952316284
+              ],
+              "render-to-layout": [
+                104.69999998807907
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 5,
+          "operation": "semantic-edit",
+          "eventToTwoRafMillis": 172.10000002384186,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                2.100000023841858
+              ],
+              "history-clone": [
+                2.900000035762787
+              ],
+              "persist": [
+                4
+              ],
+              "editor-submit": [
+                18.100000023841858
+              ],
+              "routing-projection": [
+                3.5,
+                3.199999988079071
+              ],
+              "simulation": [
+                81.39999997615814
+              ],
+              "trace": [
+                3.100000023841858
+              ],
+              "render-to-layout": [
+                130.79999995231628
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 5,
+          "operation": "undo-semantic-edit",
+          "eventToTwoRafMillis": 208.5,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                4.5
+              ],
+              "persist": [
+                3.199999988079071
+              ],
+              "undo": [
+                8
+              ],
+              "routing-projection": [
+                3.600000023841858,
+                2.800000011920929
+              ],
+              "simulation": [
+                107.30000001192093
+              ],
+              "trace": [
+                3.199999988079071
+              ],
+              "render-to-layout": [
+                173.39999997615814
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 5,
+          "operation": "trace",
+          "eventToTwoRafMillis": 65.70000004768372,
+          "metrics": {
+            "counts": {
+              "routing-projection": 1,
+              "trace": 1
+            },
+            "durations": {
+              "routing-projection": [
+                3.5
+              ],
+              "trace": [
+                2.5
+              ],
+              "render-to-layout": [
+                41.89999997615814
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 6,
+          "operation": "display-edit",
+          "eventToTwoRafMillis": 159.5,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                1.800000011920929
+              ],
+              "history-clone": [
+                2.300000011920929
+              ],
+              "persist": [
+                2.599999964237213
+              ],
+              "editor-submit": [
+                14.800000011920929
+              ],
+              "routing-projection": [
+                2,
+                2.799999952316284
+              ],
+              "simulation": [
+                66.30000001192093
+              ],
+              "trace": [
+                2.399999976158142
+              ],
+              "render-to-layout": [
+                117.39999997615814
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 6,
+          "operation": "undo-display-edit",
+          "eventToTwoRafMillis": 131.79999995231628,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                1.899999976158142
+              ],
+              "persist": [
+                1.699999988079071
+              ],
+              "undo": [
+                3.799999952316284
+              ],
+              "routing-projection": [
+                1.699999988079071,
+                1.4000000357627869
+              ],
+              "simulation": [
+                65.60000002384186
+              ],
+              "trace": [
+                2.5
+              ],
+              "render-to-layout": [
+                109.89999997615814
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 6,
+          "operation": "semantic-edit",
+          "eventToTwoRafMillis": 132.5,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                2
+              ],
+              "history-clone": [
+                2.300000011920929
+              ],
+              "persist": [
+                2.5
+              ],
+              "editor-submit": [
+                12.699999988079071
+              ],
+              "routing-projection": [
+                1.300000011920929,
+                1.5
+              ],
+              "simulation": [
+                60
+              ],
+              "trace": [
+                2.300000011920929
+              ],
+              "render-to-layout": [
+                96.60000002384186
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 6,
+          "operation": "undo-semantic-edit",
+          "eventToTwoRafMillis": 134,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                2.100000023841858
+              ],
+              "persist": [
+                2.100000023841858
+              ],
+              "undo": [
+                4.300000011920929
+              ],
+              "routing-projection": [
+                4.5,
+                1.5999999642372131
+              ],
+              "simulation": [
+                66.90000003576279
+              ],
+              "trace": [
+                2.199999988079071
+              ],
+              "render-to-layout": [
+                110.69999998807907
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 6,
+          "operation": "trace",
+          "eventToTwoRafMillis": 67.59999996423721,
+          "metrics": {
+            "counts": {
+              "routing-projection": 1,
+              "trace": 1
+            },
+            "durations": {
+              "routing-projection": [
+                2.300000011920929
+              ],
+              "trace": [
+                2.400000035762787
+              ],
+              "render-to-layout": [
+                44.69999998807907
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 7,
+          "operation": "display-edit",
+          "eventToTwoRafMillis": 176.0999999642372,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                2.300000011920929
+              ],
+              "history-clone": [
+                2.5
+              ],
+              "persist": [
+                2.800000011920929
+              ],
+              "editor-submit": [
+                15.100000023841858
+              ],
+              "routing-projection": [
+                1.9000000357627869,
+                1.899999976158142
+              ],
+              "simulation": [
+                74.69999998807907
+              ],
+              "trace": [
+                3.699999988079071
+              ],
+              "render-to-layout": [
+                135.19999998807907
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 7,
+          "operation": "undo-display-edit",
+          "eventToTwoRafMillis": 113.60000002384186,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                2.100000023841858
+              ],
+              "persist": [
+                1.7000000476837158
+              ],
+              "undo": [
+                3.900000035762787
+              ],
+              "routing-projection": [
+                1.5,
+                2
+              ],
+              "simulation": [
+                55
+              ],
+              "trace": [
+                1.800000011920929
+              ],
+              "render-to-layout": [
+                92.60000002384186
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 7,
+          "operation": "semantic-edit",
+          "eventToTwoRafMillis": 133.19999998807907,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                3
+              ],
+              "history-clone": [
+                3.5
+              ],
+              "persist": [
+                2.699999988079071
+              ],
+              "editor-submit": [
+                16
+              ],
+              "routing-projection": [
+                1.600000023841858,
+                1.5
+              ],
+              "simulation": [
+                61
+              ],
+              "trace": [
+                2.100000023841858
+              ],
+              "render-to-layout": [
+                98.09999996423721
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 7,
+          "operation": "undo-semantic-edit",
+          "eventToTwoRafMillis": 125.69999998807907,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                2.599999964237213
+              ],
+              "persist": [
+                2.600000023841858
+              ],
+              "undo": [
+                5.300000011920929
+              ],
+              "routing-projection": [
+                2.400000035762787,
+                1.699999988079071
+              ],
+              "simulation": [
+                63
+              ],
+              "trace": [
+                1.899999976158142
+              ],
+              "render-to-layout": [
+                102.19999998807907
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 7,
+          "operation": "trace",
+          "eventToTwoRafMillis": 59.299999952316284,
+          "metrics": {
+            "counts": {
+              "routing-projection": 1,
+              "trace": 1
+            },
+            "durations": {
+              "routing-projection": [
+                1.699999988079071
+              ],
+              "trace": [
+                2.799999952316284
+              ],
+              "render-to-layout": [
+                37.200000047683716
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 8,
+          "operation": "display-edit",
+          "eventToTwoRafMillis": 182.39999997615814,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                2.5
+              ],
+              "history-clone": [
+                4
+              ],
+              "persist": [
+                4.5
+              ],
+              "editor-submit": [
+                23.400000035762787
+              ],
+              "routing-projection": [
+                3,
+                1.800000011920929
+              ],
+              "simulation": [
+                74.5
+              ],
+              "trace": [
+                2.400000035762787
+              ],
+              "render-to-layout": [
+                131.4000000357628
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 8,
+          "operation": "undo-display-edit",
+          "eventToTwoRafMillis": 134.39999997615814,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                2.699999988079071
+              ],
+              "persist": [
+                2.800000011920929
+              ],
+              "undo": [
+                5.699999988079071
+              ],
+              "routing-projection": [
+                2.600000023841858,
+                2.5
+              ],
+              "simulation": [
+                63.5
+              ],
+              "trace": [
+                2.5
+              ],
+              "render-to-layout": [
+                111.30000001192093
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 8,
+          "operation": "semantic-edit",
+          "eventToTwoRafMillis": 127.20000004768372,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                1.5
+              ],
+              "history-clone": [
+                1.600000023841858
+              ],
+              "persist": [
+                1.5999999642372131
+              ],
+              "editor-submit": [
+                8.5
+              ],
+              "routing-projection": [
+                1,
+                1.699999988079071
+              ],
+              "simulation": [
+                60
+              ],
+              "trace": [
+                2.700000047683716
+              ],
+              "render-to-layout": [
+                101.5
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 8,
+          "operation": "undo-semantic-edit",
+          "eventToTwoRafMillis": 195.89999997615814,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                2.900000035762787
+              ],
+              "persist": [
+                3
+              ],
+              "undo": [
+                6.100000023841858
+              ],
+              "routing-projection": [
+                2.399999976158142,
+                2.399999976158142
+              ],
+              "simulation": [
+                96.79999995231628
+              ],
+              "trace": [
+                3.5
+              ],
+              "render-to-layout": [
+                160.70000004768372
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 8,
+          "operation": "trace",
+          "eventToTwoRafMillis": 230.5999999642372,
+          "metrics": {
+            "counts": {
+              "routing-projection": 1,
+              "trace": 1
+            },
+            "durations": {
+              "routing-projection": [
+                3.800000011920929
+              ],
+              "trace": [
+                4.5
+              ],
+              "render-to-layout": [
+                62
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 9,
+          "operation": "display-edit",
+          "eventToTwoRafMillis": 204.4000000357628,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                1.5
+              ],
+              "history-clone": [
+                3
+              ],
+              "persist": [
+                4.099999964237213
+              ],
+              "editor-submit": [
+                20.399999976158142
+              ],
+              "routing-projection": [
+                3.899999976158142,
+                2.399999976158142
+              ],
+              "simulation": [
+                107
+              ],
+              "trace": [
+                3.699999988079071
+              ],
+              "render-to-layout": [
+                165.0999999642372
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 9,
+          "operation": "undo-display-edit",
+          "eventToTwoRafMillis": 151.69999998807907,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                2.800000011920929
+              ],
+              "persist": [
+                3.300000011920929
+              ],
+              "undo": [
+                6.199999988079071
+              ],
+              "routing-projection": [
+                2.400000035762787,
+                1.899999976158142
+              ],
+              "simulation": [
+                88.69999998807907
+              ],
+              "trace": [
+                3.300000011920929
+              ],
+              "render-to-layout": [
+                131.5999999642372
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 9,
+          "operation": "semantic-edit",
+          "eventToTwoRafMillis": 106.59999996423721,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                1.199999988079071
+              ],
+              "history-clone": [
+                1.5999999642372131
+              ],
+              "persist": [
+                2.200000047683716
+              ],
+              "editor-submit": [
+                9.400000035762787
+              ],
+              "routing-projection": [
+                1.399999976158142,
+                1.5999999642372131
+              ],
+              "simulation": [
+                53.19999998807907
+              ],
+              "trace": [
+                1.600000023841858
+              ],
+              "render-to-layout": [
+                85
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 9,
+          "operation": "undo-semantic-edit",
+          "eventToTwoRafMillis": 95.19999998807907,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                2.199999988079071
+              ],
+              "persist": [
+                3.300000011920929
+              ],
+              "undo": [
+                5.5
+              ],
+              "routing-projection": [
+                1.5999999642372131,
+                1.899999976158142
+              ],
+              "simulation": [
+                52.89999997615814
+              ],
+              "trace": [
+                2.200000047683716
+              ],
+              "render-to-layout": [
+                79.19999998807907
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 9,
+          "operation": "trace",
+          "eventToTwoRafMillis": 54.39999997615814,
+          "metrics": {
+            "counts": {
+              "routing-projection": 1,
+              "trace": 1
+            },
+            "durations": {
+              "routing-projection": [
+                1.5
+              ],
+              "trace": [
+                2.100000023841858
+              ],
+              "render-to-layout": [
+                34.30000001192093
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 10,
+          "operation": "display-edit",
+          "eventToTwoRafMillis": 226,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                1.699999988079071
+              ],
+              "history-clone": [
+                2.199999988079071
+              ],
+              "persist": [
+                2.800000011920929
+              ],
+              "editor-submit": [
+                17
+              ],
+              "routing-projection": [
+                4.199999988079071,
+                3.199999988079071
+              ],
+              "simulation": [
+                113.60000002384186
+              ],
+              "trace": [
+                4.599999964237213
+              ],
+              "render-to-layout": [
+                183.4000000357628
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 10,
+          "operation": "undo-display-edit",
+          "eventToTwoRafMillis": 213,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                3
+              ],
+              "persist": [
+                3.200000047683716
+              ],
+              "undo": [
+                6.399999976158142
+              ],
+              "routing-projection": [
+                3.100000023841858,
+                2.699999988079071
+              ],
+              "simulation": [
+                101.20000004768372
+              ],
+              "trace": [
+                4.099999964237213
+              ],
+              "render-to-layout": [
+                174.39999997615814
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 10,
+          "operation": "semantic-edit",
+          "eventToTwoRafMillis": 205,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                2.600000023841858
+              ],
+              "history-clone": [
+                3.599999964237213
+              ],
+              "persist": [
+                3.399999976158142
+              ],
+              "editor-submit": [
+                18.5
+              ],
+              "routing-projection": [
+                2.400000035762787,
+                2.699999988079071
+              ],
+              "simulation": [
+                94.40000003576279
+              ],
+              "trace": [
+                3.199999988079071
+              ],
+              "render-to-layout": [
+                151.30000001192093
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 10,
+          "operation": "undo-semantic-edit",
+          "eventToTwoRafMillis": 180.39999997615814,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                1.4000000357627869
+              ],
+              "persist": [
+                1.9000000357627869
+              ],
+              "undo": [
+                3.5
+              ],
+              "routing-projection": [
+                2.699999988079071,
+                1.399999976158142
+              ],
+              "simulation": [
+                83.5
+              ],
+              "trace": [
+                4.300000011920929
+              ],
+              "render-to-layout": [
+                146.5
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 10,
+          "operation": "trace",
+          "eventToTwoRafMillis": 146.19999998807907,
+          "metrics": {
+            "counts": {
+              "routing-projection": 1,
+              "trace": 1
+            },
+            "durations": {
+              "routing-projection": [
+                2.5
+              ],
+              "trace": [
+                2.099999964237213
+              ],
+              "render-to-layout": [
+                51.19999998807907
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 11,
+          "operation": "display-edit",
+          "eventToTwoRafMillis": 190.9000000357628,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                3.200000047683716
+              ],
+              "history-clone": [
+                4.199999988079071
+              ],
+              "persist": [
+                5.099999964237213
+              ],
+              "editor-submit": [
+                22.19999998807907
+              ],
+              "routing-projection": [
+                2.899999976158142,
+                2.599999964237213
+              ],
+              "simulation": [
+                84.69999998807907
+              ],
+              "trace": [
+                4.100000023841858
+              ],
+              "render-to-layout": [
+                145.80000001192093
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 11,
+          "operation": "undo-display-edit",
+          "eventToTwoRafMillis": 150.5,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                1.300000011920929
+              ],
+              "persist": [
+                1.5999999642372131
+              ],
+              "undo": [
+                3
+              ],
+              "routing-projection": [
+                1.0999999642372131,
+                1.199999988079071
+              ],
+              "simulation": [
+                70
+              ],
+              "trace": [
+                1.7000000476837158
+              ],
+              "render-to-layout": [
+                117.39999997615814
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 11,
+          "operation": "semantic-edit",
+          "eventToTwoRafMillis": 134.9000000357628,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                2.400000035762787
+              ],
+              "history-clone": [
+                3.299999952316284
+              ],
+              "persist": [
+                2.5
+              ],
+              "editor-submit": [
+                15.600000023841858
+              ],
+              "routing-projection": [
+                1.800000011920929,
+                1.699999988079071
+              ],
+              "simulation": [
+                67.5
+              ],
+              "trace": [
+                2.600000023841858
+              ],
+              "render-to-layout": [
+                100.10000002384186
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 11,
+          "operation": "undo-semantic-edit",
+          "eventToTwoRafMillis": 138.80000001192093,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                1.4000000357627869
+              ],
+              "persist": [
+                1.9000000357627869
+              ],
+              "undo": [
+                3.400000035762787
+              ],
+              "routing-projection": [
+                1.199999988079071,
+                1.199999988079071
+              ],
+              "simulation": [
+                72.69999998807907
+              ],
+              "trace": [
+                3.200000047683716
+              ],
+              "render-to-layout": [
+                114.69999998807907
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 11,
+          "operation": "trace",
+          "eventToTwoRafMillis": 69.29999995231628,
+          "metrics": {
+            "counts": {
+              "routing-projection": 1,
+              "trace": 1
+            },
+            "durations": {
+              "routing-projection": [
+                2.299999952316284
+              ],
+              "trace": [
+                3.5
+              ],
+              "render-to-layout": [
+                32.69999998807907
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 12,
+          "operation": "display-edit",
+          "eventToTwoRafMillis": 171.39999997615814,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                1.7000000476837158
+              ],
+              "history-clone": [
+                3.199999988079071
+              ],
+              "persist": [
+                4.200000047683716
+              ],
+              "editor-submit": [
+                19.099999964237213
+              ],
+              "routing-projection": [
+                2.900000035762787,
+                2.800000011920929
+              ],
+              "simulation": [
+                83.80000001192093
+              ],
+              "trace": [
+                2.699999988079071
+              ],
+              "render-to-layout": [
+                133.69999998807907
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 12,
+          "operation": "undo-display-edit",
+          "eventToTwoRafMillis": 142.70000004768372,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                1.600000023841858
+              ],
+              "persist": [
+                2
+              ],
+              "undo": [
+                3.600000023841858
+              ],
+              "routing-projection": [
+                1.600000023841858,
+                1.399999976158142
+              ],
+              "simulation": [
+                75.5
+              ],
+              "trace": [
+                3
+              ],
+              "render-to-layout": [
+                121.09999996423721
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 12,
+          "operation": "semantic-edit",
+          "eventToTwoRafMillis": 130.30000001192093,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                1.899999976158142
+              ],
+              "history-clone": [
+                2.399999976158142
+              ],
+              "persist": [
+                2.899999976158142
+              ],
+              "editor-submit": [
+                14.5
+              ],
+              "routing-projection": [
+                2.299999952316284,
+                4.699999988079071
+              ],
+              "simulation": [
+                64.5
+              ],
+              "trace": [
+                1.899999976158142
+              ],
+              "render-to-layout": [
+                96.89999997615814
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 12,
+          "operation": "undo-semantic-edit",
+          "eventToTwoRafMillis": 103.39999997615814,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                1.899999976158142
+              ],
+              "persist": [
+                1.800000011920929
+              ],
+              "undo": [
+                3.899999976158142
+              ],
+              "routing-projection": [
+                1.399999976158142,
+                1.199999988079071
+              ],
+              "simulation": [
+                53
+              ],
+              "trace": [
+                2.099999964237213
+              ],
+              "render-to-layout": [
+                85.19999998807907
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 12,
+          "operation": "trace",
+          "eventToTwoRafMillis": 120.30000001192093,
+          "metrics": {
+            "counts": {
+              "routing-projection": 1,
+              "trace": 1
+            },
+            "durations": {
+              "routing-projection": [
+                5.099999964237213
+              ],
+              "trace": [
+                3.399999976158142
+              ],
+              "render-to-layout": [
+                42.5
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 13,
+          "operation": "display-edit",
+          "eventToTwoRafMillis": 124.79999995231628,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                1.5
+              ],
+              "history-clone": [
+                1.699999988079071
+              ],
+              "persist": [
+                3.200000047683716
+              ],
+              "editor-submit": [
+                11.899999976158142
+              ],
+              "routing-projection": [
+                1.2000000476837158,
+                1.4000000357627869
+              ],
+              "simulation": [
+                60.30000001192093
+              ],
+              "trace": [
+                2.600000023841858
+              ],
+              "render-to-layout": [
+                96.19999998807907
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 13,
+          "operation": "undo-display-edit",
+          "eventToTwoRafMillis": 128.5,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                3.400000035762787
+              ],
+              "persist": [
+                1.800000011920929
+              ],
+              "undo": [
+                5.300000011920929
+              ],
+              "routing-projection": [
+                2.5,
+                2.199999988079071
+              ],
+              "simulation": [
+                62.89999997615814
+              ],
+              "trace": [
+                2.900000035762787
+              ],
+              "render-to-layout": [
+                108.30000001192093
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 13,
+          "operation": "semantic-edit",
+          "eventToTwoRafMillis": 128.30000001192093,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                2.099999964237213
+              ],
+              "history-clone": [
+                2.5
+              ],
+              "persist": [
+                4.5
+              ],
+              "editor-submit": [
+                14.699999988079071
+              ],
+              "routing-projection": [
+                1.800000011920929,
+                1.7999999523162842
+              ],
+              "simulation": [
+                66.60000002384186
+              ],
+              "trace": [
+                2.099999964237213
+              ],
+              "render-to-layout": [
+                98.39999997615814
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 13,
+          "operation": "undo-semantic-edit",
+          "eventToTwoRafMillis": 104.30000001192093,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                1.5
+              ],
+              "persist": [
+                1.899999976158142
+              ],
+              "undo": [
+                3.399999976158142
+              ],
+              "routing-projection": [
+                1.5,
+                1.300000011920929
+              ],
+              "simulation": [
+                58.700000047683716
+              ],
+              "trace": [
+                2
+              ],
+              "render-to-layout": [
+                86.30000001192093
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 13,
+          "operation": "trace",
+          "eventToTwoRafMillis": 57.09999996423721,
+          "metrics": {
+            "counts": {
+              "routing-projection": 1,
+              "trace": 1
+            },
+            "durations": {
+              "routing-projection": [
+                2
+              ],
+              "trace": [
+                2.300000011920929
+              ],
+              "render-to-layout": [
+                37.60000002384186
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 14,
+          "operation": "display-edit",
+          "eventToTwoRafMillis": 120.89999997615814,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                1.5
+              ],
+              "history-clone": [
+                1.800000011920929
+              ],
+              "persist": [
+                2.599999964237213
+              ],
+              "editor-submit": [
+                12.199999988079071
+              ],
+              "routing-projection": [
+                3.300000011920929,
+                1.5
+              ],
+              "simulation": [
+                51.10000002384186
+              ],
+              "trace": [
+                6.199999988079071
+              ],
+              "render-to-layout": [
+                94.30000001192093
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 14,
+          "operation": "undo-display-edit",
+          "eventToTwoRafMillis": 72.39999997615814,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                1.5999999642372131
+              ],
+              "persist": [
+                1.399999976158142
+              ],
+              "undo": [
+                3.099999964237213
+              ],
+              "routing-projection": [
+                0.8999999761581421,
+                1.100000023841858
+              ],
+              "simulation": [
+                36.19999998807907
+              ],
+              "trace": [
+                1.699999988079071
+              ],
+              "render-to-layout": [
+                60.39999997615814
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 14,
+          "operation": "semantic-edit",
+          "eventToTwoRafMillis": 95.60000002384186,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                1.5
+              ],
+              "history-clone": [
+                1.699999988079071
+              ],
+              "persist": [
+                2.800000011920929
+              ],
+              "editor-submit": [
+                10
+              ],
+              "routing-projection": [
+                1.2000000476837158,
+                1.5
+              ],
+              "simulation": [
+                46.60000002384186
+              ],
+              "trace": [
+                2.100000023841858
+              ],
+              "render-to-layout": [
+                72.19999998807907
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 14,
+          "operation": "undo-semantic-edit",
+          "eventToTwoRafMillis": 92.89999997615814,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                1.5999999642372131
+              ],
+              "persist": [
+                1.7999999523162842
+              ],
+              "undo": [
+                3.699999988079071
+              ],
+              "routing-projection": [
+                1.5,
+                1.199999988079071
+              ],
+              "simulation": [
+                47.39999997615814
+              ],
+              "trace": [
+                1.800000011920929
+              ],
+              "render-to-layout": [
+                78
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 14,
+          "operation": "trace",
+          "eventToTwoRafMillis": 41.69999998807907,
+          "metrics": {
+            "counts": {
+              "routing-projection": 1,
+              "trace": 1
+            },
+            "durations": {
+              "routing-projection": [
+                1.600000023841858
+              ],
+              "trace": [
+                2
+              ],
+              "render-to-layout": [
+                26.599999964237213
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 15,
+          "operation": "display-edit",
+          "eventToTwoRafMillis": 174.80000001192093,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                2.199999988079071
+              ],
+              "history-clone": [
+                2.899999976158142
+              ],
+              "persist": [
+                3
+              ],
+              "editor-submit": [
+                16
+              ],
+              "routing-projection": [
+                2.5,
+                2.899999976158142
+              ],
+              "simulation": [
+                75
+              ],
+              "trace": [
+                3.600000023841858
+              ],
+              "render-to-layout": [
+                132.69999998807907
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 15,
+          "operation": "undo-display-edit",
+          "eventToTwoRafMillis": 115,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                3
+              ],
+              "persist": [
+                2.099999964237213
+              ],
+              "undo": [
+                5.300000011920929
+              ],
+              "routing-projection": [
+                2.600000023841858,
+                1.5
+              ],
+              "simulation": [
+                56.59999996423721
+              ],
+              "trace": [
+                1.899999976158142
+              ],
+              "render-to-layout": [
+                91.89999997615814
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 15,
+          "operation": "semantic-edit",
+          "eventToTwoRafMillis": 84.5,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                1.100000023841858
+              ],
+              "history-clone": [
+                1.199999988079071
+              ],
+              "persist": [
+                2
+              ],
+              "editor-submit": [
+                8.799999952316284
+              ],
+              "routing-projection": [
+                1.100000023841858,
+                1.100000023841858
+              ],
+              "simulation": [
+                43.90000003576279
+              ],
+              "trace": [
+                1.399999976158142
+              ],
+              "render-to-layout": [
+                66
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 15,
+          "operation": "undo-semantic-edit",
+          "eventToTwoRafMillis": 81.70000004768372,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                1.5
+              ],
+              "persist": [
+                1.399999976158142
+              ],
+              "undo": [
+                3.100000023841858
+              ],
+              "routing-projection": [
+                1.199999988079071,
+                1.300000011920929
+              ],
+              "simulation": [
+                44.5
+              ],
+              "trace": [
+                1.5999999642372131
+              ],
+              "render-to-layout": [
+                68.59999996423721
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 15,
+          "operation": "trace",
+          "eventToTwoRafMillis": 40.40000003576279,
+          "metrics": {
+            "counts": {
+              "routing-projection": 1,
+              "trace": 1
+            },
+            "durations": {
+              "routing-projection": [
+                1.5999999642372131
+              ],
+              "trace": [
+                2
+              ],
+              "render-to-layout": [
+                25.5
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 16,
+          "operation": "display-edit",
+          "eventToTwoRafMillis": 141.9000000357628,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                1.300000011920929
+              ],
+              "history-clone": [
+                1.5999999642372131
+              ],
+              "persist": [
+                3
+              ],
+              "editor-submit": [
+                11
+              ],
+              "routing-projection": [
+                1.5,
+                1.300000011920929
+              ],
+              "simulation": [
+                57.19999998807907
+              ],
+              "trace": [
+                3
+              ],
+              "render-to-layout": [
+                109.19999998807907
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 16,
+          "operation": "undo-display-edit",
+          "eventToTwoRafMillis": 141.4000000357628,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                1.699999988079071
+              ],
+              "persist": [
+                2.100000023841858
+              ],
+              "undo": [
+                4
+              ],
+              "routing-projection": [
+                2.699999988079071,
+                1.5
+              ],
+              "simulation": [
+                76.20000004768372
+              ],
+              "trace": [
+                2.5
+              ],
+              "render-to-layout": [
+                116.79999995231628
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 16,
+          "operation": "semantic-edit",
+          "eventToTwoRafMillis": 165.30000001192093,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                2.699999988079071
+              ],
+              "history-clone": [
+                2.399999976158142
+              ],
+              "persist": [
+                3.599999964237213
+              ],
+              "editor-submit": [
+                19.899999976158142
+              ],
+              "routing-projection": [
+                3.400000035762787,
+                3
+              ],
+              "simulation": [
+                83.19999998807907
+              ],
+              "trace": [
+                3.699999988079071
+              ],
+              "render-to-layout": [
+                122.60000002384186
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 16,
+          "operation": "undo-semantic-edit",
+          "eventToTwoRafMillis": 167.30000001192093,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                3.5
+              ],
+              "persist": [
+                3.100000023841858
+              ],
+              "undo": [
+                6.800000011920929
+              ],
+              "routing-projection": [
+                4,
+                1.9000000357627869
+              ],
+              "simulation": [
+                85.30000001192093
+              ],
+              "trace": [
+                3.599999964237213
+              ],
+              "render-to-layout": [
+                138.5
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 16,
+          "operation": "trace",
+          "eventToTwoRafMillis": 80.19999998807907,
+          "metrics": {
+            "counts": {
+              "routing-projection": 1,
+              "trace": 1
+            },
+            "durations": {
+              "routing-projection": [
+                3.100000023841858
+              ],
+              "trace": [
+                3.599999964237213
+              ],
+              "render-to-layout": [
+                51.69999998807907
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 17,
+          "operation": "display-edit",
+          "eventToTwoRafMillis": 151,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                1.2999999523162842
+              ],
+              "history-clone": [
+                1.800000011920929
+              ],
+              "persist": [
+                3.099999964237213
+              ],
+              "editor-submit": [
+                12.599999964237213
+              ],
+              "routing-projection": [
+                3,
+                2.800000011920929
+              ],
+              "simulation": [
+                72.09999996423721
+              ],
+              "trace": [
+                2
+              ],
+              "render-to-layout": [
+                116.69999998807907
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 17,
+          "operation": "undo-display-edit",
+          "eventToTwoRafMillis": 148.80000001192093,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                3.300000011920929
+              ],
+              "persist": [
+                2.399999976158142
+              ],
+              "undo": [
+                5.800000011920929
+              ],
+              "routing-projection": [
+                2.300000011920929,
+                1.800000011920929
+              ],
+              "simulation": [
+                70.89999997615814
+              ],
+              "trace": [
+                3.099999964237213
+              ],
+              "render-to-layout": [
+                122.89999997615814
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 17,
+          "operation": "semantic-edit",
+          "eventToTwoRafMillis": 121.69999998807907,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                1.5
+              ],
+              "history-clone": [
+                2.199999988079071
+              ],
+              "persist": [
+                2.200000047683716
+              ],
+              "editor-submit": [
+                11.899999976158142
+              ],
+              "routing-projection": [
+                1.5,
+                1.600000023841858
+              ],
+              "simulation": [
+                65.79999995231628
+              ],
+              "trace": [
+                1.899999976158142
+              ],
+              "render-to-layout": [
+                94.30000001192093
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 17,
+          "operation": "undo-semantic-edit",
+          "eventToTwoRafMillis": 84.40000003576279,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                1.4000000357627869
+              ],
+              "persist": [
+                1.800000011920929
+              ],
+              "undo": [
+                3.300000011920929
+              ],
+              "routing-projection": [
+                1.300000011920929,
+                1.2999999523162842
+              ],
+              "simulation": [
+                46.10000002384186
+              ],
+              "trace": [
+                1.7999999523162842
+              ],
+              "render-to-layout": [
+                69.80000001192093
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 17,
+          "operation": "trace",
+          "eventToTwoRafMillis": 41.10000002384186,
+          "metrics": {
+            "counts": {
+              "routing-projection": 1,
+              "trace": 1
+            },
+            "durations": {
+              "routing-projection": [
+                1.600000023841858
+              ],
+              "trace": [
+                3.600000023841858
+              ],
+              "render-to-layout": [
+                27.400000035762787
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 18,
+          "operation": "display-edit",
+          "eventToTwoRafMillis": 160.19999998807907,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                2
+              ],
+              "history-clone": [
+                2
+              ],
+              "persist": [
+                2.300000011920929
+              ],
+              "editor-submit": [
+                13.899999976158142
+              ],
+              "routing-projection": [
+                1.399999976158142,
+                2.300000011920929
+              ],
+              "simulation": [
+                78.30000001192093
+              ],
+              "trace": [
+                2.699999988079071
+              ],
+              "render-to-layout": [
+                126.60000002384186
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 18,
+          "operation": "undo-display-edit",
+          "eventToTwoRafMillis": 103,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                1.9000000357627869
+              ],
+              "persist": [
+                2.100000023841858
+              ],
+              "undo": [
+                4.199999988079071
+              ],
+              "routing-projection": [
+                1.399999976158142,
+                1.399999976158142
+              ],
+              "simulation": [
+                52.89999997615814
+              ],
+              "trace": [
+                1.9000000357627869
+              ],
+              "render-to-layout": [
+                83.60000002384186
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 18,
+          "operation": "semantic-edit",
+          "eventToTwoRafMillis": 144,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                1.600000023841858
+              ],
+              "history-clone": [
+                2
+              ],
+              "persist": [
+                3.799999952316284
+              ],
+              "editor-submit": [
+                16.299999952316284
+              ],
+              "routing-projection": [
+                1.899999976158142,
+                1.5
+              ],
+              "simulation": [
+                72.30000001192093
+              ],
+              "trace": [
+                2.399999976158142
+              ],
+              "render-to-layout": [
+                108.89999997615814
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 18,
+          "operation": "undo-semantic-edit",
+          "eventToTwoRafMillis": 116.10000002384186,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                1.9000000357627869
+              ],
+              "persist": [
+                2.100000023841858
+              ],
+              "undo": [
+                4.200000047683716
+              ],
+              "routing-projection": [
+                2.600000023841858,
+                2.300000011920929
+              ],
+              "simulation": [
+                63.89999997615814
+              ],
+              "trace": [
+                1.899999976158142
+              ],
+              "render-to-layout": [
+                97.10000002384186
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 18,
+          "operation": "trace",
+          "eventToTwoRafMillis": 47.30000001192093,
+          "metrics": {
+            "counts": {
+              "routing-projection": 1,
+              "trace": 1
+            },
+            "durations": {
+              "routing-projection": [
+                1.4000000357627869
+              ],
+              "trace": [
+                2.5
+              ],
+              "render-to-layout": [
+                29.5
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 19,
+          "operation": "display-edit",
+          "eventToTwoRafMillis": 136.89999997615814,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                1.399999976158142
+              ],
+              "history-clone": [
+                1.9000000357627869
+              ],
+              "persist": [
+                2.699999988079071
+              ],
+              "editor-submit": [
+                12.300000011920929
+              ],
+              "routing-projection": [
+                3.199999988079071,
+                1.399999976158142
+              ],
+              "simulation": [
+                58.5
+              ],
+              "trace": [
+                2.599999964237213
+              ],
+              "render-to-layout": [
+                106.09999996423721
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 19,
+          "operation": "undo-display-edit",
+          "eventToTwoRafMillis": 123.90000003576279,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                2
+              ],
+              "persist": [
+                2
+              ],
+              "undo": [
+                4.100000023841858
+              ],
+              "routing-projection": [
+                2.599999964237213,
+                1.600000023841858
+              ],
+              "simulation": [
+                64.09999996423721
+              ],
+              "trace": [
+                2
+              ],
+              "render-to-layout": [
+                101.79999995231628
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 19,
+          "operation": "semantic-edit",
+          "eventToTwoRafMillis": 138.9000000357628,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                3.899999976158142
+              ],
+              "history-clone": [
+                4.300000011920929
+              ],
+              "persist": [
+                4.5
+              ],
+              "editor-submit": [
+                19.30000001192093
+              ],
+              "routing-projection": [
+                3.300000011920929,
+                3.400000035762787
+              ],
+              "simulation": [
+                63.39999997615814
+              ],
+              "trace": [
+                2.899999976158142
+              ],
+              "render-to-layout": [
+                104.19999998807907
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 19,
+          "operation": "undo-semantic-edit",
+          "eventToTwoRafMillis": 109.60000002384186,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                2.599999964237213
+              ],
+              "persist": [
+                2.800000011920929
+              ],
+              "undo": [
+                5.5
+              ],
+              "routing-projection": [
+                2.399999976158142,
+                2.300000011920929
+              ],
+              "simulation": [
+                56.10000002384186
+              ],
+              "trace": [
+                1.9000000357627869
+              ],
+              "render-to-layout": [
+                89.30000001192093
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 19,
+          "operation": "trace",
+          "eventToTwoRafMillis": 39.19999998807907,
+          "metrics": {
+            "counts": {
+              "routing-projection": 1,
+              "trace": 1
+            },
+            "durations": {
+              "routing-projection": [
+                1.5
+              ],
+              "trace": [
+                2
+              ],
+              "render-to-layout": [
+                24.30000001192093
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 20,
+          "operation": "display-edit",
+          "eventToTwoRafMillis": 127,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                1.699999988079071
+              ],
+              "history-clone": [
+                1.800000011920929
+              ],
+              "persist": [
+                3
+              ],
+              "editor-submit": [
+                13.699999988079071
+              ],
+              "routing-projection": [
+                1.800000011920929,
+                1.399999976158142
+              ],
+              "simulation": [
+                56
+              ],
+              "trace": [
+                2.100000023841858
+              ],
+              "render-to-layout": [
+                97.5
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 20,
+          "operation": "undo-display-edit",
+          "eventToTwoRafMillis": 110,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                1.5
+              ],
+              "persist": [
+                2.399999976158142
+              ],
+              "undo": [
+                4
+              ],
+              "routing-projection": [
+                4.400000035762787,
+                1.5
+              ],
+              "simulation": [
+                52.89999997615814
+              ],
+              "trace": [
+                2.299999952316284
+              ],
+              "render-to-layout": [
+                89.69999998807907
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 20,
+          "operation": "semantic-edit",
+          "eventToTwoRafMillis": 93,
+          "metrics": {
+            "counts": {
+              "history-compare": 1,
+              "history-clone": 1,
+              "persist": 1,
+              "editor-submit": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-compare": [
+                1.300000011920929
+              ],
+              "history-clone": [
+                1.5999999642372131
+              ],
+              "persist": [
+                2.600000023841858
+              ],
+              "editor-submit": [
+                10.399999976158142
+              ],
+              "routing-projection": [
+                1.2999999523162842,
+                1.4000000357627869
+              ],
+              "simulation": [
+                47.19999998807907
+              ],
+              "trace": [
+                1.699999988079071
+              ],
+              "render-to-layout": [
+                71.5
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 20,
+          "operation": "undo-semantic-edit",
+          "eventToTwoRafMillis": 76.90000003576279,
+          "metrics": {
+            "counts": {
+              "history-clone": 1,
+              "persist": 1,
+              "undo": 1,
+              "routing-projection": 2,
+              "simulation": 1,
+              "trace": 1
+            },
+            "durations": {
+              "history-clone": [
+                1.699999988079071
+              ],
+              "persist": [
+                1.5
+              ],
+              "undo": [
+                3.300000011920929
+              ],
+              "routing-projection": [
+                1.300000011920929,
+                1.0999999642372131
+              ],
+              "simulation": [
+                41
+              ],
+              "trace": [
+                1.5
+              ],
+              "render-to-layout": [
+                63.19999998807907
+              ]
+            }
+          }
+        },
+        {
+          "iteration": 20,
+          "operation": "trace",
+          "eventToTwoRafMillis": 35.39999997615814,
+          "metrics": {
+            "counts": {
+              "routing-projection": 1,
+              "trace": 1
+            },
+            "durations": {
+              "routing-projection": [
+                1.199999988079071
+              ],
+              "trace": [
+                1.699999988079071
+              ],
+              "render-to-layout": [
+                20.69999998807907
+              ]
+            }
+          }
+        }
+      ],
+      "operations": {
+        "display-edit": {
+          "eventToTwoRafMillis": {
+            "samples": 20,
+            "min": 120.89999997615814,
+            "median": 160.19999998807907,
+            "p95": 204.4000000357628,
+            "max": 226
+          },
+          "phases": {
+            "history-compare": {
+              "samples": 20,
+              "min": 1.2999999523162842,
+              "median": 1.699999988079071,
+              "p95": 2.5,
+              "max": 3.200000047683716
+            },
+            "history-clone": {
+              "samples": 20,
+              "min": 1.5999999642372131,
+              "median": 2.200000047683716,
+              "p95": 4,
+              "max": 4.199999988079071
+            },
+            "persist": {
+              "samples": 20,
+              "min": 2.300000011920929,
+              "median": 3,
+              "p95": 5.099999964237213,
+              "max": 5.099999964237213
+            },
+            "editor-submit": {
+              "samples": 20,
+              "min": 11,
+              "median": 15.100000023841858,
+              "p95": 22.19999998807907,
+              "max": 23.400000035762787
+            },
+            "routing-projection": {
+              "samples": 40,
+              "min": 1.2000000476837158,
+              "median": 2,
+              "p95": 3.899999976158142,
+              "max": 4.199999988079071
+            },
+            "simulation": {
+              "samples": 20,
+              "min": 51.10000002384186,
+              "median": 74.09999996423721,
+              "p95": 107,
+              "max": 113.60000002384186
+            },
+            "trace": {
+              "samples": 20,
+              "min": 2,
+              "median": 2.699999988079071,
+              "p95": 4.599999964237213,
+              "max": 6.199999988079071
+            },
+            "render-to-layout": {
+              "samples": 20,
+              "min": 94.30000001192093,
+              "median": 126.60000002384186,
+              "p95": 165.0999999642372,
+              "max": 183.4000000357628
+            }
+          },
+          "invocationCounts": {
+            "history-compare": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "history-clone": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "persist": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "editor-submit": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "routing-projection": [
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2
+            ],
+            "simulation": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "trace": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "undo-display-edit": {
+          "eventToTwoRafMillis": {
+            "samples": 20,
+            "min": 72.39999997615814,
+            "median": 134.39999997615814,
+            "p95": 177.69999998807907,
+            "max": 213
+          },
+          "phases": {
+            "history-clone": {
+              "samples": 20,
+              "min": 1.300000011920929,
+              "median": 2.099999964237213,
+              "p95": 3.399999976158142,
+              "max": 3.400000035762787
+            },
+            "persist": {
+              "samples": 20,
+              "min": 1.399999976158142,
+              "median": 2,
+              "p95": 3.200000047683716,
+              "max": 3.300000011920929
+            },
+            "undo": {
+              "samples": 20,
+              "min": 3,
+              "median": 4.199999988079071,
+              "p95": 6.199999988079071,
+              "max": 6.399999976158142
+            },
+            "routing-projection": {
+              "samples": 40,
+              "min": 0.8999999761581421,
+              "median": 1.899999976158142,
+              "p95": 3.100000023841858,
+              "max": 4.400000035762787
+            },
+            "simulation": {
+              "samples": 20,
+              "min": 36.19999998807907,
+              "median": 64.09999996423721,
+              "p95": 88.69999998807907,
+              "max": 101.20000004768372
+            },
+            "trace": {
+              "samples": 20,
+              "min": 1.699999988079071,
+              "median": 2.300000011920929,
+              "p95": 4.099999964237213,
+              "max": 4.299999952316284
+            },
+            "render-to-layout": {
+              "samples": 20,
+              "min": 60.39999997615814,
+              "median": 109.89999997615814,
+              "p95": 142.80000001192093,
+              "max": 174.39999997615814
+            }
+          },
+          "invocationCounts": {
+            "history-clone": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "persist": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "undo": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "routing-projection": [
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2
+            ],
+            "simulation": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "trace": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "semantic-edit": {
+          "eventToTwoRafMillis": {
+            "samples": 20,
+            "min": 84.5,
+            "median": 133.19999998807907,
+            "p95": 172.10000002384186,
+            "max": 205
+          },
+          "phases": {
+            "history-compare": {
+              "samples": 20,
+              "min": 1.100000023841858,
+              "median": 2,
+              "p95": 3,
+              "max": 3.899999976158142
+            },
+            "history-clone": {
+              "samples": 20,
+              "min": 1.199999988079071,
+              "median": 2.399999976158142,
+              "p95": 4.100000023841858,
+              "max": 4.300000011920929
+            },
+            "persist": {
+              "samples": 20,
+              "min": 1.5999999642372131,
+              "median": 2.600000023841858,
+              "p95": 4.5,
+              "max": 4.5
+            },
+            "editor-submit": {
+              "samples": 20,
+              "min": 8.5,
+              "median": 14.100000023841858,
+              "p95": 19.30000001192093,
+              "max": 19.899999976158142
+            },
+            "routing-projection": {
+              "samples": 40,
+              "min": 1,
+              "median": 1.7999999523162842,
+              "p95": 3.400000035762787,
+              "max": 4.699999988079071
+            },
+            "simulation": {
+              "samples": 20,
+              "min": 43.90000003576279,
+              "median": 65.69999998807907,
+              "p95": 84.10000002384186,
+              "max": 94.40000003576279
+            },
+            "trace": {
+              "samples": 20,
+              "min": 1.399999976158142,
+              "median": 2.399999976158142,
+              "p95": 3.699999988079071,
+              "max": 3.699999988079071
+            },
+            "render-to-layout": {
+              "samples": 20,
+              "min": 66,
+              "median": 100.10000002384186,
+              "p95": 134.19999998807907,
+              "max": 151.30000001192093
+            }
+          },
+          "invocationCounts": {
+            "history-compare": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "history-clone": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "persist": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "editor-submit": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "routing-projection": [
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2
+            ],
+            "simulation": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "trace": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "undo-semantic-edit": {
+          "eventToTwoRafMillis": {
+            "samples": 20,
+            "min": 76.90000003576279,
+            "median": 117.30000001192093,
+            "p95": 195.89999997615814,
+            "max": 208.5
+          },
+          "phases": {
+            "history-clone": {
+              "samples": 20,
+              "min": 1.4000000357627869,
+              "median": 1.9000000357627869,
+              "p95": 3.5,
+              "max": 4.5
+            },
+            "persist": {
+              "samples": 20,
+              "min": 1.399999976158142,
+              "median": 1.9000000357627869,
+              "p95": 3.199999988079071,
+              "max": 3.300000011920929
+            },
+            "undo": {
+              "samples": 20,
+              "min": 3.100000023841858,
+              "median": 4.199999988079071,
+              "p95": 6.800000011920929,
+              "max": 8
+            },
+            "routing-projection": {
+              "samples": 40,
+              "min": 1.0999999642372131,
+              "median": 1.699999988079071,
+              "p95": 3.600000023841858,
+              "max": 4.5
+            },
+            "simulation": {
+              "samples": 20,
+              "min": 41,
+              "median": 63,
+              "p95": 96.79999995231628,
+              "max": 107.30000001192093
+            },
+            "trace": {
+              "samples": 20,
+              "min": 1.5,
+              "median": 2.199999988079071,
+              "p95": 3.599999964237213,
+              "max": 4.300000011920929
+            },
+            "render-to-layout": {
+              "samples": 20,
+              "min": 63.19999998807907,
+              "median": 97.10000002384186,
+              "p95": 160.70000004768372,
+              "max": 173.39999997615814
+            }
+          },
+          "invocationCounts": {
+            "history-clone": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "persist": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "undo": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "routing-projection": [
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2
+            ],
+            "simulation": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "trace": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        "trace": {
+          "eventToTwoRafMillis": {
+            "samples": 20,
+            "min": 35.39999997615814,
+            "median": 61.80000001192093,
+            "p95": 146.19999998807907,
+            "max": 230.5999999642372
+          },
+          "phases": {
+            "routing-projection": {
+              "samples": 20,
+              "min": 1.199999988079071,
+              "median": 2,
+              "p95": 3.800000011920929,
+              "max": 5.099999964237213
+            },
+            "trace": {
+              "samples": 20,
+              "min": 1.699999988079071,
+              "median": 2.400000035762787,
+              "p95": 3.600000023841858,
+              "max": 4.5
+            },
+            "render-to-layout": {
+              "samples": 20,
+              "min": 20.69999998807907,
+              "median": 37.200000047683716,
+              "p95": 51.69999998807907,
+              "max": 62
+            }
+          },
+          "invocationCounts": {
+            "routing-projection": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ],
+            "trace": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "sourceChangedDuringRun": false
+}

@@ -11,10 +11,15 @@ import {
 } from './engine'
 import type { AzNetTopology } from './model'
 import { azEndpointKey, getAzNetEndpoints, type AzEndpointOption } from './endpoints'
+import { coexistenceFindings } from './coexistence'
+import { udrAssociationFindings } from './udr-regions'
+import { inspectionEvidence, type InspectionEvidence } from './inspection-evidence'
 
 export type AzDiagnosticSeverity = 'error' | 'warning' | 'info'
 
 export type AzDiagnosticCategory =
+  | 'udr-region-association'
+  | 'gateway-coexistence'
   | 'gateway-subnet-missing-udr'
   | 'gateway-subnet-bgp-disabled'
   | 'bgp-routes-suppressed'
@@ -65,6 +70,7 @@ export interface AzDiagnosticFinding {
   causeKey?: string
   causeTitle?: string
   occurrences?: AzDiagnosticFinding[]
+  inspection?: InspectionEvidence
 }
 
 export function groupAzNetFindings(findings: AzDiagnosticFinding[]): AzDiagnosticFinding[] {
@@ -122,12 +128,21 @@ export function azFindingFlows(findings: AzDiagnosticFinding[]): AzDiagnosticFin
     })).values()]
 }
 
-export function runAzNetDiagnostics(
+export function runAzNetStaticDiagnostics(
   topology: AzNetTopology,
   simulation: AzSimulationResult,
-  options: { includePairAnalysis?: boolean } = {},
 ): AzDiagnosticFinding[] {
-  const findings: AzDiagnosticFinding[] = []
+  const ranges = new Map<string, ReturnType<typeof cidr>>()
+  const cachedCidr = (prefix: string) => {
+    if (!ranges.has(prefix)) ranges.set(prefix, cidr(prefix))
+    return ranges.get(prefix)
+  }
+  const findings: AzDiagnosticFinding[] = coexistenceFindings(topology)
+  findings.push(...udrAssociationFindings(topology).map((finding) => ({
+    ...finding, id: `udr-region:${finding.subnetId}`, severity: 'error' as const,
+    category: 'udr-region-association' as const, title: 'Route-table region association is invalid or unknown',
+    remediation: 'Set explicit matching VNet and route-table regions, or dissociate the subnet. References are preserved; forwarding is not assessed until repaired.',
+  })))
 
   // 1. Check GatewaySubnet BGP Propagation Disabled + Missing Spoke UDRs (Asymmetric Firewall Bypass)
   for (const vnet of topology.vnets) {
@@ -659,7 +674,7 @@ export function runAzNetDiagnostics(
 
       for (const udr of rt.routes) {
         if (!udr.enabled) continue
-        const udrCidr = cidr(udr.prefix)
+        const udrCidr = cachedCidr(udr.prefix)
         if (!udrCidr) continue
 
         // (a) Check if udr points to VirtualNetworkGateway for another Azure VNet's address space
@@ -708,7 +723,7 @@ export function runAzNetDiagnostics(
             if (!r.active) return false
             if (r.source !== 'VirtualNetworkGateway' && r.source !== 'RouteServer') return false
             if (r.nextHopIp && r.nextHopIp === udr.nextHopIp) return false
-            const rCidr = cidr(r.prefix)
+            const rCidr = cachedCidr(r.prefix)
             if (!rCidr || rCidr.length <= udrCidr.length) return false
             const sampleIp = ipv4(firstUsableIp(r.prefix))
             return sampleIp !== undefined && contains(udr.prefix, sampleIp)
@@ -879,6 +894,13 @@ export function runAzNetDiagnostics(
     v.appliances.filter((a) => a.kind === 'azure-firewall').map((a) => ({ vnet: v, app: a })),
   )
   for (const vnet of topology.vnets) {
+    if (vnet.appliances.filter((app) => app.kind === 'azure-firewall').length > 1) {
+      findings.push({ id: `diag:firewall-singleton:${vnet.id}`, severity: 'error', category: 'scale-limit',
+        title: `Multiple Azure Firewalls in ${vnet.name}`,
+        summary: 'Azure supports only one Azure Firewall resource per VNet. Multiple resources in this imported design are not a supported HA configuration.',
+        remediation: 'Review the imported resources and remove extra Firewalls or place them in separate VNets. Microsoft manages the redundant backend instances of each Firewall service.',
+        vnetId: vnet.id })
+    }
     for (const subnet of vnet.subnets) {
       if (
         subnet.name === 'GatewaySubnet' ||
@@ -937,6 +959,15 @@ export function runAzNetDiagnostics(
     }
   }
 
+  return findings
+}
+
+export function runAzNetDiagnostics(
+  topology: AzNetTopology,
+  simulation: AzSimulationResult,
+  options: { includePairAnalysis?: boolean } = {},
+): AzDiagnosticFinding[] {
+  const findings = runAzNetStaticDiagnostics(topology, simulation)
   if (options.includePairAnalysis !== false) {
     const analysis = analyzeAzNetConnectivity(topology, simulation, { scope: 'all' })
     findings.push(...analysis.findings.filter((f) =>
@@ -1079,6 +1110,7 @@ export function createAzNetConnectivityAnalysis(
         : causeTable ? `Asymmetric stateful inspection at ${causeTable.vnetName}/${causeTable.subnetName}`
           : `Asymmetric stateful inspection through ${pair.asymmetricBypassApplianceNames.join(', ')}`,
       sampleFlow: { source: a.ref, sourceIp: a.defaultIp, destination: b.ref, destinationIp: b.defaultIp },
+      inspection: !failed ? inspectionEvidence(topology, simulation, pair, a, b) : undefined,
     })
   }
 

@@ -1,12 +1,21 @@
 import { describe, expect, it, vi } from 'vitest'
 import { executePlatform } from '../platform/service'
-import type { PlatformRequest, PlatformResult } from '../platform/contract'
+import type { PlatformDocument, PlatformRequest, PlatformResult } from '../platform/contract'
 import { exampleCourse } from './course-examples'
 import { scenarioBundle } from './scenario-course'
-import type { CourseBundle } from './course-contract'
+import type { CourseBundle, CourseCheck } from './course-contract'
 import type { AzSimulationResult } from '../azure-net/engine'
 import { requirementDescription } from './runner-content'
 import { createCourseRunner, orderedTasks, type LearningWorkspace, type RunnerOptions, type TaskCompletion } from './runner'
+import { createProgressLedger, guidedProgressKey } from './progress-ledger'
+import { newBeltAchievement } from './belt-achievement'
+import { achievedStages, beltStages } from './belt-stages'
+import { haLessonPacket, haLessonRequirements, haLessonTopology } from './ha-scenario'
+import { hybridLessonRequirements, hybridLessonTopology } from './hybrid-scenario'
+import { packetObservationKey } from './task-guidance'
+import { curriculumV2Bundle } from './curriculum-v2'
+import { curriculumV2Assessments } from './curriculum-v2-profile'
+import { beltProgress, earnedAwards } from './progress-ledger'
 
 function harness(overrides: Partial<RunnerOptions> = {}, course = exampleCourse) {
   const bundle = structuredClone(course)
@@ -57,8 +66,369 @@ function beforeTask(bundle: CourseBundle, taskId: string): TaskCompletion[] {
   }))
 }
 
+function checkHarness(check: CourseCheck, document: PlatformDocument, count = 1) {
+  const bundle = structuredClone(scenarioBundle)
+  const lesson = bundle.lessons[0]
+  lesson.tasks = lesson.tasks.slice(0, count)
+  lesson.taskOrder = lesson.tasks.map((task) => task.id)
+  bundle.course.lessonOrder = [lesson.id]
+  bundle.checks = lesson.tasks.map((task) => ({ ...structuredClone(check), id: task.checkId }))
+  bundle.scenarios[0].document = document
+  return harness({}, bundle)
+}
+
 describe('evidence-gated course runner', () => {
-  it('automatically verifies and awards once, but requires deliberate quiz commitment and fresh exact inspections', async () => {
+  it.each([
+    ['v2-peering.address', 'choice-a'], ['v2-peering.predict', 'choice-b'], ['v2-peering.checkpoint', 'choice-a'],
+    ['v2-firewall.role', 'choice-b'], ['v2-firewall.predict-prefix', 'choice-a'], ['v2-firewall.checkpoint', 'choice-b'],
+    ['v2-wan.transit', 'choice-a'], ['v2-secured-wan.placement', 'choice-b'], ['v2-secured-wan.checkpoint', 'choice-a'],
+    ['v2-static-vpn.roles', 'choice-b'], ['v2-static-vpn.checkpoint', 'choice-a'], ['v2-bgp.diagnose', 'choice-b'],
+    ['v2-bgp.checkpoint', 'choice-a'], ['v2-expressroute.architecture', 'choice-b'], ['v2-expressroute.checkpoint', 'choice-a'],
+    ['v2-er-locations.checkpoint', 'choice-b'], ['v2-vpn-backup.checkpoint', 'choice-a'],
+    ['v2-nva-ha.responsibilities', 'choice-b'], ['v2-nva-ha.predict-reply', 'choice-a'], ['v2-nva-ha.diagnose', 'choice-b'],
+    ['v2-nva-ha.checkpoint', 'choice-a'], ['v2-segmentation.lookup-export', 'choice-b'],
+    ['v2-segmentation.checkpoint', 'choice-a'], ['v2-handover.diagnose', 'choice-b'], ['v2-handover.checkpoint', 'choice-a'],
+  ])('grades the historical answer identity and current feedback for %s', async (taskId, originalCorrectId) => {
+    const completions = beforeTask(curriculumV2Bundle, taskId).map((entry) => ({ ...entry, contentVersion: 2 }))
+    const history = structuredClone(completions)
+    const h = harness({ completions }, curriculumV2Bundle)
+    const { lesson, task } = orderedTasks(h.bundle).find(({ task }) => task.id === taskId)!
+    const check = h.bundle.checks.find((check) => check.id === task.checkId)!
+    if (check.kind !== 'quiz.answered') throw new Error('Quiz required')
+    h.load(h.bundle.scenarios.findIndex((scenario) => scenario.id === lesson.scenarioId))
+    expect(h.state().taskId).toBe(taskId)
+    expect(check.params.correctChoiceId).toBe(originalCorrectId)
+    const wrong = check.params.choices.find((choice) => choice.id !== originalCorrectId)!
+    await h.runner.assess(wrong.id)
+    expect(h.state()).toMatchObject({ feedback: 'incorrect', explanation: wrong.feedback })
+    expect(h.completed).not.toHaveBeenCalled()
+    await h.runner.assess(originalCorrectId)
+    expect(h.state()).toMatchObject({ feedback: 'passed',
+      explanation: check.params.choices.find((choice) => choice.id === originalCorrectId)!.feedback })
+    expect(h.runner.advance()).toBe(true)
+    expect(h.completed).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      taskId, assessmentVersion: task.assessmentVersion, awardId: task.awardId, points: task.points,
+    }))
+    expect(completions).toEqual(history)
+  })
+
+  it('retains a completed content-version-2 course and its black belt without repeating awards', () => {
+    const completions = orderedTasks(curriculumV2Bundle).map(({ task, lesson }) => ({
+      courseId: curriculumV2Bundle.course.id, contentVersion: 2, lessonId: lesson.id, taskId: task.id,
+      assessmentVersion: task.assessmentVersion, checkId: task.checkId, awardId: task.awardId, points: task.points,
+      title: task.title, sessionId: 'earlier', revision: 1, scope: 1, engineVersion: 'earlier', completedAt: '2026-11-18T12:00:00Z',
+    }))
+    const history = structuredClone(completions), h = harness({ completions }, curriculumV2Bundle)
+    expect(h.state().taskId).toBeUndefined()
+    expect(h.state().completions).toHaveLength(72)
+    expect(beltProgress({ version: 1, policyVersion: 1, completions }, h.bundle.course, curriculumV2Assessments))
+      .toMatchObject({ points: 1345, belt: { id: 'black' } })
+    expect(h.completed).not.toHaveBeenCalled()
+    expect(completions).toEqual(history)
+  })
+
+  it('requires the real peering chain and fresh Application inspection without revoking historical belts or re-awarding XP', async () => {
+    const completions = orderedTasks(curriculumV2Bundle).map(({ task, lesson }) => ({
+      courseId: curriculumV2Bundle.course.id, contentVersion: 1, lessonId: lesson.id, taskId: task.id,
+      assessmentVersion: 1, checkId: task.checkId, awardId: task.awardId, points: task.points,
+      title: task.title, sessionId: 'earlier', revision: 1, scope: 1, engineVersion: 'earlier', completedAt: '2026-11-18T12:00:00Z',
+    }))
+    const historical = structuredClone(completions)
+    const ledger = { version: 1 as const, policyVersion: 1 as const, completions }
+    expect(beltProgress(ledger, curriculumV2Bundle.course, curriculumV2Assessments))
+      .toMatchObject({ points: 1345, belt: { id: 'black' } })
+    const h = harness({ completions }, curriculumV2Bundle)
+    h.load()
+    expect(h.state().taskId).toBe('v2-peering.connect')
+    const flags = { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: false }
+    const peer = (a: string, b: string) => h.edit((document) => {
+      if (document.mode === 'vwan') throw new Error('Mixed topology required')
+      document.topology.vnetPeerings.push({ id: `${a}-${b}`, name: 'Learner', vnetAId: a, vnetBId: b,
+        enabled: true, aToB: { ...flags }, bToA: { ...flags } })
+    })
+    peer('app', 'partner')
+    h.runner.observe(h.state().observation!)
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('requirements')
+    const stale = h.state().observation!
+    peer('partner', 'tenant')
+    h.runner.observe(stale)
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('inspect')
+    h.runner.observe({ ...h.state().observation!, vnetId: 'partner', subnetId: 'partner-work' })
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('inspect')
+    h.runner.observe(h.state().observation!)
+    await h.runner.assess()
+    expect(h.state()).toMatchObject({ feedback: 'passed' })
+    expect(h.runner.advance()).toBe(true)
+    expect(h.state().celebration?.points).toBe(0)
+    const revised = h.completed.mock.calls[0][0] as TaskCompletion
+    expect(revised).toMatchObject({ taskId: 'v2-peering.connect', assessmentVersion: 2, awardId: 'v2-peering.connect.award' })
+    expect(earnedAwards({ ...ledger, completions: [...completions, revised] }, curriculumV2Bundle.course.id)
+      .reduce((sum, entry) => sum + entry.points, 0)).toBe(1345)
+    expect(completions).toEqual(historical)
+  })
+  it('requires fresh native inspection and satisfied model requirements for a verification task', async () => {
+    const h = checkHarness({ id: 'inspected-verification', kind: 'routes.inspected', params: {
+      vnetId: 'hybrid-app', subnetId: 'work', prefix: '172.28.0.0/16',
+      requirements: [hybridLessonRequirements[0]],
+    } }, { mode: 'full', topology: hybridLessonTopology() })
+    h.load()
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('inspect')
+    expect(h.evaluate).not.toHaveBeenCalled()
+    h.runner.observe(h.state().observation!)
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('requirements')
+    expect(h.completed).not.toHaveBeenCalled()
+    h.edit((document) => {
+      if (document.mode === 'vwan') throw new Error('Native topology required')
+      document.topology.vpnConnections[0].enabled = true
+    })
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('inspect')
+    h.runner.observe(h.state().observation!)
+    await h.pass()
+  })
+  it.each([
+    { vnetId: 'hybrid-hub', gatewayId: 'primary-er', prefix: '172.28.0.0/16' },
+    { locationId: 'hybrid-location', prefix: '172.28.0.0/16' },
+  ])('requires the original native gateway/location and current revision for $prefix inspection', async (params) => {
+    const h = checkHarness({ id: 'native-control-check', kind: 'control-routes.inspected', params },
+      { mode: 'full', topology: hybridLessonTopology() })
+    h.load()
+    const first = h.state().observation!
+    h.runner.observe({ ...first, ...('gatewayId' in params ? { vnetId: 'another-vnet' } : { locationId: 'another-location' }) })
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('inspect')
+    expect(h.evaluate).not.toHaveBeenCalled()
+    h.edit(() => {})
+    h.runner.observe(first)
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('inspect')
+    h.runner.observe(h.state().observation!)
+    await h.pass()
+    expect(h.completed).toHaveBeenCalledOnce()
+  })
+
+  it('requires declarative fields on the original connection, not a passing unrelated flow or a replacement ID', async () => {
+    const h = checkHarness({ id: 'native-config-check', kind: 'topology.configured', params: {
+      expected: { vpnConnections: [{ id: 'branch-vpn', targetId: 'backup-vpn', enabled: true, bgpEnabled: true }] },
+      requirements: [hybridLessonRequirements.find((entry) => entry.id === 'hybrid-operations')!],
+    } }, { mode: 'full', topology: hybridLessonTopology() })
+    h.load()
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('requirements')
+    expect(h.evaluate).not.toHaveBeenCalled()
+    h.edit((document) => {
+      if (document.mode === 'vwan') throw new Error('Native topology required')
+      document.topology.vpnConnections[0].enabled = true
+      document.topology.vpnConnections[0].id = 'replacement'
+    })
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('requirements')
+    h.edit((document) => {
+      if (document.mode === 'vwan') throw new Error('Native topology required')
+      document.topology.vpnConnections[0].id = 'branch-vpn'
+    })
+    await h.pass()
+    expect(h.completed).toHaveBeenCalledOnce()
+  })
+
+  it('checks the native destination lookup as well as the exact preferred row when grading transport selection', async () => {
+    const topology = hybridLessonTopology()
+    topology.vpnConnections[0].enabled = true
+    const h = checkHarness({ id: 'transport-selection-check', kind: 'topology.configured', params: {
+      expected: { vpnConnections: [{ id: 'branch-vpn', enabled: true }] },
+      selectedRoutes: [{ vnetId: 'hybrid-app', subnetId: 'work', prefix: '172.28.0.0/16',
+        nextHopResourceId: 'primary-er', destinationAddress: '172.28.10.10' }],
+      requirements: [hybridLessonRequirements.find((entry) => entry.id === 'hybrid-operations')!],
+    } }, { mode: 'full', topology })
+    h.load()
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('requirements')
+    expect(h.completed).not.toHaveBeenCalled()
+    h.edit((document) => {
+      if (document.mode === 'vwan') throw new Error('Native topology required')
+      document.topology.vpnConnections[0].advertisedPrefixes = ['172.28.0.0/16']
+    })
+    await h.pass()
+  })
+
+  it.each(['protocol', 'sourcePort', 'destinationPort', 'target'] as const)('rejects a native packet observation with the wrong %s and cannot reuse a prior trace', async (field) => {
+    const topology = haLessonTopology()
+    topology.udrTables[1].routes[0].nextHopIp = '10.80.3.10'
+    const h = checkHarness({ id: 'native-packet-check', kind: 'packet.inspected', params: {
+      vnetId: 'hub', packet: haLessonPacket, requirements: haLessonRequirements,
+    } }, { mode: 'full', topology }, 2)
+    h.load()
+    const first = h.state().observation!
+    const wrong = { ...haLessonPacket }
+    if (field === 'protocol') wrong.protocol = 'udp'
+    else if (field === 'target') wrong.target = haLessonPacket.source
+    else wrong[field]++
+    h.runner.observe({ ...first, prefix: packetObservationKey(wrong) })
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('inspect')
+    expect(h.evaluate).not.toHaveBeenCalled()
+    const { workloadId, nicId, ipConfigurationId } = haLessonPacket.source as Extract<typeof haLessonPacket.source, { kind: 'workload' }>
+    h.runner.observe({ ...first, prefix: packetObservationKey({
+      ...haLessonPacket, source: { ipConfigurationId, nicId, workloadId, kind: 'workload' },
+    }) })
+    await h.pass()
+    h.runner.observe(first)
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('inspect')
+    expect(h.completed).toHaveBeenCalledOnce()
+    h.runner.observe(h.state().observation!)
+    await h.pass()
+    expect(h.completed).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(['saved', 'session', 'conflict'] as const)('celebrates only accepted upward belt awards, preserving the held debrief: %s', async (mode) => {
+    vi.useFakeTimers()
+    const ledger = { version: 1, policyVersion: 1, completions: beforeTask(exampleCourse, 'peering.explain') }
+    const data = new Map([[guidedProgressKey, JSON.stringify(ledger)]])
+    const store = createProgressLedger(() => ({
+      getItem: (key) => data.get(key) ?? null,
+      setItem: (key, value) => { if (mode === 'session') throw new Error('quota'); data.set(key, value) },
+      removeItem: (key) => { data.delete(key) },
+    }))
+    if (mode === 'conflict') data.set(guidedProgressKey, 'preserve conflicting bytes')
+    const h = harness({ completions: ledger.completions, completed: (completion) => store.record(completion, true) })
+    try {
+      expect(h.state().celebration).toBeUndefined()
+      h.load(); h.runner.setAutomatic(true)
+      await h.runner.assess('not-transitive')
+      await vi.advanceTimersByTimeAsync(2000)
+      expect(store.getSnapshot().status).toBe(mode)
+      if (mode === 'conflict') {
+        expect(h.state().celebration).toBeUndefined()
+        expect(h.state().awaitingNext).toBe(false)
+        expect(data.get(guidedProgressKey)).toBe('preserve conflicting bytes')
+      } else {
+        expect(h.state().celebration?.belt).toEqual({ courseId: exampleCourse.course.id, previousBeltId: 'white', beltId: 'yellow' })
+        expect(h.state().awaitingNext).toBe(true)
+        const accepted = store.backup(false)
+        h.runner.dismissBelt(); h.runner.cancel()
+        expect(h.state().celebration?.beltDismissed).toBe(true)
+        expect(h.state().taskId).toBe('peering.explain')
+        expect(h.state().awaitingNext).toBe(true)
+        h.runner.review('peering.inspect')
+        h.runner.review()
+        expect(h.state().celebration?.beltDismissed).toBe(true)
+        expect(store.backup(false)).toBe(accepted)
+        expect(h.runner.advance()).toBe(true)
+        expect(h.state().taskId).toBe('override.load')
+      }
+    } finally { h.runner.setAutomatic(false); vi.useRealTimers() }
+  })
+
+  it('does not celebrate restored, externally replaced or replayed historical achievements', async () => {
+    const historical = beforeTask(exampleCourse, 'override.load')
+    const h = harness({ completions: historical })
+    expect(h.state().celebration).toBeUndefined()
+    h.runner.replaceProgress(historical)
+    expect(h.state().celebration).toBeUndefined()
+    h.runner.replayLesson('direct-peering')
+    await h.finishPeering()
+    expect(h.completed).not.toHaveBeenCalled()
+    expect(h.state().celebration?.belt).toBeUndefined()
+    expect(h.state().completions).toEqual(historical)
+  })
+
+  it('summarizes every newly crossed stage when one missing checkpoint unlocks several historical XP thresholds', () => {
+    const all = beforeTask(exampleCourse, 'capstone.explain')
+    const { lesson, task } = orderedTasks(exampleCourse).at(-1)!
+    all.push({ ...all[0], lessonId: lesson.id, taskId: task.id, checkId: task.checkId, awardId: task.awardId, points: task.points })
+    const before = all.filter((entry) => entry.taskId !== 'peering.explain')
+    const achievement = newBeltAchievement(exampleCourse, before, all)!
+    expect(achievement).toMatchObject({ previousBeltId: 'white', beltId: 'black' })
+    expect(achievedStages(achievement).map((stage) => stage.lessonIds)).toEqual(exampleCourse.course.lessonOrder.map((id) => [id]))
+    expect(newBeltAchievement(exampleCourse, all, before)).toBeUndefined()
+    expect(newBeltAchievement(exampleCourse, all, all)).toBeUndefined()
+  })
+
+  it.each([exampleCourse, scenarioBundle])('aligns authored stages with actual opening debriefs and existing terminal checkpoints: $course.id', (bundle) => {
+    const stages = beltStages[bundle.course.id]
+    const covered = stages.flatMap((stage) => stage.lessonIds)
+    expect(covered).toEqual(bundle.course.lessonOrder.slice(0, bundle.course.id === scenarioBundle.course.id ? 8 : 6))
+    expect(new Set(covered).size).toBe(covered.length)
+    for (const [index, stage] of stages.entries()) {
+      const first = bundle.lessons.find((lesson) => lesson.id === stage.lessonIds[0])!
+      const last = bundle.lessons.find((lesson) => lesson.id === stage.lessonIds.at(-1))!
+      expect(bundle.course.belts[index + 1].id).toBe(stage.beltId)
+      expect(bundle.course.belts[index + 1].checkpointTaskIds.at(-1)).toBe(last.taskOrder.at(-1))
+      const opening = first.tasks.find((task) => task.id === first.taskOrder[0])!.debrief!
+      for (const language of ['en', 'ja'] as const) {
+        expect(opening.paragraphs[0][language]).toContain(stage.introduction[language])
+        expect(stage.topics.every((topic) => topic[language].length > 0)).toBe(true)
+      }
+    }
+  })
+
+  it.each([false, true])('grades stable quiz IDs and feedback after authored choice reversal: %s', async (reverse) => {
+    const h = harness({ completions: beforeTask(exampleCourse, 'override.explain') })
+    const check = h.bundle.checks.find((entry) => entry.id === 'explain-udr')!
+    if (check.kind !== 'quiz.answered') throw new Error('Quiz required')
+    if (reverse) check.params.choices.reverse()
+    h.load(1)
+    const wrong = check.params.choices.find((choice) => choice.id !== check.params.correctChoiceId)!
+    await h.runner.assess(wrong.id)
+    expect(h.state().feedback).toBe('incorrect')
+    expect(h.state().explanation).toEqual(wrong.feedback)
+    expect(h.completed).not.toHaveBeenCalled()
+    await h.pass(check.params.correctChoiceId)
+    expect(h.completed).toHaveBeenCalledOnce()
+    expect(h.completed).toHaveBeenCalledWith(expect.objectContaining({ awardId: 'override.explain', assessmentVersion: 1, points: 25 }))
+  })
+
+  it('requires both hub peerings and enabled access, not just the first connection', async () => {
+    const h = harness({ completions: beforeTask(scenarioBundle, 'inspection-bypass.connect') }, scenarioBundle)
+    h.load(1)
+    const connect = (vnetAId: string) => h.edit((document) => {
+      if (document.mode === 'vwan') throw new Error('Mixed fixture required')
+      document.topology.vnetPeerings.push({ ...structuredClone(document.topology.vnetPeerings[0]), id: `learner-${vnetAId}`, vnetAId, vnetBId: 'hub' })
+    })
+    connect('a')
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('requirements')
+    connect('b')
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('passed')
+    h.edit((document) => {
+      if (document.mode === 'vwan') throw new Error('Mixed fixture required')
+      document.topology.vnetPeerings[2].bToA.allowVirtualNetworkAccess = false
+    })
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('requirements')
+    expect(h.completed).not.toHaveBeenCalled()
+  })
+
+  it('requires enabled appliance UDRs on each owned subnet association before completing the introductory policy task', async () => {
+    const h = harness({ completions: beforeTask(scenarioBundle, 'inspection-bypass.summary') }, scenarioBundle)
+    h.load(1)
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('requirements')
+    h.edit((document) => {
+      if (document.mode === 'vwan') throw new Error('Mixed fixture required')
+      for (const table of document.topology.udrTables) table.routes.push({
+        id: 'learner-summary', name: 'Private inspection', prefix: '10.0.0.0/8', nextHopType: 'VirtualAppliance', nextHopIp: '10.20.1.4', enabled: true,
+      })
+    })
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('passed')
+    h.edit((document) => {
+      if (document.mode === 'vwan') throw new Error('Mixed fixture required')
+      delete document.topology.vnets[1].subnets[0].routeTableId
+    })
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('requirements')
+    expect(h.completed).not.toHaveBeenCalled()
+  })
+
+  it('automatically verifies and awards once, then waits for Next after each task including committed quizzes and exact inspections', async () => {
     vi.useFakeTimers()
     const h = harness()
     try {
@@ -70,6 +440,11 @@ describe('evidence-gated course runner', () => {
       await vi.advanceTimersByTimeAsync(2000)
       expect(h.completed).toHaveBeenCalledTimes(1)
       expect(h.state().celebration?.points).toBe(h.bundle.lessons[0].tasks[0].points)
+      expect(h.state().awaitingNext).toBe(true)
+      expect(h.state().taskId).toBe('peering.load')
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(h.state().taskId).toBe('peering.load')
+      expect(h.runner.advance()).toBe(true)
       const quiz = h.state().taskId
       await vi.advanceTimersByTimeAsync(5000)
       expect(h.state().taskId).toBe(quiz)
@@ -77,6 +452,8 @@ describe('evidence-gated course runner', () => {
       await vi.advanceTimersByTimeAsync(2000)
       expect(h.completed).toHaveBeenCalledTimes(2)
       expect(h.state().celebration?.explanation).toBeTruthy()
+      expect(h.state().taskId).toBe(quiz)
+      expect(h.runner.advance()).toBe(true)
       const observation = h.state().observation!
       h.runner.observe({ ...observation, subnetId: 'work-b' })
       await vi.advanceTimersByTimeAsync(3000)
@@ -84,8 +461,56 @@ describe('evidence-gated course runner', () => {
       h.runner.observe(observation)
       await vi.advanceTimersByTimeAsync(3000)
       expect(h.completed).toHaveBeenCalledTimes(3)
+      expect(h.state().taskId).toBe('peering.inspect-before')
+      expect(h.state().awaitingNext).toBe(true)
       await vi.advanceTimersByTimeAsync(5000)
       expect(h.completed).toHaveBeenCalledTimes(3)
+    } finally { h.runner.setAutomatic(false); vi.useRealTimers() }
+  })
+
+  it('keeps an awarded teaching step across documentation-tab pauses, edits and historical review without reusing proof or awarding again', async () => {
+    vi.useFakeTimers()
+    const h = harness()
+    try {
+      h.load(); h.runner.setAutomatic(true)
+      await vi.advanceTimersByTimeAsync(2600)
+      const celebration = h.state().celebration
+      h.runner.setAutomatic(false)
+      h.edit(() => {})
+      h.runner.review('peering.load')
+      expect(h.runner.advance()).toBe(false)
+      h.runner.review()
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(h.state().celebration).toBe(celebration)
+      expect(h.state().taskId).toBe('peering.load')
+      expect(h.state().awaitingNext).toBe(true)
+      expect(h.state().observation).toBeUndefined()
+      expect(h.completed).toHaveBeenCalledTimes(1)
+      expect(h.runner.advance()).toBe(true)
+      expect(h.state().taskId).toBe('peering.predict')
+      expect(h.state().awaitingNext).toBe(false)
+      expect(h.state().canContinue).toBe(false)
+      expect(h.completed).toHaveBeenCalledTimes(1)
+    } finally { h.runner.setAutomatic(false); vi.useRealTimers() }
+  })
+
+  it('retains the final task explanation until Next before showing course completion', async () => {
+    vi.useFakeTimers()
+    const last = orderedTasks(exampleCourse).at(-1)!
+    const h = harness({ completions: beforeTask(exampleCourse, last.task.id) })
+    try {
+      h.load(exampleCourse.scenarios.findIndex((entry) => entry.id === last.lesson.scenarioId))
+      h.runner.setAutomatic(true)
+      const check = exampleCourse.checks.find((entry) => entry.id === last.task.checkId)!
+      if (check.kind !== 'quiz.answered') throw new Error('Final quiz expected')
+      await h.runner.assess(check.params.correctChoiceId)
+      await vi.advanceTimersByTimeAsync(2000)
+      expect(h.state().completions).toHaveLength(40)
+      expect(h.state().taskId).toBe(last.task.id)
+      expect(h.state().awaitingNext).toBe(true)
+      expect(h.runner.advance()).toBe(true)
+      expect(h.state().taskId).toBeUndefined()
+      expect(h.completed).toHaveBeenCalledTimes(1)
     } finally { h.runner.setAutomatic(false); vi.useRealTimers() }
   })
 

@@ -1,7 +1,8 @@
 import type { HubFirewallPolicy, Topology } from '../model'
 import type { PathNode } from '../paths'
 import type { AzNetTopology } from '../azure-net/model'
-import type { AzEndpointRef } from '../azure-net/engine'
+import type { AzEndpointRef, AzSimulationResult } from '../azure-net/engine'
+import type { Simulation } from '../routing'
 import type { PacketRequest, PacketResult } from '../packet-flow'
 import type { WorkloadIpReference } from '../inventory'
 import type { VpnNatPacketRequest, VpnNatPacketResult } from '../vpn-nat-packet'
@@ -10,11 +11,15 @@ import { workspaceCapabilities, workspaceCapabilityLimits } from '../workspace-c
 import { flowExportLimits } from '../flow-export-options'
 import { applicationCapabilities } from '../application-inventory'
 import type { ApplicationRequest, ApplicationResult } from '../application'
+import type { BgpInspection } from '../bgp-neighbors'
 
 export const contractVersion = 1 as const
 export const latestContractVersion = 2 as const
-export const engineVersion = '2026.11.18.2'
-export type PlatformMode = 'vwan' | 'hub-spoke' | 'full'
+export const supportedContractVersions = [contractVersion, latestContractVersion] as const
+export const platformModes = ['vwan', 'hub-spoke', 'full'] as const
+export const platformOperations = ['validate', 'simulate', 'evaluate', 'application'] as const
+export const engineVersion = '2026.11.20.1'
+export type PlatformMode = typeof platformModes[number]
 export type PlatformDocument =
   | { mode: 'vwan'; topology: Topology }
   | { mode: 'hub-spoke' | 'full'; topology: AzNetTopology }
@@ -51,10 +56,10 @@ export type PacketRequirement = {
 }
 export type Requirement = FlowRequirement | RouteRequirement | PacketRequirement
 export type PlatformRequest = {
-  contractVersion: 1 | 2
+  contractVersion: typeof supportedContractVersions[number]
   engineVersion?: string
   document: PlatformDocument
-  operation: 'validate' | 'simulate' | 'evaluate' | 'application'
+  operation: typeof platformOperations[number]
   locale?: 'en' | 'ja'
   requirements?: Requirement[]
   budget?: { maxMillis?: number; maxOutputBytes?: number }
@@ -74,7 +79,8 @@ export type PlatformResult = {
   revision: string
   status: 'complete' | 'invalid' | 'not assessed'
   document?: PlatformDocument
-  simulation?: unknown
+  simulation?: Simulation | AzSimulationResult
+  bgpNeighbors?: BgpInspection
   assessments: Assessment[]
   errors: { code: string; message: string }[]
   limitations: string[]
@@ -94,11 +100,18 @@ export const platformLimits = {
 }
 
 export const capabilities = {
-  contractVersion: latestContractVersion, supportedContractVersions: [contractVersion, latestContractVersion], engineVersion,
-  modes: ['vwan', 'hub-spoke', 'full'],
+  contractVersion: latestContractVersion, supportedContractVersions, engineVersion,
+  modes: platformModes,
   topologyVersions: { vwan: 1, 'hub-spoke': 2, full: 2 },
-  operations: ['validate', 'simulate', 'evaluate', 'application'],
+  operations: platformOperations,
   application: applicationCapabilities,
+  bgpNeighbors: {
+    evidence: 'bgpNeighbors', version: 1, provenance: 'simulation',
+    scope: 'Stable original resource, modeled speaker, relationship and directional session identities. Select exactly one local resource/instance before reading neighbors.',
+    routes: 'Logical relationship candidates and distinct-prefix counts, not measured per-instance advertisements/counters. Received post-policy, advertised candidates and peer-received post-policy scopes remain distinct.',
+    supported: ['both documented ARS speakers per configured NVA', 'explicit standalone VPN active/active or single-active perspective', 'logical site relationships'],
+    unknown: ['managed ER/VWAN and gateway/ARS internal endpoint/session mappings', 'unspecified legacy VPN speaker multiplicity', 'physical Azure instance IDs', 'actual BGP establishment/FSM/uptime/counters', 'per-instance route divergence and failures'],
+  },
   rendering: {
     formats: ['gif', 'svg', 'png'], durationsMs: [1500, 2000], ...flowExportLimits,
     source: 'Existing flow assessment handle and exact assessmentId; independent per-leg trace evidence and topology revision.',
@@ -109,6 +122,14 @@ export const capabilities = {
   mixedRouting: ['native hub tables/association/propagation', 'shared VWAN HRP selection', 'hub-owned and site-owned route maps',
     'integrated SD-WAN and original spoke NVA BGP peers', 'static VPN and converged mixed ER exports',
     'site inbound local preference', 'WAN branch export/default/learning controls'],
+  gatewayCoexistence: {
+    modes: ['hub-spoke', 'full'], scope: 'Standalone ER/private-peering and S2S VPN gateways in one VNet; not Virtual WAN managed gateway controls.',
+    configuration: 'Optional gateway sku, vpnType (RouteBased/PolicyBased) and vpnGatewayGeneration (Generation1/Generation2); omitted capture/legacy fields remain unknown. Basic, PolicyBased and GatewaySubnet /28 or longer are unsupported for coexistence.',
+    routing: 'No-ARS equal-prefix ER preference, longest-prefix match and steady-state withdrawal/restoration. Same-VNet ARS branch-to-branch exchanges NVA/gateway and opposite-kind ER/VPN gateway routes; VPN requires explicit active/active and ASN 65515, but does not require VPN BGP enablement. Static VPN site prefixes can be exchanged.',
+    unknown: ['live establishment/convergence/failover timing', 'Microsoft-peering failover', 'VPN Internet underlay reachability',
+      'SKU regional availability/capacity and deployment readiness', 'IPsec traffic-selector enforcement', 'unknown gateway prerequisites'],
+    boundaries: 'Azure outbound ER preference does not set site return policy. Configure site inbound local preference explicitly. ARS does not provide ER circuit-to-circuit transit; use Global Reach.',
+  },
   subnetPeering: {
     modes: ['hub-spoke', 'full'], topologyVersion: 2,
     field: 'vnetPeerings[].scope: {type:whole-vnet} or {type:subnets,subnetAIds:originalIds[],subnetBIds:originalIds[]}; omitted scope preserves legacy whole-VNet peering.',
@@ -122,9 +143,12 @@ export const capabilities = {
     modes: ['hub-spoke', 'full'], evidence: 'simulation.nvaBgpPeers[originalApplianceId][]',
     scope: 'Original ARS/VNet and NVA/VNet identities, per-peer received candidates, explicit availability, supported outbound policy scope and receiving-AS loop rejection.',
     selection: 'selectedByArs is the exporting ARS selection, not an NVA best path. Distinct same-prefix candidates from different peers are retained.',
+    reflection: 'Different-VNet NVA reflection requires exporting ARS branchToBranchTraffic. Disabling it preserves peer availability, ARS inbound learning, local NIC programming and connected VNet advertisements. Same-VNet flag behavior is not assessed; legacy prefix eligibility is retained.',
+    attributes: 'Received different-VNet BGP-NVA candidates prepend ARS ASN 65515 after outbound policy. sourceRoute retains the separate ARS-learned source identity/path/next hop before outbound policy. Wire next-hop IP is explicitly not-assessed: the model has no managed endpoint bindings. Same-VNet and gateway-source wire AS paths are omitted as not-assessed. Captured native endpoint/path/next-hop observations remain separate, never assigned to modeled roles.',
+    policyProjection: 'routeServerOutbound is a source-side policy/SDN projection, not receiver wire attributes. VNet-scoped SDN propagation and NVA BGP eligibility are distinct.',
     gatewaySummaries: 'When the exporting VNet configures summarizedGatewayPrefixes, each peer carries gatewaySummaryAssessment.status=not-assessed with original configuration/prerequisite identities. Received candidates cannot establish presence or absence of those summaries. Gateway-to-on-premises documentation does not qualify ARS-to-NVA behavior.',
     excluded: ['NVA best-path selection or forwarding from received candidates', 'unmodeled gateway summaries', 'ARS neighbor IPs',
-      'per-instance sessions', 'live adjacency', 'vendor-specific per-neighbor configuration'],
+      'native per-instance sessions and counters', 'live adjacency', 'vendor-specific per-neighbor configuration'],
   },
   orderedApplianceChains: {
     modes: ['hub-spoke', 'full'], field: 'applianceChain', expectation: 'allow',
@@ -141,13 +165,21 @@ export const capabilities = {
       'additional backend NAT policies', 'Internet egress', 'live probes/convergence', 'guest OS readiness', 'session replication/continuity'],
   },
   staticHubFirewall: {
-    scope: 'Single hub, declared original hub.firewall ID/name, routing intent disabled, CIDR/ResourceId routes to that ID only.',
+    scope: 'Single hub, declared original hub.firewall ID/name, CIDR/ResourceId routes to that ID only. With routing intent, only defaultRouteTable Firewall statics are supported.',
     forwarding: 'Longest prefix, then static over learned for equal prefixes; independent local-connection Firewall onward and return lookups.',
     assertions: 'flow firewallPolicy: {hubId, forward: required|bypassed, reverse: required|bypassed}, with expectation allow.',
     excluded: ['multi-hub static inspection', 'static branch-to-branch inspection', 'arbitrary IP/resource next hops and spoke NVAs',
-      'routing intent combined with hub statics', 'unobserved capture reconstruction', 'Firewall policy, sessions, packet/application delivery'],
+      'routing intent with custom tables or VNet-connection hub next hops', 'unobserved capture reconstruction', 'Firewall policy, sessions, packet/application delivery'],
   },
   workspace: { capabilities: workspaceCapabilities, limitations: workspaceCapabilityLimits },
+  vpnOverEr: {
+    modes: ['hub-spoke', 'full'], topologyVersion: 2,
+    scope: 'Classic active/standby RouteBased VPN with explicit Standard public-IP capability, owned private endpoints and selected same-circuit ER links.',
+    routing: 'Declared independent outer ER routing context; all private overlays withdrawn for endpoint lookup. Inner workloads retain normal routing and site policies; direct ER fallback is not IPsec.',
+    evidence: 'simulation.vpnUnderlays[connectionId]; assessments[].evidence.forward/reverse.vpnProtection and named outer contexts in VPN trace hops.',
+    excluded: ['static VPN overlay', 'active/active endpoint ownership', 'VPN NAT composition', 'Virtual WAN/NVA/SD-WAN private overlay',
+      'actual on-prem underlay context configuration', 'IKE/IPsec SAs, crypto correctness, packet delivery, MTU/MSS, throughput and convergence'],
+  },
   vpnNat: { operation: 'simulate', requestField: 'vpnPacket', modes: ['hub-spoke', 'full'], providers: VPN_NAT_CAPABILITIES,
     endpoints: 'One original connectionId, ingress/egress initiation and explicit IPv4 TCP/UDP tuple. Replies are assessed only within that forward request.',
     outcomes: 'Native routing and per-leg translation only; security/application delivery not assessed.' },

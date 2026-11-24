@@ -10,9 +10,14 @@ import { loadLanguage, translate } from '../src/messages'
 import { PlatformJobs } from './jobs'
 import type { PlatformRequest } from '../src/platform/contract'
 import { engineVersion } from '../src/platform/contract'
+import { createPlatformRequest } from '../src/platform/request'
+import { validatePlatformResult } from '../src/platform/result'
+import { validateRequest } from '../src/platform/service'
 import { resolve } from 'node:path'
 import { largeVwanCapture } from '../tests/large-vwan-fixture'
 import { importAzureCapture } from '../src/azure-import'
+import { bgpNeighborTopology, bgpNeighborVwanTopology } from '../tests/fixtures/bgp-neighbors'
+import { coexistenceTopology } from '../tests/fixtures/coexistence'
 
 const require = createRequire(import.meta.url)
 const compiled = require('../platform-dist/service.cjs') as { executePlatform: typeof executePlatform }
@@ -23,6 +28,115 @@ export const request = (): PlatformRequest => ({
 })
 
 describe('browser-free platform contract', () => {
+  it('omits absent typed request options without sanitizing live topology or unknown contract inputs', async () => {
+    const input = createPlatformRequest({ ...request(), locale: undefined, requirements: undefined,
+      budget: { maxMillis: undefined, maxOutputBytes: 1000 } })
+    expect(Object.hasOwn(input, 'locale')).toBe(false)
+    expect(input.budget).toEqual({ maxOutputBytes: 1000 })
+    expect(validateRequest(input)).toEqual(input)
+    const topology = input.document.topology
+    Object.assign(topology, { unknownExtension: { keep: true } })
+    expect(validateRequest(input).document.topology).toHaveProperty('unknownExtension.keep', true)
+    topology.name = 'Live unsaved Node edit'
+    const jobs = new PlatformJobs(resolve('platform-dist', 'worker.cjs'))
+    try {
+      const live = createPlatformRequest({ ...input, budget: { maxMillis: undefined } })
+      const result = await jobs.run(live)
+      expect(result.status).toBe('complete')
+      expect(result.document?.topology.name).toBe('Live unsaved Node edit')
+    } finally { jobs.close() }
+    Object.assign(topology, { unsafeUnset: undefined })
+    expect(() => validateRequest(input)).toThrow('Plain JSON')
+    delete (topology as unknown as Record<string, unknown>).unsafeUnset
+    expect(() => validateRequest(createPlatformRequest({ ...input, unknownOption: true } as PlatformRequest))).toThrow('Unknown contract field')
+    let accessed = false
+    const accessor = Object.defineProperty({ ...input }, 'locale', { get: () => { accessed = true; return 'en' }, enumerable: true })
+    expect(() => createPlatformRequest(accessor)).toThrow('Unsafe request option')
+    expect(accessed).toBe(false)
+  })
+  it('rejects wrong-provider, malformed and incomplete worker envelopes without upgrading uncertainty', () => {
+    const input = request()
+    const result = executePlatform(input)
+    expect(validatePlatformResult(result, input)).toBe(result)
+    expect(() => validatePlatformResult({ ...result, simulation: undefined }, input)).toThrow('simulation evidence')
+    expect(() => validatePlatformResult({ ...result, contractVersion: 2 }, input)).toThrow()
+    expect(() => validatePlatformResult({ ...result, document: { ...result.document, mode: 'full' } }, input)).toThrow('provider')
+    expect(() => validatePlatformResult({ ...result, simulation: { subnetTables: {}, warnings: [] } }, input)).toThrow('provider')
+    expect(() => validatePlatformResult({ ...result, errors: null }, input)).toThrow('envelope')
+    const document = input.document
+    if (document.mode !== 'vwan') throw new Error('VWAN fixture required.')
+    const evaluation: PlatformRequest = { ...input, operation: 'evaluate', requirements: [
+      { id: 'owned-table', kind: 'route', table: document.topology.hubs[0].id, prefix: '10.0.0.0/8', expectation: 'present' },
+    ] }
+    const assessed = executePlatform(evaluation)
+    expect(validatePlatformResult(assessed, evaluation)).toBe(assessed)
+    expect(() => validatePlatformResult({ ...assessed, assessments: [] }, evaluation)).toThrow('incomplete')
+    expect(() => validatePlatformResult({ ...assessed, status: 'complete', assessments: [
+      { ...assessed.assessments[0], outcome: 'not assessed' },
+    ] }, evaluation)).toThrow('inconsistent')
+  })
+  it('exports managed VWAN BGP relationship metadata in compiled execution without altering routing or native JSON', () => {
+    const topology = bgpNeighborVwanTopology()
+    const input = { contractVersion: 1, operation: 'simulate', document: { mode: 'vwan', topology } }
+    const result = executePlatform(input)
+    expect(result.status).toBe('complete')
+    expect(compiled.executePlatform(input)).toEqual(result)
+    expect(result.document?.topology).toEqual(validateTopology(topology))
+    expect(result.simulation).toEqual(simulate(validateTopology(topology)))
+    expect(result.bgpNeighbors?.managedRelationships.map((relationship) => relationship.kind).sort())
+      .toEqual(['express-route', 'express-route', 'inter-hub', 'vpn'])
+    expect(result.bgpNeighbors?.neighbors).toEqual([])
+  })
+  it('retains explicit WAN scopes and evaluates both VPN directions in compiled execution', () => {
+    const topology = JSON.parse(readFileSync(resolve('samples', 'two-wan-s2s.json'), 'utf8'))
+    const input = {
+      contractVersion: 1, operation: 'evaluate', document: { mode: 'vwan', topology },
+      requirements: [{ id: 'wan-vpn-flow', kind: 'flow', source: { kind: 'spoke', id: 'application' },
+        target: { kind: 'spoke', id: 'remote' }, sourceAddress: '10.10.0.4', destinationAddress: '10.20.0.4', expectation: 'allow' }],
+    }
+    const result = executePlatform(input)
+    expect(result.status).toBe('complete')
+    expect(result.assessments[0].outcome).toBe('satisfied')
+    expect(compiled.executePlatform(input)).toEqual(result)
+    topology.interWanVpns[0].bToA = []
+    expect(executePlatform(input).assessments[0].outcome).toBe('violated')
+    topology.interWanVpns[0].status = 'unknown'
+    expect(executePlatform(input).assessments[0].outcome).toBe('not assessed')
+  })
+  it.each(['hub-spoke', 'full'] as const)('preserves coexistence configuration and supported static-VPN ARS exchange in compiled %s execution', (mode) => {
+    const topology = coexistenceTopology()
+    topology.vnets[0].gateways[0].bgpEnabled = false
+    topology.vpnConnections[0].bgpEnabled = false
+    const input = { contractVersion: 1, operation: 'simulate', document: { mode, topology } }
+    const result = executePlatform(input)
+    expect(result.status).toBe('complete')
+    expect(compiled.executePlatform(input)).toEqual(result)
+    expect(result.document?.topology).toEqual(topology)
+    expect((result.simulation as ReturnType<typeof simulateAzNet>).siteRibs['er-site']).toEqual(expect.arrayContaining([
+      expect.objectContaining({ prefix: '192.0.2.0/24', preferred: true }),
+    ]))
+    topology.vnets[0].gateways[0].activeActive = false
+    expect(executePlatform(input).status).toBe('not assessed')
+    topology.vnets[0].gateways[0].sku = 'Basic'
+    expect(executePlatform({ ...input, operation: 'validate' })).toMatchObject({
+      status: 'invalid', errors: [{ message: expect.stringContaining('does not support ER/VPN coexistence') }],
+    })
+  })
+  it.each(['hub-spoke', 'full'] as const)('exports serializable BGP speaker/session identities and logical scopes through the compiled %s contract', (mode) => {
+    const topology = bgpNeighborTopology()
+    const input = { contractVersion: 1, operation: 'simulate', document: { mode, topology } }
+    const result = executePlatform(input)
+    expect(compiled.executePlatform(input)).toEqual(result)
+    const inspection = result.bgpNeighbors!
+    const reader = inspection.neighbors.filter((neighbor) => neighbor.localResourceKey === JSON.stringify(['appliance', 'reader']))
+    expect(reader).toHaveLength(4)
+    expect(new Set(reader.map((neighbor) => neighbor.remoteInstanceId)).size).toBe(4)
+    expect(reader.every((neighbor) => neighbor.received?.scope === 'received-post-policy')).toBe(true)
+    expect(inspection.resources.find((resource) => resource.id === 'vpn-as')!.instances).toHaveLength(1)
+    expect(inspection.resources.find((resource) => resource.id === 'edge-location')!.instances).toHaveLength(0)
+    expect(JSON.parse(JSON.stringify(inspection))).toEqual(inspection)
+    expect(result.document?.topology).toEqual(topology)
+  })
   it.each(['hub-spoke', 'full'] as const)('preserves VNet community advertisements and provenance in %s compiled headless execution', (mode) => {
     const topology = parseAzNetTopology(sample('azure-net/uc9-expressroute-hairpin-two-vnets.json'))
     topology.vnets[1].bgpCommunities = { virtualNetworkCommunity: '12076:20001', regionalCommunity: '12076:50004' }

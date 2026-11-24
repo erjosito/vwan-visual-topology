@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { simulateAzNet, traceAzNetFlow } from './engine'
+import { lookupSubnetEffectiveRoute, simulateAzNet, traceAzNetFlow } from './engine'
 import { createEmptyAzNetTopology, validateAzNetTopology } from './model'
 import { parseAzNetTopology } from './admission'
 import { applyAzHubRouteMap, pruneAzSiteRouteMaps } from './route-maps'
 import type { RouteMapRule } from '../model'
 import { validateRequest } from '../platform/service'
+import { routingIntentConfiguration } from '../routing-intent'
+import { applyAzRoutingIntentEdit } from './routing-intent'
 
 function mixedTopology() {
   const topology = createEmptyAzNetTopology()
@@ -37,6 +39,31 @@ const rule = (values: Partial<RouteMapRule> = {}): RouteMapRule => ({
 })
 
 describe('Mixed native capability bridge', () => {
+  it.each([[false, true], [true, false], [true, true]])('preserves Full Hybrid routes and classic owners with intent private=%s internet=%s', (privatePolicy, internet) => {
+    const before = mixedTopology()
+    const next = structuredClone(before)
+    Object.assign(next.vwanHubs[0].routingIntent, { private: privatePolicy, internet })
+    applyAzRoutingIntentEdit(before, next)
+    const expected = routingIntentConfiguration(next.vwanHubs[0])
+    expect(next.vnets[1].vwanHubAttachment?.hubRouting).toEqual(expected)
+    expect(next.vpnConnections[0].hubRouting).toEqual(expected)
+    expect(next.erLinks[1].hubRouting).toEqual(expected)
+    expect(next.vnets[0]).toEqual(before.vnets[0])
+    expect(next.erLinks[0]).toEqual(before.erLinks[0])
+    const simulation = simulateAzNet(next)
+    expect(simulation.vwanHubTableCoverage.wan.defaultRouteTable.complete).toBe(true)
+    expect(simulation.vwanHubRibs.wan.some((route) => route.prefix === '172.16.0.0/24')).toBe(true)
+    expect(lookupSubnetEffectiveRoute(simulation.subnetTables['wan-work'], '8.8.8.8')?.source).toBe('System')
+    const withDefault = structuredClone(next)
+    withDefault.vnets[1].vwanHubAttachment!.propagateDefaultRoute = true
+    const route = lookupSubnetEffectiveRoute(simulateAzNet(withDefault).subnetTables['wan-work'], '8.8.8.8')
+    expect(route?.source).toBe(internet ? 'VirtualNetworkGateway' : 'System')
+    const removed = structuredClone(next)
+    Object.assign(removed.vwanHubs[0].routingIntent, { private: false, internet: false })
+    applyAzRoutingIntentEdit(next, removed)
+    expect(removed.vpnConnections[0].hubRouting?.labels).toEqual(['default'])
+  })
+
   it('keeps one-direction site and hub assignments valid plain JSON after native edits prune them', () => {
     const topology = mixedTopology()
     topology.routeMaps = [
@@ -260,5 +287,54 @@ describe('Mixed native capability bridge', () => {
     expect(simulation.subnetTables['wan-work'].routes.some((route) => route.source === 'VirtualNetworkGateway' && route.prefix === '0.0.0.0/0')).toBe(false)
     topology.vpnConnections[0].propagateDefaultRoute = false
     expect(simulateAzNet(topology).siteRibs.branch.some((route) => route.prefix === '0.0.0.0/0')).toBe(false)
+  })
+
+  it.each([
+    { private: false, internet: false },
+    { private: true, internet: false },
+    { private: false, internet: true },
+    { private: true, internet: true },
+  ])('separates spoke policy advertisements from onward and branch routes with intent %j', (intent) => {
+    const topology = mixedTopology()
+    topology.vwanHubs[0].routingIntent = intent
+    topology.vnets[1].vwanHubAttachment!.propagateDefaultRoute = true
+    const simulation = simulateAzNet(topology)
+    const table = simulation.subnetTables['wan-work']
+    const prefixes = table.routes.filter((route) => route.source === 'VirtualNetworkGateway').map((route) => route.prefix)
+    expect(prefixes).toEqual(expect.arrayContaining(intent.private
+      ? ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'] : ['10.0.0.0/16', '172.16.0.0/24']))
+    expect(prefixes.includes('172.16.0.0/24')).toBe(!intent.private)
+    expect(prefixes.includes('0.0.0.0/0')).toBe(intent.internet)
+    expect(lookupSubnetEffectiveRoute(table, '10.1.1.4')).toMatchObject({ source: 'System', nextHopType: 'VnetLocal' })
+    if (intent.internet) expect(lookupSubnetEffectiveRoute(table, '8.8.8.8')).toMatchObject({ source: 'VirtualNetworkGateway', active: true })
+    expect(simulation.vwanHubRibs.wan).toContainEqual(expect.objectContaining({ prefix: '172.16.0.0/24', preferred: true }))
+    expect(simulation.siteRibs.branch).toContainEqual(expect.objectContaining({ prefix: '10.1.0.0/16', preferred: true }))
+    expect(simulation.siteRibs.branch.some((route) => route.prefix === '10.0.0.0/8')).toBe(false)
+    const flow = traceAzNetFlow(topology, simulation, { kind: 'subnet', vnetId: 'spoke', subnetId: 'wan-work' }, '172.16.0.4')
+    expect(flow.status, flow.summaryReason).toBe('delivered')
+    expect(flow.traversedApplianceIds.includes('vhub-fw:wan')).toBe(intent.private)
+  })
+
+  it('withdraws private policy prefixes, preserves explicit UDR overrides and respects BGP suppression', () => {
+    const topology = mixedTopology()
+    topology.vwanHubs[0].routingIntent = { private: true, internet: true, privatePrefixes: ['100.64.0.0/10'] }
+    topology.vnets[1].vwanHubAttachment!.propagateDefaultRoute = false
+    topology.udrTables = [{ id: 'policy', name: 'Explicit policy', disableBgpRoutePropagation: false,
+      routes: [{ id: 'drop', name: 'Drop branch traffic', prefix: '172.16.0.0/12', nextHopType: 'None', enabled: true }] }]
+    topology.vnets[1].subnets[0].routeTableId = 'policy'
+    let table = simulateAzNet(topology).subnetTables['wan-work']
+    expect(lookupSubnetEffectiveRoute(table, '100.64.1.4')).toMatchObject({ source: 'VirtualNetworkGateway' })
+    expect(lookupSubnetEffectiveRoute(table, '172.16.0.4')).toMatchObject({ source: 'User', nextHopType: 'None' })
+    expect(table.routes).toContainEqual(expect.objectContaining({ prefix: '172.16.0.0/12', source: 'VirtualNetworkGateway', active: false }))
+    expect(table.routes.some((route) => route.prefix === '0.0.0.0/0' && route.source === 'VirtualNetworkGateway')).toBe(false)
+    topology.udrTables[0].disableBgpRoutePropagation = true
+    table = simulateAzNet(topology).subnetTables['wan-work']
+    expect(table.routes.some((route) => route.source === 'VirtualNetworkGateway')).toBe(false)
+    expect(table.suppressedBgpRoutes).toContainEqual(expect.objectContaining({ prefix: '100.64.0.0/10', active: false }))
+    topology.udrTables[0].disableBgpRoutePropagation = false
+    topology.vwanHubs[0].routingIntent = { private: false, internet: false }
+    table = simulateAzNet(topology).subnetTables['wan-work']
+    expect(table.routes.some((route) => route.prefix === '100.64.0.0/10' && route.source === 'VirtualNetworkGateway')).toBe(false)
+    expect(table.routes).toContainEqual(expect.objectContaining({ prefix: '172.16.0.0/24', source: 'VirtualNetworkGateway', active: true }))
   })
 })

@@ -1,6 +1,7 @@
 import { expect, test } from './vwan-example-fixture'
 import type { Page } from '@playwright/test'
 import { example } from '../src/model'
+import { downloadTopologyCopy } from './document-action-helpers'
 
 const languageKey = 'vwan-visual-topology:language:v1'
 const topologyKey = 'vwan-visual-topology:v1'
@@ -30,7 +31,7 @@ test('English is the default; Japanese persists without changing topology or por
   await expect(page.getByLabel('ハブ Europe hub を選択', { exact: true })).toBeVisible()
   expect(await savedTopology(page)).toBe(saved)
   const download = page.waitForEvent('download')
-  await page.getByRole('button', { name: 'JSON をエクスポート', exact: true }).click()
+  await downloadTopologyCopy(page)
   const stream = await (await download).createReadStream()
   const chunks: Buffer[] = []
   for await (const chunk of stream!) chunks.push(chunk)
@@ -187,13 +188,14 @@ test('feedback switches inside its modal without losing consent, text, failure o
 test('unsupported or unavailable browser storage safely falls back and still allows switching', async ({ page }) => {
   await page.addInitScript((key) => { localStorage.setItem(key, 'unsupported') }, languageKey)
   await page.goto('/')
+  await expect(page.getByTestId('vwan-app')).toBeVisible()
   await expect(page.locator('html')).toHaveAttribute('lang', 'en')
   await page.evaluate(() => {
     Storage.prototype.getItem = () => { throw new Error('blocked') }
     Storage.prototype.setItem = () => { throw new Error('blocked') }
   })
   await switchLanguage(page, 'ja')
-  await expect(page.getByRole('button', { name: 'JSON をエクスポート', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: '名前を付けて保存', exact: true })).toBeVisible()
   await switchLanguage(page, 'en')
   await expect(page.locator('html')).toHaveAttribute('lang', 'en')
 })

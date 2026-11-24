@@ -5,12 +5,7 @@
   align-items: center;
   margin-bottom: 12px;
 }
-.learning-explain { white-space: normal; margin: 8px 0; font-size: 13px; font-weight: normal; }
-.learning-explain summary { cursor: pointer; }
-.learning-explain p { line-height: 1.5; }
-.learning-explain a { color: var(--accent, #1857b6); }
 .learning-notice { border-left: 3px solid var(--border, #b8c7d8); padding: 8px 12px; }
-.learning-explain summary:focus-visible { outline: 2px solid var(--focus, #1857b6); outline-offset: 3px; }
 .learning-sidebar {
   position: fixed;
   inset: 64px 8px 8px auto;
@@ -33,6 +28,10 @@
 .learning-sidebar p { line-height: 1.5; }
 .learning-success { border-left: 3px solid var(--accent, #1857b6); padding: 8px 12px; }
 .learning-success p { margin-block: 6px; }
+.learning-debrief h5 { font-size: 15px; margin-block: 12px; }
+.learning-references { padding-inline-start: 20px; line-height: 1.5; }
+.learning-references li { margin-block: 8px; }
+.learning-references a { color: var(--accent, #1857b6); }
 .learning-guide { position: relative; display: inline-block; margin-block: 8px; }
 .learning-guide [role="tooltip"] {
   position: absolute;
@@ -49,7 +48,11 @@
   font-size: 13px;
   z-index: 1;
 }
-.learning-choice { display: flex; gap: 8px; align-items: baseline; margin-block: 12px; }
+.learning-choice { display: flex; gap: 8px; align-items: center; min-height: 32px; margin-block: 8px; }
+.learning-choice input[type="radio"] { width: auto; flex: none; padding: 0; margin: 0; }
+.learning-choice span { flex: 1; min-width: 0; }
+.learning-scenario-background summary { margin-block: 4px; }
+.learning-scenario-progress { font-size: 12px; color: var(--text-muted); }
 .learning-sidebar-open :is(.aznet-topbar, .unified-topbar) { flex-wrap: wrap; max-height: 180px; overflow: auto; }
 .learning-sidebar-open .unified-topbar-controls { flex-basis: 100%; justify-content: flex-start; }
 .learning-sidebar button { white-space: normal; min-height: 32px; }
@@ -67,3 +70,5 @@
 }
 @media (prefers-contrast: more) { .learning-cue { border-color: Highlight; outline-color: CanvasText; } }
 @media (prefers-reduced-motion: reduce) { .learning-sidebar, .learning-cue { animation: none; transition: none; scroll-behavior: auto; } }
+.learning-belt-progress { border-inline-start: 3px solid var(--accent); padding-inline-start: 10px; margin-block: 12px; font-size: 12px; }
+.learning-belt-progress p { margin-block: 4px; }

@@ -1,5 +1,5 @@
 #requires -Version 7.0
-param([ValidateSet('All', 'Metadata', 'Contexts', 'Bounds')][string]$Suite = 'All')
+param([ValidateSet('All', 'Metadata', 'Contexts', 'Bounds', 'Scale')][string]$Suite = 'All')
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot
 $output = Join-Path $repo 'test-artifacts' 'azure-files' 'collector'
@@ -81,6 +81,22 @@ if ($args[0] -eq 'network') {
     if ($env:MOCK_EFFECTIVE_MODE -eq 'pagination') { $response.nextLink = 'https://example.invalid/do-not-follow' }
     $response | ConvertTo-Json -Compress -Depth 20
     exit 0
+}
+if ($env:MOCK_VNET_COUNT -and $env:MOCK_BULK) {
+    $uri = $args[[Array]::IndexOf($args, '--url') + 1]
+    $path = [uri]::UnescapeDataString(([uri]$uri).AbsolutePath)
+    if ($path -like '*/providers/Microsoft.Network/virtualNetworks') {
+        Add-Content -LiteralPath $env:MOCK_AZ_LOG -Value $uri
+        $entries = @(for ($i = 0; $i -lt [int]$env:MOCK_VNET_COUNT; $i++) {
+            @{ id = "$path/synthetic-$i"; properties = @{
+                addressSpace = @{ addressPrefixes = @("172.$(20 + [Math]::Floor($i / 256)).$($i % 256).0/24") }
+                secret = 'must-not-be-exported'
+            } }
+        })
+        $entries += @{ id = "$path/unreferenced"; properties = @{ addressSpace = @{ addressPrefixes = @('192.0.2.0/24') }; secret = 'must-not-be-exported' } }
+        @{ value = $entries } | ConvertTo-Json -Depth 20 -Compress
+        exit 0
+    }
 }
 $result = & $env:MOCK_BASE_FIXTURE @args
 if ($LASTEXITCODE) { exit $LASTEXITCODE }
@@ -182,15 +198,15 @@ try {
             catch { $accepted = $false; Assert ($_.Exception.Message -like '*1000 total spoke IPv4 prefixes*') 'Prefix work bound must fail explicitly.' }
             Assert ($accepted -eq $case[2]) 'Preserve the old 60-spoke envelope and enforce the qualified large-workload prefix budget.'
         }
-        foreach ($count in @(61, 200, 201)) {
+        foreach ($count in @(61, 1000, 1001)) {
             $env:MOCK_VNET_COUNT = "$count"
             $env:MOCK_AZ_MODE = 'normal'
             $file = Join-Path $output "synthetic-$count.json"
             if (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file }
             $result = & $pwshPath -NoLogo -NoProfile -NonInteractive -File $collector -VirtualWanId $wanId -OutputFile $file 2>&1 | Out-String
             $code = $LASTEXITCODE
-            if ($count -gt 200) {
-                Assert ($code -ne 0 -and $result -like '*200 total VNet connections*') 'Aggregate reference admission must reject the 201st connection across hubs.'
+            if ($count -gt 1000) {
+                Assert ($code -ne 0 -and $result -like '*1000 total VNet connections*') 'Aggregate reference admission must reject the 1001st connection across hubs.'
                 Assert (!(Test-Path -LiteralPath $file)) 'Over-budget captures must not be written.'
             } else {
                 Assert ($code -eq 0) "Bounded synthetic collector failed: $result"
@@ -208,8 +224,27 @@ try {
         Remove-Item Env:MOCK_VNET_COUNT
         if ($Suite -eq 'Bounds') { return }
     }
+    if ($Suite -in @('All', 'Scale')) {
+        Assert ((Get-FileHash $collector).Hash -eq (Get-FileHash (Join-Path $repo 'public' 'scripts' 'collect-azure-vwan.ps1')).Hash) 'Published and source collectors must match.'
+        $env:MOCK_VNET_COUNT = '501'
+        $env:MOCK_BULK = '1'
+        $env:MOCK_AZ_MODE = 'normal'
+        $file = Join-Path $output 'bulk-501.json'
+        $result = & $pwshPath -NoLogo -NoProfile -NonInteractive -File $collector -VirtualWanId $wanId -OutputFile $file -Force -BulkVnetReads -AllowCrossSubscriptionVnets 2>&1 | Out-String
+        Assert ($LASTEXITCODE -eq 0) "Bulk collection must succeed: $result"
+        $capture = Get-Content -LiteralPath $file -Raw | ConvertFrom-Json
+        $references = @($capture.hubs | ForEach-Object { $_.connections })
+        Assert ($references.Count -eq 501 -and @($references | Where-Object { $null -ne $_.addressPrefixes }).Count -eq 501) 'All 501 referenced VNet prefixes must be retained.'
+        $reads = @(Get-Content -LiteralPath $env:MOCK_AZ_LOG | Where-Object { $_ -like '*/virtualNetworks?*' })
+        Assert ($reads.Count -eq 1) 'Bulk read must list the resource group once, not use one CLI call per VNet.'
+        Assert ((Get-Content -LiteralPath $file -Raw) -notmatch 'must-not-be-exported|192.0.2.0') 'Unreferenced VNet data must not be exported.'
+        Remove-Item Env:MOCK_VNET_COUNT, Env:MOCK_BULK
+        Write-Host 'Verified 501-VNet bulk collection within unchanged invocation budget.'
+        if ($Suite -eq 'Scale') { return }
+    }
     $configModes = if ($Suite -eq 'Metadata') { @('normal') } elseif ($Suite -eq 'Contexts') { @('missing-table-labels', 'missing-table-routes') } else { @('normal', 'static-routes', 'partial', 'cross', 'vnet-only', 'basic', 'bad-next') }
     foreach ($mode in $configModes) {
+        Set-Content -LiteralPath $env:MOCK_AZ_LOG -Value ''
         $env:MOCK_AZ_MODE = if ($mode -eq 'cross') { 'partial' } else { $mode }
         $file = Join-Path $output "$mode.json"
         [string[]]$extra = if ($mode -eq 'cross') { @('-AllowCrossSubscriptionVnets') } else { @() }

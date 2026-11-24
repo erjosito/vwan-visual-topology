@@ -11,6 +11,9 @@ import { nodePrefixes } from './paths'
 import type { ObjectSelection, RouterSelection, Topology } from './model'
 import { topologyObject } from './model'
 import { isolationLinkName } from './resilience'
+import { canAcknowledgeWarning, orderWarningFindings } from './warning-acknowledgements'
+import { WarningAcknowledgement } from './WarningAcknowledgement'
+import { useWorkspaceEditorState, useWorkspaceStorage } from './workspace-context'
 
 const storageKey = 'vwan-visual-topology:diagnostics:v1'
 const emptyProfile = (): DiagnosticsProfile => ({ version: 1, intents: [], failureAnalysis: false })
@@ -22,7 +25,7 @@ function download(value: unknown, name: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject, onOpenStaticRouting, onAssignPrefixToSite, onClearHighlight, onProfileChange, onClose }: {
+export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject, onOpenStaticRouting, onAssignPrefixToSite, onClearHighlight, onProfileChange, isAcknowledged, onAcknowledge, onRestoreAll, onClose }: {
   topology: Topology; onFinding: (finding: DiagnosticsFinding) => void
   onInspect: (node: ObjectSelection) => void
   onEditObject?: (node: ObjectSelection) => void
@@ -30,7 +33,11 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject,
   onAssignPrefixToSite?: (siteId: string, prefixes: string[]) => void
   onClearHighlight: () => void; onClose: () => void
   onProfileChange?: () => void
+  isAcknowledged: (finding: DiagnosticsFinding) => boolean
+  onAcknowledge: (finding: DiagnosticsFinding, acknowledged: boolean) => void
+  onRestoreAll: () => void
 }) {
+  const storage = useWorkspaceStorage()
   const nodes = [
     ...topology.spokes.map((node) => ({ kind: 'spoke' as const, id: node.id, name: node.name })),
     ...topology.sites.map((node) => ({ kind: 'site' as const, id: node.id, name: node.name })),
@@ -38,31 +45,32 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject,
   ]
   const [initial] = useState(() => {
     try {
-      const saved = localStorage.getItem(storageKey)
+      const saved = storage.getItem(storageKey)
       return { profile: saved ? validateDiagnosticsProfile(JSON.parse(saved)) : emptyProfile(), error: '' }
     } catch { return { profile: emptyProfile(), error: 'The saved analysis profile could not be loaded. Its stored contents have not been overwritten.' } }
   })
-  const [profile, setProfile] = useState(initial.profile)
-  const [error, setError] = useState(initial.error)
-  const [source, setSource] = useState(nodes[0] ? key(nodes[0]) : '')
-  const [target, setTarget] = useState(nodes[1] ? key(nodes[1]) : '')
-  const [sourcePrefix, setSourcePrefix] = useState(nodes[0] ? nodePrefixes(topology, nodes[0])[0] ?? '' : '')
-  const [destinationPrefix, setDestinationPrefix] = useState(nodes[1] ? nodePrefixes(topology, nodes[1])[0] ?? '' : '')
-  const [expectation, setExpectation] = useState<'allow' | 'deny'>('allow')
-  const [firewall, setFirewall] = useState('')
-  const [constraintRouter, setConstraintRouter] = useState(topology.hubs[0] ? `hub:${topology.hubs[0].id}` : '')
-  const [constraintConnection, setConstraintConnection] = useState('')
-  const [constraintDirection, setConstraintDirection] = useState<'inbound' | 'outbound'>('outbound')
-  const [constraintPrefix, setConstraintPrefix] = useState('')
-  const [constraintExpectation, setConstraintExpectation] = useState<'present' | 'absent'>('present')
-  const [report, setReport] = useState<DiagnosticsReport>()
-  const [reportProfile, setReportProfile] = useState('')
-  const [cancelled, setCancelled] = useState(false)
+  const [profile, setProfile] = useWorkspaceEditorState('vwan.diagnostics.profile', initial.profile)
+  const [error, setError] = useWorkspaceEditorState('vwan.diagnostics.error', initial.error)
+  const [source, setSource] = useWorkspaceEditorState('vwan.diagnostics.source', nodes[0] ? key(nodes[0]) : '')
+  const [target, setTarget] = useWorkspaceEditorState('vwan.diagnostics.target', nodes[1] ? key(nodes[1]) : '')
+  const [sourcePrefix, setSourcePrefix] = useWorkspaceEditorState('vwan.diagnostics.sourcePrefix', nodes[0] ? nodePrefixes(topology, nodes[0])[0] ?? '' : '')
+  const [destinationPrefix, setDestinationPrefix] = useWorkspaceEditorState('vwan.diagnostics.destinationPrefix', nodes[1] ? nodePrefixes(topology, nodes[1])[0] ?? '' : '')
+  const [expectation, setExpectation] = useWorkspaceEditorState<'allow' | 'deny'>('vwan.diagnostics.expectation', 'allow')
+  const [firewall, setFirewall] = useWorkspaceEditorState('vwan.diagnostics.firewall', '')
+  const [constraintRouter, setConstraintRouter] = useWorkspaceEditorState('vwan.diagnostics.constraintRouter', topology.hubs[0] ? `hub:${topology.hubs[0].id}` : '')
+  const [constraintConnection, setConstraintConnection] = useWorkspaceEditorState('vwan.diagnostics.constraintConnection', '')
+  const [constraintDirection, setConstraintDirection] = useWorkspaceEditorState<'inbound' | 'outbound'>('vwan.diagnostics.constraintDirection', 'outbound')
+  const [constraintPrefix, setConstraintPrefix] = useWorkspaceEditorState('vwan.diagnostics.constraintPrefix', '')
+  const [constraintExpectation, setConstraintExpectation] = useWorkspaceEditorState<'present' | 'absent'>('vwan.diagnostics.constraintExpectation', 'present')
+  const [report, setReport] = useWorkspaceEditorState<DiagnosticsReport | undefined>('vwan.diagnostics.report', undefined,
+    value => value?.continuation?.status === 'paused' ? { ...value, complete: false, continuation: { ...value.continuation, status: 'cancelled' } } : value)
+  const [reportProfile, setReportProfile] = useWorkspaceEditorState('vwan.diagnostics.reportProfile', '')
+  const [cancelled, setCancelled] = useWorkspaceEditorState('vwan.diagnostics.cancelled', false)
   const [runScope, setRunScope] = useState<{ revision: string; profileRevision: string }>()
-  const [severity, setSeverity] = useState('')
-  const [category, setCategory] = useState('')
-  const [nodeFilter, setNodeFilter] = useState('')
-  const [filter, setFilter] = useState('')
+  const [severity, setSeverity] = useWorkspaceEditorState('vwan.diagnostics.severity', '')
+  const [category, setCategory] = useWorkspaceEditorState('vwan.diagnostics.category', '')
+  const [nodeFilter, setNodeFilter] = useWorkspaceEditorState('vwan.diagnostics.nodeFilter', '')
+  const [filter, setFilter] = useWorkspaceEditorState('vwan.diagnostics.filter', '')
   const importer = useRef<HTMLInputElement>(null)
   const importRequest = useRef(0)
   const worker = useRef<Worker | undefined>(undefined)
@@ -80,7 +88,7 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject,
       importRequest.current++
       onClearHighlight()
       setProfile(valid); setReport(undefined); setError(''); setCancelled(false)
-      try { localStorage.setItem(storageKey, JSON.stringify(valid)) }
+      try { storage.setItem(storageKey, JSON.stringify(valid)) }
       catch { setError('Browser storage is unavailable or full. Export the analysis profile to preserve it.') }
     } catch { setError('Invalid analysis profile. Use canonical IPv4 addresses or network prefixes and valid flow requirements.') }
   }
@@ -138,12 +146,12 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject,
     worker.current.postMessage({ type: 'continue' })
   }
   const name = (node?: PathNode) => node ? topologyObject(topology, node)?.name ?? node.id : ''
-  const visible = currentReport?.findings.filter((finding) => finding.severity !== 'unknown' &&
+  const visible = orderWarningFindings(currentReport?.findings.filter((finding) => finding.severity !== 'unknown' &&
     (!severity || finding.severity === severity) && (!category || finding.rule === category)
     && (!nodeFilter || [finding.source, finding.target, ...finding.related].some((node) => node && key(node) === nodeFilter))
     && (!filter || (finding.occurrences ?? [finding]).some((entry) =>
       [entry.prefix, entry.sourceAddress, entry.destinationAddress, name(entry.source), name(entry.target), t(entry.title), t(entry.detail)]
-        .some((value) => value?.toLocaleLowerCase().includes(filter.toLocaleLowerCase()))))) ?? []
+        .some((value) => value?.toLocaleLowerCase().includes(filter.toLocaleLowerCase()))))) ?? [], isAcknowledged)
   const categories = [...new Map(currentReport?.findings.filter((finding) => finding.severity !== 'unknown').map((finding) => [finding.rule, finding.title]) ?? []).entries()]
   return <CanvasOverlay title={t('Routing diagnostics')} className="diagnostics-panel" onClose={onClose}>
     <p className="muted">{t('Offline, intent-aware routing checks. Declare expected communication; asymmetric transit alone is not an error. Actual hosts, firewall rules, NAT and traffic hashes are not verified.')}</p>
@@ -210,6 +218,9 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject,
         ...(coverage.otherUnknownFindings.length ? [coverage.otherUnknownFindings.length === 1 ? t('1 incomplete check') : t('{0} incomplete checks', coverage.otherUnknownFindings.length)] : []),
       ]
       return <section aria-label={t('Diagnostic results')}>
+        <p data-testid="warning-attention-count" role="status">{t('{0} findings need attention · {1} acknowledged · {2} total', currentReport.findings.filter((finding) => (finding.severity === 'error' || finding.severity === 'warning') && !isAcknowledged(finding)).length, currentReport.findings.filter(isAcknowledged).length, currentReport.findings.length)}</p>
+        <p className="muted">{t('Acknowledgement is saved with this design. It does not fix a warning or change routing checks; changed evidence needs attention again.')}</p>
+        {!!topology.warningAcknowledgements?.length && <button onClick={onRestoreAll}>{t('Restore all warning attention')}</button>}
         <p className={!coverage.scanIncomplete && currentReport.complete ? 'notice analysis-complete' : 'notice'} role="status">{t(coverage.scanIncomplete
           ? 'Analysis is partial or some cases could not be assessed.'
           : coverage.hasNotes
@@ -225,8 +236,11 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject,
           <label className="field"><span>{t('Filter by prefix or endpoint')}</span><input aria-label={t('Filter by prefix or endpoint')} value={filter} onChange={(event) => setFilter(event.target.value)} /></label>
         </div>
         <p className="muted">{t('Forward and return paths use different destination colors. Symmetric ECMP candidates do not prove symmetric traffic hashing.')}</p>
-        <div className="flow-results">{visible.map((finding) => <article key={finding.id} className={`diagnostic-finding ${finding.severity}`}>
+        <div className="flow-results">{visible.map((finding, index) => <div key={finding.id}>
+          {isAcknowledged(finding) && (index === 0 || !isAcknowledged(visible[index - 1])) && <h3 className="warning-acknowledged-heading">{t('Acknowledged warnings')}</h3>}
+          <article data-finding-id={finding.id} className={`diagnostic-finding ${finding.severity}${isAcknowledged(finding) ? ' acknowledged-warning' : ''}`}>
           <div className="row"><span className="diagnostic-severity">{t(severities[finding.severity])}</span><button className="finding-title" onClick={() => onFinding(finding)}>{t(finding.title)}</button></div>
+          {canAcknowledgeWarning(finding) && <WarningAcknowledgement acknowledged={isAcknowledged(finding)} onChange={(acknowledged) => onAcknowledge(finding, acknowledged)} />}
           <p>{t(finding.detail)}</p>
           <FindingFlows finding={finding} topology={topology} onFinding={onFinding} />
           {!finding.source && <p>{t('Affected objects: {0}', finding.related.map((node) => topologyObject(topology, node)?.name ?? node.id).join(', '))}</p>}
@@ -240,7 +254,7 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject,
             <div className="row">{finding.related.filter((node) => ['hub', 'site', 'erLocation'].includes(node.kind) && topologyObject(topology, node)).slice(0, 4).map((node) => <button key={key(node)} onClick={() => onInspect(node)}>{t('Inspect routes: {0}', topologyObject(topology, node)?.name)}</button>)}</div>
             {([['Forward', finding.forward], ['Return', finding.reverse]] as const).map(([direction, paths]) => <div key={direction}><h4>{t(direction)}</h4>{paths.map((path, index) => <details key={index}><summary>{t(path.status === 'unknown' ? 'Not assessed' : path.status === 'delivered' ? 'Reachable' : path.status === 'loop' ? 'Forwarding loop' : 'No route')} · {index + 1}</summary><ol>{path.steps.map((step, index) => <li key={index}>{localizeDiagnostic(step)}</li>)}</ol></details>)}</div>)}
           </details>
-        </article>)}</div>
+        </article></div>)}</div>
         {!visible.length && <p className="empty">{t('No findings match these filters. Review the assessed scope and limitations before drawing conclusions.')}</p>}
         <button onClick={() => download({ kind: 'vwan-routing-diagnostics', version: 1, profile, report: currentReport }, 'vwan-diagnostics-report.json')}>{t('Export diagnostic report')}</button>
       </section>

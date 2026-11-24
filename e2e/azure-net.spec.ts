@@ -1,4 +1,6 @@
+import { downloadTopologyCopy } from './document-action-helpers'
 import { expect, test } from './vwan-example-fixture'
+import { replaceActiveSavedTopology, waitForWorkspaceSample } from './workspace-storage-helpers'
 import type { Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -15,11 +17,295 @@ async function inspectSubnet(page: Page, subnetId: string) {
   await page.getByRole('menuitem', { name: 'Inspect Subnet Effective Routes', exact: true }).click()
 }
 
-async function loadTopology(page: Page, topology: AzNetTopology) {
+async function loadTopology(page: Page, topology: AzNetTopology, mode = 'hub-spoke') {
+  if (await page.getByTestId('aznet-app').count()) {
+    await replaceActiveSavedTopology(page, 'azure-net', JSON.stringify({ sampleId: '', topology }))
+    await page.reload()
+    return
+  }
   await page.addInitScript((value) => {
     localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology: value }))
   }, topology)
-  await page.goto('/?mode=hub-spoke')
+  await page.goto(`/?mode=${mode}`)
+}
+
+test('loads Azure capture tools only on request without changing the open design', async ({ page }) => {
+  const requests: string[] = []
+  page.on('request', request => requests.push(request.url()))
+  await page.goto('/?mode=full')
+  await expect(page.getByTestId('aznet-app')).toBeVisible()
+  await page.waitForLoadState('networkidle')
+  expect(requests.some(url => url.includes('AzurePanel'))).toBe(false)
+  const saved = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
+  await page.getByTestId('workspace-azure-button').click()
+  await expect(page.getByTestId('aznet-azure-capture-card')).toBeVisible()
+  expect(requests.some(url => url.includes('AzurePanel'))).toBe(true)
+  await expect(page.getByRole('link', { name: '⬇ Download Collector Script (.ps1)', exact: true })).toHaveAttribute('download', 'collect-azure-network.ps1')
+  await expect(page.getByRole('button', { name: '🔍 Compare Capture Against Current Topology', exact: true })).toBeVisible()
+  expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(saved)
+})
+
+test('shows routing-intent policy routes, default precedence and withdrawal in the spoke inspector', async ({ page }) => {
+  const topology = createEmptyAzNetTopology()
+  topology.vwanHubs = [{ id: 'wan', name: 'Secured WAN', region: 'westeurope', preference: 'ExpressRoute',
+    routingIntent: { private: true, internet: true } }]
+  topology.vnets = [{ id: 'spoke', name: 'WAN spoke', region: 'westeurope', role: 'spoke-vnet', prefixes: ['10.1.0.0/16'],
+    subnets: [{ id: 'work', name: 'Work', prefix: '10.1.1.0/24' }], gateways: [], appliances: [],
+    vwanHubAttachment: { hubId: 'wan', enabled: true, propagateDefaultRoute: true } }]
+  topology.sites = [{ id: 'branch', name: 'Branch', asn: 65001, prefixes: ['172.16.0.0/24'] }]
+  topology.vpnConnections = [{ id: 'vpn', name: 'Branch VPN', siteId: 'branch', targetKind: 'vwan-hub',
+    targetId: 'wan', enabled: true, bgpEnabled: true }]
+  await loadTopology(page, topology, 'full')
+  await inspectSubnet(page, 'work')
+  const policy = page.getByTestId('aznet-route-row-172.16.0.0/12-VirtualNetworkGateway')
+  await expect(policy).toContainText('Active')
+  await expect(page.getByTestId('aznet-route-row-172.16.0.0/24-VirtualNetworkGateway')).toHaveCount(0)
+  await expect(page.getByTestId('aznet-route-row-0.0.0.0/0-VirtualNetworkGateway')).toContainText('Active')
+  await expect(page.getByTestId('aznet-route-row-0.0.0.0/0-System')).toContainText('Invalid')
+  await page.getByTestId('aznet-lpm-input').fill('172.16.0.4')
+  await expect(policy).toContainText('LPM Winner')
+  await page.getByTestId('aznet-lpm-input').fill('10.1.1.4')
+  await expect(page.getByTestId('aznet-route-row-10.1.0.0/16-System')).toContainText('LPM Winner')
+  topology.vwanHubs[0].routingIntent = { private: false, internet: false }
+  await loadTopology(page, topology, 'full')
+  await inspectSubnet(page, 'work')
+  await expect(policy).toHaveCount(0)
+  await expect(page.getByTestId('aznet-route-row-172.16.0.0/24-VirtualNetworkGateway')).toContainText('Active')
+  await expect(page.getByTestId('aznet-route-row-0.0.0.0/0-VirtualNetworkGateway')).toHaveCount(0)
+  await expect(page.getByTestId('aznet-route-row-0.0.0.0/0-System')).toContainText('Active')
+})
+
+for (const mode of ['hub-spoke', 'full']) {
+  test(`separates Firewall and NVA creation, subnet selection, HA ownership and history in ${mode}`, async ({ page }) => {
+    const topology = structuredClone(AZURE_NET_SAMPLES.find((sample) => sample.id === 'hub-spoke-firewall-udr')!.topology)
+    topology.vnets[0].appliances[0].enableIpForwarding = false
+    await page.goto(`/?mode=${mode}`)
+    await page.locator('input[type=file]').first().setInputFiles({
+      name: 'firewall-nva-authoring.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
+    })
+    const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology as AzNetTopology)
+    const configure = async () => {
+      await openNodeMenu(page, 'aznet-vnet-vnet-hub-weu')
+      await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
+    }
+    await configure()
+    await expect(page.getByTestId('aznet-add-fw-vnet-hub-weu')).toBeDisabled()
+    await expect(page.getByTestId('appliance-availability-azure-firewall')).toContainText('Microsoft-managed HA')
+    await page.getByTestId('aznet-chip-app-hub-azfw').focus()
+    await page.keyboard.press('Enter')
+    await expect(page.getByTestId('aznet-firewall-availability')).toBeVisible()
+    await expect(page.getByTestId('aznet-hybrid-nva-editor')).toHaveCount(0)
+    await configure()
+    await page.getByTestId('aznet-add-nva-vnet-hub-weu').click()
+    const form = page.getByTestId('aznet-nva-creation')
+    await expect(form).toContainText('User-managed NVA HA')
+    await expect(form).toContainText('Vendor floating-IP reassignment')
+    await expect(form.getByLabel('NVA subnet', { exact: true })).toHaveValue('')
+    await expect(form.getByRole('button', { name: 'Create NVA', exact: true })).toBeDisabled()
+    await expect(form.getByLabel('NVA subnet', { exact: true }).locator('option[value="sub-hub-fw"]')).toHaveCount(0)
+    await expect(form.getByLabel('NVA subnet', { exact: true }).locator('option[value="sub-hub-gw"]')).toHaveCount(0)
+    await form.getByLabel('NVA name', { exact: true }).fill('First NVA')
+    await form.getByLabel('NVA subnet', { exact: true }).selectOption('sub-hub-mgmt')
+    await form.getByRole('button', { name: 'Create NVA', exact: true }).click()
+    await expect.poll(async () => (await saved()).vnets[0].appliances.length).toBe(2)
+    let current = (await saved()).vnets[0]
+    expect(current.appliances[1]).toMatchObject({ name: 'First NVA', kind: 'nva-vm', subnetId: 'sub-hub-mgmt', privateIp: '10.0.2.4', bgpEnabled: false })
+    expect(current.subnets).toEqual(topology.vnets[0].subnets)
+    expect((await saved()).udrTables).toEqual(topology.udrTables)
+    await openNodeMenu(page, 'aznet-vnet-vnet-hub-weu')
+    await page.getByRole('menuitem', { name: 'Add / Remove VNet Elements', exact: true }).click()
+    await expect(page.getByRole('menuitem', { name: /Add Azure Firewall/ })).toBeDisabled()
+    await page.getByRole('menuitem', { name: '+ Add NVA', exact: true }).click()
+    await form.getByLabel('NVA subnet', { exact: true }).selectOption('sub-hub-mgmt')
+    await form.getByRole('button', { name: 'Create NVA', exact: true }).click()
+    await expect.poll(async () => (await saved()).vnets[0].appliances.length).toBe(3)
+    current = (await saved()).vnets[0]
+    expect(current.appliances[2].privateIp).toBe('10.0.2.5')
+    await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
+    await expect.poll(async () => (await saved()).vnets[0].appliances.length).toBe(2)
+    await page.getByRole('button', { name: '↷ Redo', exact: true }).click()
+    await expect.poll(async () => (await saved()).vnets[0].appliances).toEqual(current.appliances)
+    await page.reload()
+    expect((await saved()).vnets[0].appliances).toEqual(current.appliances)
+  })
+
+  test(`retains imported duplicate Firewalls and diagnoses the unsupported HA design in ${mode}`, async ({ page }) => {
+    const topology = structuredClone(AZURE_NET_SAMPLES.find((sample) => sample.id === 'hub-spoke-firewall-udr')!.topology)
+    topology.vnets[0].appliances.push({ ...topology.vnets[0].appliances[0], id: 'extra-fw', privateIp: '10.0.1.5' })
+    await loadTopology(page, topology, mode)
+    await openNodeMenu(page, 'aznet-vnet-vnet-hub-weu')
+    await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
+    await expect(page.getByTestId('aznet-vnet-config-vnet-hub-weu').getByRole('alert')).toContainText('multiple Azure Firewalls')
+    await expect(page.getByTestId('aznet-add-fw-vnet-hub-weu')).toBeDisabled()
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology.vnets[0].appliances)).toEqual(topology.vnets[0].appliances)
+  })
+
+  test(`highlights invalid and out-of-VNet CIDRs in ${mode}`, async ({ page }) => {
+    const topology = structuredClone(AZURE_NET_SAMPLES.find((sample) => sample.id === 'hub-spoke-firewall-udr')!.topology)
+    await loadTopology(page, topology, mode)
+    await openNodeMenu(page, 'aznet-vnet-vnet-hub-weu')
+    await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
+    const prefixes = page.getByTitle('VNet CIDR prefixes (comma-separated)', { exact: true })
+    const subnet = page.getByTestId('aznet-subnet-prefix-sub-hub-fw')
+    await prefixes.fill('10.30.0.0/24')
+    await expect(prefixes).toHaveAttribute('aria-invalid', 'true')
+    await expect(subnet).toHaveAttribute('aria-invalid', 'true')
+    const errorColor = await prefixes.evaluate((element) => getComputedStyle(element).color)
+    await expect(page.getByTestId('aznet-vnet-vnet-hub-weu').locator('.aznet-vnet-prefix')).toHaveCSS('fill', errorColor)
+    await subnet.fill('not-a-cidr')
+    await expect(subnet).toHaveAttribute('aria-invalid', 'true')
+    await expect(subnet).toHaveCSS('color', errorColor)
+    await expect(page.getByTestId('aznet-subnet-sub-hub-fw')).toHaveAttribute('data-address-invalid', 'true')
+    await prefixes.fill('10.0.0.7/22')
+    await expect(prefixes).toHaveAttribute('aria-invalid', 'true')
+    await prefixes.fill('10.0.0.0/22')
+    await subnet.fill('10.0.1.0/26')
+    await expect(prefixes).toHaveAttribute('aria-invalid', 'false')
+    await expect(subnet).toHaveAttribute('aria-invalid', 'false')
+  })
+
+  test(`keeps subnet resource addresses and next hops consistent through edits and history in ${mode}`, async ({ page }) => {
+    const topology = structuredClone(AZURE_NET_SAMPLES.find((sample) => sample.id === 'hub-spoke-firewall-udr')!.topology)
+    const vnet = topology.vnets[0]
+    vnet.prefixes = ['10.30.0.0/24']
+    vnet.subnets.forEach((subnet, index) => { subnet.prefix = `10.30.0.${index * 64}/26` })
+    vnet.appliances = []
+    for (const route of topology.udrTables.flatMap((table) => table.routes)) {
+      if (route.nextHopIp === '10.0.1.4') route.nextHopIp = '10.30.0.68'
+    }
+    const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology as AzNetTopology)
+    await page.goto(`/?mode=${mode}`)
+    await page.locator('input[type=file]').first().setInputFiles({
+      name: 'subnet-addresses.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
+    })
+    await openNodeMenu(page, 'aznet-vnet-vnet-hub-weu')
+    await page.getByRole('menuitem', { name: 'Add / Remove VNet Elements', exact: true }).click()
+    await page.getByRole('menuitem', { name: /Add Azure Firewall/i }).click()
+    await expect.poll(async () => (await saved()).vnets[0].appliances[0]?.privateIp).toBe('10.30.0.68')
+    await openNodeMenu(page, 'aznet-vnet-vnet-hub-weu')
+    await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
+    await page.getByTestId('aznet-subnet-prefix-sub-hub-fw').fill('10.30.0.192/26')
+    await expect.poll(async () => (await saved()).vnets[0].appliances[0].privateIp).toBe('10.30.0.196')
+    expect((await saved()).udrTables.flatMap((table) => table.routes).filter((route) => route.nextHopType === 'VirtualAppliance')
+      .every((route) => route.nextHopIp === '10.30.0.196')).toBe(true)
+    await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
+    await expect.poll(async () => (await saved()).vnets[0].appliances[0].privateIp).toBe('10.30.0.68')
+    await page.getByRole('button', { name: '↷ Redo', exact: true }).click()
+    await expect.poll(async () => (await saved()).vnets[0].appliances[0].privateIp).toBe('10.30.0.196')
+    await page.reload()
+    await expect.poll(async () => (await saved()).vnets[0].appliances[0].privateIp).toBe('10.30.0.196')
+  })
+}
+
+test('retains NVA subnet drafts through Japanese switching and rejects exhausted allocation without mutation', async ({ page }) => {
+  const topology = structuredClone(AZURE_NET_SAMPLES.find((sample) => sample.id === 'hub-spoke-firewall-udr')!.topology)
+  topology.vnets[0].subnets.push({ id: 'full-subnet', name: 'Full subnet', prefix: '10.0.3.0/29',
+    privateEndpoints: [4, 5, 6].map((host) => ({ id: `pe-${host}`, name: `PE ${host}`, serviceName: 'service', ipAddress: `10.0.3.${host}` })) })
+  await loadTopology(page, topology)
+  await openNodeMenu(page, 'aznet-vnet-vnet-hub-weu')
+  await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
+  await page.getByTestId('aznet-add-nva-vnet-hub-weu').click()
+  const form = page.getByTestId('aznet-nva-creation')
+  await form.getByLabel('NVA name', { exact: true }).fill('日本語 NVA')
+  await form.getByLabel('NVA subnet', { exact: true }).selectOption('full-subnet')
+  await page.getByRole('combobox', { name: 'Language / 言語', exact: true }).selectOption('ja')
+  await expect(form.getByLabel('NVA 名', { exact: true })).toHaveValue('日本語 NVA')
+  await expect(form.getByLabel('NVA サブネット', { exact: true })).toHaveValue('full-subnet')
+  await form.getByRole('button', { name: 'NVA を作成', exact: true }).click()
+  await expect(form.getByRole('alert')).toContainText('空き IPv4')
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)).toEqual(topology)
+  expect((await new AxeBuilder({ page }).include('[data-testid="aznet-nva-creation"]').analyze()).violations).toEqual([])
+  await form.getByLabel('NVA サブネット', { exact: true }).selectOption('sub-hub-mgmt')
+  await form.getByRole('button', { name: 'NVA を作成', exact: true }).focus()
+  await page.keyboard.press('Enter')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology.vnets[0].appliances[1]?.name)).toBe('日本語 NVA')
+})
+
+test('rejects queued duplicate Firewalls while allocation tools load without losing the first creation', async ({ page }) => {
+  const topology = structuredClone(AZURE_NET_SAMPLES.find((sample) => sample.id === 'hub-spoke-firewall-udr')!.topology)
+  topology.vnets[0].appliances = []
+  let release!: () => void
+  let requested = false
+  const loading = new Promise<void>((resolve) => { release = resolve })
+  await page.route('**/src/azure-net/subnet-allocation.ts*', async (route) => {
+    requested = true
+    await loading
+    await route.continue()
+  })
+  await loadTopology(page, topology)
+  const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology as AzNetTopology)
+  for (let index = 0; index < 2; index++) {
+    await openNodeMenu(page, 'aznet-vnet-vnet-hub-weu')
+    await page.getByRole('menuitem', { name: 'Add / Remove VNet Elements', exact: true }).click()
+    await page.getByRole('menuitem', { name: /Add Azure Firewall/i }).click()
+    await expect.poll(() => requested).toBe(true)
+  }
+  expect((await saved()).vnets[0].appliances).toHaveLength(0)
+  release()
+  await expect.poll(async () => (await saved()).vnets[0].appliances.map((app) => app.privateIp)).toEqual(['10.0.1.4'])
+  await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
+  await expect.poll(async () => (await saved()).vnets[0].appliances).toHaveLength(0)
+})
+
+test('validates deferred CIDR drafts and renumbers modeled inventory on commit', async ({ page }) => {
+  const topology = structuredClone(AZURE_NET_SAMPLES.find((sample) => sample.id === 'hub-spoke-firewall-udr')!.topology)
+  const vnet = topology.vnets[0], app = vnet.appliances[0]
+  topology.inventory = {
+    workloads: [{ id: 'router-vm', name: 'Router', nicIds: ['router-nic'], backingDeviceId: app.id }],
+    nics: [{ id: 'router-nic', name: 'Router NIC', owner: { kind: 'vnet', id: vnet.id },
+      ipConfigurations: [{ id: 'primary', name: 'Primary', subnetId: app.subnetId, privateIp: app.privateIp }] }],
+    publicIps: [],
+  }
+  await loadTopology(page, topology)
+  await openNodeMenu(page, 'aznet-vnet-vnet-hub-weu')
+  await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
+  const subnet = page.getByTestId(`aznet-subnet-prefix-${app.subnetId}`)
+  const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology as AzNetTopology)
+  await subnet.fill('invalid-draft')
+  await expect(subnet).toHaveAttribute('aria-invalid', 'true')
+  expect((await saved()).vnets[0].appliances[0].privateIp).toBe(app.privateIp)
+  await subnet.fill('10.0.3.64/26')
+  await expect(subnet).toHaveAttribute('aria-invalid', 'false')
+  await subnet.blur()
+  await expect.poll(async () => (await saved()).vnets[0].appliances[0].privateIp).toBe('10.0.3.68')
+  expect((await saved()).inventory!.nics[0].ipConfigurations[0].privateIp).toBe('10.0.3.68')
+})
+
+test('offers explicit repair for stale imported subnet resource addresses', async ({ page }) => {
+  const topology = structuredClone(AZURE_NET_SAMPLES.find((sample) => sample.id === 'hub-spoke-firewall-udr')!.topology)
+  topology.vnets[0].appliances[0].privateIp = '10.0.202.4'
+  await loadTopology(page, topology)
+  await openNodeMenu(page, 'aznet-vnet-vnet-hub-weu')
+  await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
+  await page.getByRole('button', { name: 'Update resource addresses', exact: true }).click()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology.vnets[0].appliances[0].privateIp)).toBe('10.0.1.4')
+  await expect(page.getByRole('button', { name: 'Update resource addresses', exact: true })).toHaveCount(0)
+})
+
+for (const mode of ['hub-spoke', 'full']) {
+  test(`hides internal VNet role labels while preserving imported roles in ${mode}`, async ({ page }) => {
+    const topology = structuredClone(AZURE_NET_SAMPLES.find((sample) => sample.id === 'hub-spoke-firewall-udr')!.topology)
+    await page.goto(`/?mode=${mode}`)
+    await page.locator('input[type=file]').first().setInputFiles({
+      name: 'vnet-roles.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify(topology)),
+    })
+    const diagram = page.getByTestId('aznet-diagram-svg')
+    for (const vnet of topology.vnets) {
+      const node = diagram.getByTestId(`aznet-select-vnet-${vnet.id}`)
+      await expect(node).toContainText(vnet.name)
+      await expect(node).toContainText(`${vnet.prefixes.join(', ')} · ${vnet.region}`)
+      await expect(node.getByText(new RegExp(`^${vnet.role}$`, 'i'))).toHaveCount(0)
+    }
+
+    const download = page.waitForEvent('download')
+    await downloadTopologyCopy(page)
+    const exported = JSON.parse(readFileSync((await (await download).path())!, 'utf8')) as AzNetTopology
+    expect(exported.vnets.map(({ id, role }) => ({ id, role }))).toEqual(
+      topology.vnets.map(({ id, role }) => ({ id, role })),
+    )
+  })
 }
 
 test('authors Managed VNRA transit with original ownership, scoped inspection, history and JSON round trips', async ({ page }) => {
@@ -65,6 +351,7 @@ test('authors Managed VNRA transit with original ownership, scoped inspection, h
   await page.getByRole('menuitem', { name: 'Open VNet detail', exact: true }).click()
   const detail = page.getByTestId('network-detail-dialog')
   const device = detail.getByTestId('detail-vnra')
+  await detail.locator(`[data-subnet-id="${app.subnetId}"] .detail-subnet-policies > summary`).click()
   await expect(device).toContainText(app.id)
   await expect(device).toContainText('Authored transit')
   await device.getByRole('button', { name: 'Configure Managed VNRA', exact: true }).click()
@@ -75,6 +362,7 @@ test('authors Managed VNRA transit with original ownership, scoped inspection, h
   expect((await saved()).vnets[0].appliances[0].id).toBe(app.id)
   await openNodeMenu(page, 'aznet-vnet-vnet-hub-r1')
   await page.getByRole('menuitem', { name: 'Open VNet detail', exact: true }).click()
+  await detail.locator(`[data-subnet-id="${app.subnetId}"] .detail-subnet-policies > summary`).click()
   await device.getByRole('button', { name: 'Inspect Appliance Subnet Effective Routes', exact: true }).click()
   await expect(page.getByTestId('aznet-effective-route-table')).toBeVisible()
   await expect(page.getByTestId('aznet-editor-scope-banner')).toHaveCount(0)
@@ -91,7 +379,7 @@ test('authors Managed VNRA transit with original ownership, scoped inspection, h
   await page.getByRole('button', { name: 'Close Path explorer', exact: true }).click()
 
   const download = page.waitForEvent('download')
-  await page.getByRole('button', { name: /Export JSON/ }).click()
+  await downloadTopologyCopy(page)
   const file = (await (await download).path())!
   const exported = JSON.parse(readFileSync(file, 'utf8')) as AzNetTopology
   expect(exported.vnets[0].appliances[0]).toEqual((await saved()).vnets[0].appliances[0])
@@ -187,15 +475,21 @@ test.describe('AzNet bounded workspace and durable gestures', () => {
   })
 
   test('reports rejected imports and quota failure while preserving the active design and export', async ({ page }) => {
-    await page.addInitScript(() => {
+    await page.goto('/?mode=full&sample=hub-spoke-firewall-udr')
+    await waitForWorkspaceSample(page, 'azure-net', 'hub-spoke-firewall-udr')
+    const retained = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
+    await page.evaluate(() => {
       const set = Storage.prototype.setItem
       Storage.prototype.setItem = function (key, value) {
-        if (key === 'aznet-visual-topology:v1') throw new DOMException('Test quota exhausted', 'QuotaExceededError')
+        if (key.startsWith('network-simulator:workspace-tab:v1:') && key.endsWith(':topology')) throw new DOMException('Test quota exhausted', 'QuotaExceededError')
         return set.call(this, key, value)
       }
     })
-    await page.goto('/?mode=full&sample=hub-spoke-firewall-udr')
-    await expect(page.getByTestId('aznet-save-error')).toContainText('Export JSON')
+    await page.getByTestId('aznet-add-vnet-btn').click()
+    await expect(page.getByTestId('aznet-save-error')).toHaveCount(0)
+    await expect(page.getByTestId('document-local-state')).toHaveText('Not saved')
+    await expect(page.getByTestId('document-save-state')).toHaveAttribute('title', /Profile recovery unavailable/)
+    expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(retained)
     const node = page.getByTestId('aznet-vnet-vnet-hub-weu')
     const input = page.locator('input[type=file]').first()
     for (const body of ['null', '{"version":2,"kind":"azure-network-topology","name":"Broken","vnets":[]}']) {
@@ -204,24 +498,19 @@ test.describe('AzNet bounded workspace and durable gestures', () => {
       await expect(node).toBeVisible()
     }
     const download = page.waitForEvent('download')
-    await page.getByRole('button', { name: '⬇ Export JSON', exact: true }).click()
+    await downloadTopologyCopy(page)
     expect((await download).suggestedFilename()).toMatch(/\.json$/)
   })
 
-  test('consumes shared snapshots once and reloads newer edits without uploading a topology', async ({ page }) => {
-    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+  test('deprecates embedded snapshot generation and preserves the workspace without uploading', async ({ page }) => {
     await page.goto('/?mode=hub-spoke&sample=hub-spoke-firewall-udr')
     const uploads: string[] = []
     page.on('request', (request) => { if (!['GET', 'HEAD'].includes(request.method())) uploads.push(request.url()) })
     await page.getByTestId('aznet-share-url-btn').click()
-    await expect(page.getByTestId('aznet-share-url-btn')).toHaveText('✓ Link Copied')
-    await expect(page.getByTestId('aznet-share-url-btn')).toHaveAttribute('title', /full design.*Not encrypted or redacted/)
-    const link = await page.evaluate(() => navigator.clipboard.readText())
-    expect(link).toContain('#s=')
+    await expect(page.getByTestId('aznet-share-url-btn')).toHaveText('Share cloud save')
+    await expect(page.getByTestId('aznet-share-url-btn')).toHaveAttribute('title', /revocable 30-day link/)
+    await expect(page.getByTestId('aznet-workspace-notice')).toContainText('Unsaved edits are not shared')
     expect(new URL(page.url()).hash).toBe('')
-    await page.goto(link)
-    await expect(page.getByTestId('aznet-vnet-vnet-hub-weu')).toBeVisible()
-    await expect.poll(() => new URL(page.url()).hash).toBe('')
     await page.getByTestId('aznet-add-vnet-btn').click()
     const added = page.locator('[data-testid^="aznet-vnet-vnet-custom-"]')
     await expect(added).toHaveCount(1)
@@ -339,6 +628,13 @@ test.describe('AzNet bounded workspace and durable gestures', () => {
     await expect(page.getByTestId('aznet-bicep-code')).toContainText('Renamed data workload')
     await openNodeMenu(page, 'aznet-vnet-vnet-spoke-data')
     await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
+    const subnets = page.locator('.aznet-inspector-window summary').filter({ hasText: 'Subnet configuration' }).first()
+    if (await subnets.count() && await subnets.locator('..').getAttribute('open') === null) await subnets.click()
+    const beforeDissociation = await counts(page)
+    for (const association of await page.getByTestId(/^aznet-subnet-rt-select-/).all()) {
+      await association.selectOption('')
+    }
+    await expect.poll(async () => (await counts(page)).simulation).toBeGreaterThan(beforeDissociation.simulation)
     const beforeRegion = await counts(page)
     await page.getByTestId('aznet-vnet-region-vnet-spoke-data').fill('eastus')
     await expect.poll(async () => (await counts(page)).simulation).toBeGreaterThan(beforeRegion.simulation)
@@ -371,7 +667,7 @@ test.describe('AzNet bounded workspace and durable gestures', () => {
       await page.goto(`/?mode=${mode}`)
       await page.getByRole('button', { name: 'Workspace controls', exact: true }).click()
       await page.getByTestId('aznet-check-routing-btn').click()
-      await expect(page.getByTestId('aznet-routing-check-status')).toBeVisible()
+      await expect(page.getByTestId('aznet-routing-check-status')).toBeVisible({ timeout: 30_000 })
       const node = page.getByTestId('aznet-vnet-bench-vnet-0')
       const frame = node.locator('.network-node-frame')
       const originalX = await frame.getAttribute('x')
@@ -605,7 +901,8 @@ test.describe('AzNetSim native workspace compatibility', () => {
 
     // Switch to Sample 2 (Azure Route Server + SD-WAN NVA)
     await page.getByTestId('aznet-sample-select').selectOption('ars-sdwan-nva-coexistence')
-    await page.getByTestId('aznet-tab-diagnostics').click()
+    await waitForWorkspaceSample(page, 'azure-net', 'ars-sdwan-nva-coexistence')
+    await page.getByRole('button', { name: /^Advanced checks/ }).click()
     await expect(page.getByTestId('aznet-finding-bgp-routes-suppressed')).toBeVisible()
 
     // Load the all-features stress case from the secondary validation collection.
@@ -614,9 +911,13 @@ test.describe('AzNetSim native workspace compatibility', () => {
     await page.getByTestId('aznet-sample-gallery-modal').getByRole('combobox', { name: 'Collection', exact: true }).selectOption('validation')
     await expect(page.getByTestId('aznet-gallery-card-uc9-expressroute-hairpin-two-vnets')).toBeVisible()
     await page.getByTestId('aznet-gallery-load-enterprise-vnet-all-features-showcase').click()
-    await page.getByRole('button', { name: 'Replace and load', exact: true }).click()
     await expect(page.getByTestId('aznet-sample-gallery-modal')).toHaveCount(0)
     await expect(page.getByTestId('aznet-vnet-vnet-hub-neu')).toBeVisible()
+    const designs = page.getByRole('tablist', { name: 'Designs', exact: true }).getByRole('tab')
+    await expect(designs).toHaveCount(3)
+    await designs.first().click()
+    await expect(page.getByTestId('aznet-vnet-vnet-hub-weu')).toBeVisible()
+    await expect(page.getByTestId('aznet-symmetry-verdict')).toContainText('Symmetric')
   })
 
   test('supports all samples without mode restrictions, URL hash sharing, Internet tracing and native label compatibility', async ({
@@ -640,11 +941,9 @@ test.describe('AzNetSim native workspace compatibility', () => {
     await page.getByTestId('aznet-subnet-selector').selectOption('sub-app-web')
     await expect(page.getByTestId('aznet-route-trace-badge-fwd').first()).toBeVisible()
 
-    // Sharing copies a snapshot without installing a stale override in this workspace's URL.
-    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+    // Sharing now requires an explicit confirmed cloud save, never an embedded snapshot.
     await page.getByTestId('aznet-share-url-btn').click()
-    await expect(page.getByTestId('aznet-share-url-btn')).toHaveText('✓ Link Copied')
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toContain('#s=')
+    await expect(page.getByTestId('aznet-workspace-notice')).toContainText('Unsaved edits are not shared')
     expect(new URL(page.url()).hash).not.toContain('s=')
 
     // 5. Optional diagram node labels in AzNet Configure tab & vWAN mode (#47 scoped to selected node)
@@ -658,7 +957,7 @@ test.describe('AzNetSim native workspace compatibility', () => {
     // Switch to vWAN-Only mode and set a custom diagram label on Europe hub
     await page.getByRole('button', { name: 'Close Configure selected object', exact: true }).click()
     await page.getByTestId('workspace-library-open').click()
-    await page.getByRole('button', { name: 'Open saved design: Global branch network', exact: true }).click()
+    await page.getByRole('button', { name: 'Open saved topology: Global branch network', exact: true }).click()
     await page.getByLabel('Select hub Europe hub', { exact: true }).focus()
     await page.keyboard.press('Shift+F10')
     await page.getByRole('menu').getByRole('menuitem', { name: 'Edit configuration', exact: true }).click()
@@ -677,7 +976,7 @@ test.describe('AzNetSim native workspace compatibility', () => {
 
     await expect(page.getByTestId('aznet-app')).toBeVisible()
     await page.getByTestId('workspace-library-open').click()
-    await expect(page.getByRole('dialog', { name: 'Workspace', exact: true })).toContainText('One active design')
+    await expect(page.getByRole('dialog', { name: 'Workspace', exact: true })).toContainText('Open topologies in separate tabs')
     await page.getByRole('dialog', { name: 'Workspace', exact: true }).getByRole('button', { name: 'Close', exact: true }).click()
 
     await expect(page.getByTestId('aznet-subnet-sub-app-web')).not.toContainText('GWroutes:OFF')
@@ -700,7 +999,7 @@ test.describe('AzNetSim native workspace compatibility', () => {
     await expect(peerHoverCard).toHaveCount(0)
 
     // #36: Right-click VNet node to open contextual menu
-    await page.getByTestId('aznet-vnet-vnet-spoke-app').click({ button: 'right', position: { x: 24, y: 18 }, force: true })
+    await page.getByTestId('aznet-select-vnet-vnet-spoke-app').locator('rect').nth(1).click({ button: 'right' })
     const ctxMenu = page.getByRole('menu').first()
     await expect(ctxMenu).toBeVisible()
     await expect(ctxMenu.getByRole('menuitem', { name: /Configure VNet/i })).toBeVisible()
@@ -882,3 +1181,45 @@ test.describe('AzNetSim native workspace compatibility', () => {
   })
 })
 
+for (const mode of ['hub-spoke', 'full']) {
+  test(`keeps protected peering routes active and BGP conflicts invalid in effective-route and LPM views in ${mode}`, async ({ page }) => {
+    const topology = createEmptyAzNetTopology()
+    topology.vnets = [
+      { id: 'gwc', name: 'VNet-Hub-GWC', role: 'hub', region: 'westeurope', prefixes: ['10.1.0.0/24'],
+        subnets: [{ id: 'gwc-gw', name: 'GatewaySubnet', prefix: '10.1.0.0/27' },
+          { id: 'gwc-fw', name: 'AzureFirewallSubnet', prefix: '10.1.0.64/26' }],
+        gateways: [{ id: 'gwc-er', name: 'GWC ER', kind: 'ExpressRoute', asn: 65515, enabled: true, bgpEnabled: true }], appliances: [] },
+      { id: 'weu', name: 'VNet-Hub-WEU', role: 'hub', region: 'westeurope', prefixes: ['10.2.0.0/24'],
+        subnets: [{ id: 'weu-gw', name: 'GatewaySubnet', prefix: '10.2.0.0/27' },
+          { id: 'weu-work', name: 'Workload', prefix: '10.2.0.64/26' }],
+        gateways: [{ id: 'weu-er', name: 'WEU ER', kind: 'ExpressRoute', asn: 65515, enabled: true, bgpEnabled: true }], appliances: [] },
+    ]
+    const flags = { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: false }
+    topology.vnetPeerings = [{ id: 'peer', name: 'Direct GWC-WEU', vnetAId: 'gwc', vnetBId: 'weu', enabled: true, aToB: { ...flags }, bToA: { ...flags } }]
+    topology.erLocations = [{ id: 'er', name: 'Amsterdam', peeringLocation: 'Amsterdam', sku: 'Standard' }]
+    topology.erLinks = ['gwc-er', 'weu-er'].map((targetId) => ({ id: `er-${targetId}`, name: targetId,
+      locationId: 'er', targetKind: 'vnet-gateway' as const, targetId, enabled: true }))
+    topology.sites = [{ id: 'site', name: 'BGP conflicts and remote prefixes', asn: 65001,
+      prefixes: ['10.2.0.128/25', '10.2.1.0/24', '10.2.2.0/24'] }]
+    topology.erLinks.push({ id: 'er-site', name: 'Site', locationId: 'er', targetKind: 'site', targetId: 'site', enabled: true })
+    await loadTopology(page, topology, mode)
+    await inspectSubnet(page, 'gwc-fw')
+    const system = page.getByTestId('aznet-route-row-10.2.0.0/24-System')
+    await expect(system).toContainText('Active')
+    await expect(system).not.toHaveClass(/suppressed/)
+    const equal = page.getByTestId('aznet-route-row-10.2.0.0/24-VirtualNetworkGateway')
+    await expect(equal).toContainText('Invalid')
+    await expect(equal).toContainText('12076 12076')
+    await expect(equal).toContainText('protected System VNetPeering route 10.2.0.0/24')
+    const moreSpecific = page.getByTestId('aznet-route-row-10.2.0.128/25-VirtualNetworkGateway')
+    await expect(moreSpecific).toContainText('Invalid')
+    await expect(moreSpecific).toContainText('protected System VNetPeering')
+    await page.getByTestId('aznet-lpm-input').fill('10.2.0.132')
+    await expect(system).toContainText('LPM Winner')
+    await expect(moreSpecific).not.toHaveClass(/lpm-winner/)
+    await page.getByTestId('aznet-lpm-input').fill('10.2.1.4')
+    await expect(page.getByTestId('aznet-route-row-10.2.1.0/24-VirtualNetworkGateway')).toContainText('LPM Winner')
+    await expect(page.getByTestId('aznet-route-row-10.2.2.0/24-VirtualNetworkGateway')).toContainText('Active')
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)).toEqual(topology)
+  })
+}

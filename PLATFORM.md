@@ -10,8 +10,10 @@ The existing React UI, native JSON formats, validators and TypeScript engines
 remain the source of routing behavior. There is no separate desktop engine.
 #114 tracks P0, #115 P1, #116 P2A, and #106 desktop/P2B.
 #119/P3A and #120/P3B add on-demand explanations and local practice.
-Identity, cloud progress, verified awards and resource-deployment APIs remain
-outside this implementation.
+Identity and cloud progress are separate optional UI services, not part of the
+local simulation contract. Windows cloud sign-in is configured separately under
+[cloud accounts](docs/cloud-accounts.md#configure-windows-cloud-sign-in).
+Verified awards and resource-deployment APIs remain outside this implementation.
 
 Both websites and Windows start with an empty mixed-network topology when there
 is no saved workspace; explicit samples/imports and saved work still load normally.
@@ -148,13 +150,15 @@ mapping or filtering cannot certify either connectivity or isolation. Supported
 repairs are open-ended; no guest/listener or live-session readiness is certified.
 
 The lazy, non-modal learning sidebar runs the **Routing foundations** track's
-six sequential missions through black belt (40 tasks, 1,325 first-earned points) from `course-examples.ts`,
-`course-routing.ts` and `course-wan.ts`. They cover direct peering, equal-prefix
-UDR preference, longest-prefix diagnosis, shared-gateway return routing, secured
-Virtual WAN and a two-fault hybrid capstone. `runner.ts` is the single progression authority: scoped
+revised Azure networking journey from `curriculum-v2.ts`: twelve linear chapters,
+72 assessed tasks and 1,345 XP, with mixed/full belt checkpoints through black.
+Topics progress from peering, Firewall/UDRs and Standard/secured Virtual WAN
+through static VPN, BGP, ExpressRoute resilience, VPN backup, NVA HA and
+multi-hub handover. The original and scenario editions remain playable archives.
+`runner.ts` is the single progression authority: scoped
 setup, observation, direct-peering configuration plus engine outcome, open-design
 requirements, and quizzes unlock the next task only after a passing current
-check and explicit **Complete task & continue**. The root keeps task/completion
+check and explicit **Next**. Loading/preparation earns no XP. The root keeps task/completion
 and pause/resume state across native editor switches. Compatible completion and
 linear position restore after reload from the bounded browser-local ledger.
 Raw JSON, raw requirements,
@@ -203,13 +207,13 @@ that today's canvas is still valid. Explicit lesson replay preserves history
 and cannot emit duplicate completion events. Newly inserted/revised unmet
 tasks gate the next uncompleted task even if later historical records exist.
 
-Routing foundations has separately versioned original and scenario editions.
-New learners start the seven-scenario edition. Existing completion history
-keeps the original edition until explicit, confirmed enrollment; old points
+Routing foundations has separately versioned revised, original and scenario editions.
+New learners start `azure-routing-v2`. Existing completion history
+keeps its archived edition until explicit, confirmed enrollment; old points
 and belts remain historical achievements, not credit in the new edition.
 Enrollment is an optional field in the existing v1 progress ledger and uses
 the same writer ownership and optimistic conflict checks as completion writes.
-Changing editions does not replace the current practice canvas. Each scenario
+Changing editions does not replace the current practice canvas. Each chapter
 still requires the existing explicit starter/replacement confirmation.
 
 Mixed flow requirements can declare
@@ -478,7 +482,7 @@ Reference: [HA ports and configuration-specific symmetry](https://learn.microsof
 | --- | --- | --- |
 | Web | Existing UI/engines and diagnostics workers remain browser-local. `src/platform/browser.ts` adds a separately tested worker contract adapter for new consumers; the existing UI is not wholesale migrated to that facade. Native saves remain per browser origin. | Static-site loading and deliberately selected existing web integrations retain their current behavior. No Azure credentials or new backend. |
 | Local MCP | `platform-dist/mcp.cjs`, Node workers, process-local jobs/evidence. No file, Azure, shell or UI mutation tools. | Stdio only; no HTTP listener. Your selected AI provider can receive tool inputs/results. Local MCP does **not** make hosted Copilot offline. |
-| Windows desktop | Packaged React UI/assets in Electron; isolated Node workers and deliberate file dialogs. Same native JSON and existing capture review. | Renderer has no Node, filesystem or generic IPC/process API. No automatic HTTP(S) requests, updates, telemetry or crash uploads. Feedback and share-link features are disabled. Deliberate Azure collection alone invokes the local read-only CLI broker. |
+| Windows desktop | Packaged React UI/assets in Electron; isolated Node workers and deliberate file dialogs. Same native JSON and existing capture review. | Renderer has no Node, filesystem or generic IPC/process API. Anonymous startup/local modeling make no automatic HTTP(S) requests. Optional signed-in cloud access uses the main-process API broker; the renderer stays network-locked. No updates, telemetry or crash uploads. Feedback/share-link features are disabled. Azure collection uses its separate local read-only CLI broker. |
 
 Core/Node bundle import guards reject React, browser locale state and browser
 worker dependencies. Presentation helpers accept a renderer rather than reading
@@ -753,11 +757,58 @@ References: [NSG processing and statefulness](https://learn.microsoft.com/en-us/
 
 ## Local MCP / Copilot skill
 
-Prerequisites: Node 22 and a trusted checkout; dependencies are restored with
-`npm ci`, then `npm run build:platform`. `npm run mcp` starts the standalone
-stdio server. `.github/mcp.json` declares the repository-local server, launched
-from this repository root after building. Review/enable it through your client's
-trust flow; the configuration does not grant blanket permissions.
+Prerequisites: **Node 22+** and an MCP-compatible AI client. Choose one installation:
+
+- **Portable package:** download a published **Local MCP server** release
+  (`mcp-v<version>`) from [GitHub releases](https://github.com/erjosito/vwan-visual-topology/releases?q=mcp-v).
+  This is the MCP package, not the Windows installer or a promotion receipt.
+- **Source checkout:** use a trusted checkout, restore dependencies with `npm ci`,
+  then run `npm run build:platform`. `npm run mcp` starts the standalone stdio
+  server from the repository root. `.github/mcp.json` declares that local server.
+
+The [independent release pipeline](docs/releasing.md) publishes the portable
+package without building the web app or Windows installer.
+Extract into a new directory, run `npm ci --omit=dev --ignore-scripts`, and
+configure the client to launch `node` with the absolute path to `mcp.cjs`.
+For example, merge this entry into your client's MCP-server configuration
+(the surrounding property name can differ by client):
+
+```json
+{
+  "mcpServers": {
+    "azure-network-simulator": {
+      "command": "node",
+      "args": ["C:\\Tools\\AzNetSim-MCP\\mcp.cjs"]
+    }
+  }
+}
+```
+
+For source builds, use the absolute path to `platform-dist/mcp.cjs` instead.
+Review/enable the server through your client's trust flow; configuration does
+not grant blanket permissions. Node must be on the client's PATH, or `command`
+must be the absolute path to its executable. The server uses stdio, not a URL
+or hosted endpoint.
+
+Restart the client/server to use the new package; web and Windows releases do
+not replace an already-running MCP process. To update, extract the new package
+into a separate directory, restore its dependencies, update the configured path
+and restart. Do not mix files from different versions.
+
+For a first simulation, ask the connected client to:
+
+1. Read `get_capabilities` and `get_schema` for the intended topology mode, using
+   the schema's native example rather than inventing fields.
+2. Run `start_simulation` with `operation: "validate"`, then read `get_job`.
+   Correct admission errors before interpreting routing results.
+3. Run `operation: "evaluate"` with explicit supported flow or exact-route
+   assertions. Read the job and bounded evidence, distinguishing pass, fail
+   and unassessed requirements. Results model steady-state configuration, not
+   live Azure delivery or convergence.
+
+The tools do not deploy Azure resources or edit an open canvas. Although the
+server runs locally, tool inputs and results may reach your selected AI provider;
+local MCP does not make hosted Copilot offline. Follow your data policy.
 
 The simulation tools are `get_capabilities`, `get_schema`, `start_simulation`,
 `get_job`, `get_evidence`, `cancel_job`. They provide native examples,
@@ -856,8 +907,18 @@ Documentation windows have no preload/bridge. External navigation/windows,
 webviews and renderer HTTP(S) fetches are blocked. Local docs, samples,
 JSON/Bicep/collector exports and existing diagnostics remain available.
 
-The five renderer methods are `openTopology`, `accounts`, `targets`,
-`collect`, `simulate`; there is no generic invoke, shell string or event bus.
+Configured Windows builds support optional personal Microsoft cloud accounts:
+MSAL Node opens only a validated Microsoft sign-in URL in the system browser,
+uses PKCE and a bounded loopback callback, and encrypts the credential cache
+with Windows DPAPI. Access/refresh tokens stay in the main process. Cloud library
+and learning-progress requests use fixed, schema-checked IPC operations and
+the embedded HTTPS API endpoint, not renderer networking. Configuration,
+account switching, sign-out and live interoperability qualification are documented
+in [cloud accounts](docs/cloud-accounts.md#configure-windows-cloud-sign-in).
+
+The renderer bridge exposes fixed local-file, Azure collection, simulation and
+cloud methods declared in `src/platform/desktop.ts`; there is no generic invoke,
+shell string or event bus.
 CLI reads use a fixed PowerShell wrapper with explicit tenant/subscription.
 Collection requires a native confirmation (default Cancel), chosen WAN or
 resource group, and read-only existing collectors. Authentication/scope/cloud

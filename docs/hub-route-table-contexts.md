@@ -75,12 +75,44 @@ Default routes do not propagate between hubs.
 VNet ingress and NVA ingress use their connection association. The hub-origin
 path selector and BGP-table inspector expose explicit table selection. Forward
 and return directions are evaluated independently. Longest-prefix lookup is
-performed inside the selected table, not by filtering a preselected global RIB.
+performed inside the selected table, not by filtering a preselected global BGP table.
 
 Unsupported static next hops, incomplete inventory/configuration, ambiguous
 remote context, and custom contexts involving secured hubs produce **Not
 assessed**, not a synthetic network failure or a healthy result. Arbitrary
 firewall rules, NAT, sessions and vendor NVA behavior are not certified.
+
+## Mixed-workspace spoke routes under routing intent
+
+The native v2 spoke effective-route projection distinguishes the policy routes
+received by a VNet from the hub's learned destinations used for onward forwarding:
+
+| Hub policies | Routes projected to an attached spoke |
+| --- | --- |
+| Neither | Selected learned destinations from the associated hub table |
+| Private only | RFC1918 aggregates (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`) and configured additional private prefixes |
+| Internet only | Learned destinations, plus `0.0.0.0/0` when the connection enables default propagation |
+| Both | Private policy prefixes, plus the opt-in Internet default |
+
+Policy routes use the Virtual Network Gateway source in the subnet table.
+An equal-prefix BGP default overrides the System Internet default; UDRs retain
+their precedence. Local/directly peered System ranges remain protected and win
+longest-prefix lookup against covering policy summaries. Disabling BGP
+propagation suppresses these advertisements, and disabling intent withdraws
+the derived prefixes without deleting the original learned destinations.
+A learned default remains subject to the connection's existing default control.
+
+Do not apply the spoke summary projection to VPN/ExpressRoute advertisements:
+Microsoft documents individual learned prefixes for ordinary on-premises
+connections. ExpressRoute transit enabled by Microsoft Support is a separate
+boundary, not implied support. Policy prefixes do not make uncovered aggregate
+addresses reachable; forwarding still needs an actual onward route.
+
+This matrix is documentation-derived regression coverage, not a new live Azure
+qualification. Custom secured-hub contexts remain **Not assessed**. The planning
+model does not reproduce Azure's irreversible association/propagation changes
+or restore previous Azure configuration when intent is removed.
+See [Microsoft routing-intent considerations and effective routes](https://learn.microsoft.com/azure/virtual-wan/how-to-routing-policies).
 
 ## Capture and comparison boundaries
 

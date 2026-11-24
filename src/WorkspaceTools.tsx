@@ -6,7 +6,6 @@ import { workspaceIdentityKey } from './workspace-objects'
 import type { WorkspaceIdentity, WorkspaceObject } from './workspace-objects'
 import './workspace-tools.css'
 import { workspaceCapabilities, workspaceCapabilityLimits } from './workspace-capabilities'
-import { workspaceCapabilitiesJa } from './workspace-capabilities-ja'
 import { useWorkspaceSession } from './workspace-context'
 
 type WorkspaceAction = ContextAction & { testId?: string }
@@ -51,8 +50,9 @@ function ActionList({ actions, query, parents = [], onRun }: {
   })}</ul>
 }
 
-export function WorkspaceTools<Selection>({ creationActions, getSelection, inventory, dismissRequest = 0, openRequest = 0 }: {
+export function WorkspaceTools<Selection>({ creationActions, resourceActions = [], getSelection, inventory, dismissRequest = 0, openRequest = 0 }: {
   creationActions: WorkspaceAction[]
+  resourceActions?: WorkspaceAction[]
   dismissRequest?: number
   openRequest?: number
   getSelection?: () => { title: string; actions: ContextAction[] } | null | undefined
@@ -63,9 +63,9 @@ export function WorkspaceTools<Selection>({ creationActions, getSelection, inven
   }
 }) {
   const id = useId()
-  const language = useLanguage()
+  useLanguage()
   const preview = useWorkspaceSession()?.presentationPreview
-  const capabilityText = (message: string) => language === 'ja' ? workspaceCapabilitiesJa[message] ?? message : message
+  const capabilityText = t
   const [visibility, setVisibility] = useState(() => ({ open: initialOpen(), request: dismissRequest, openRequest }))
   const requested = visibility.openRequest !== openRequest
   const open = requested || visibility.open && visibility.request === dismissRequest
@@ -88,8 +88,6 @@ export function WorkspaceTools<Selection>({ creationActions, getSelection, inven
     const update = () => setTop(Math.max(0, header.getBoundingClientRect().bottom))
     const observer = new ResizeObserver(update)
     observer.observe(header)
-    const native = document.querySelector('.desktop-tools')
-    if (native) observer.observe(native)
     window.addEventListener('resize', update)
     window.addEventListener('scroll', update, true)
     update()
@@ -133,6 +131,7 @@ export function WorkspaceTools<Selection>({ creationActions, getSelection, inven
     [t('Capability coverage'), capabilityText(row.feature)].join(' ').toLocaleLowerCase().includes(query))
   const groups = [
     { title: t('Create network objects'), actions: creationActions, selection: false },
+    ...(resourceActions.length ? [{ title: t('Manage workspace resources'), actions: resourceActions, selection: false }] : []),
     ...(selection ? [{ title: selection.title, actions: selection.actions, selection: true }] : []),
   ].filter((group) => visibleActions(group.actions, query).length)
   if (preview) groups.sort((a, b) => Number(b.selection) - Number(a.selection))

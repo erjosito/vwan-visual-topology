@@ -25,33 +25,72 @@
 .presentation-inspector-section > summary { cursor: pointer; font-weight: 600; overflow-wrap: anywhere; }
 .presentation-inspector-section > summary > span { display: block; font-size: 11px; font-weight: normal; color: var(--text-muted); margin: 4px 0; }
 .presentation-inspector-section > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.configuration-edit-status { display: block; margin: 0 0 10px; padding: 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 12px; overflow-wrap: anywhere; }
+.configuration-edit-status[data-pending="true"] { border-inline-start: 3px solid var(--accent); }
+.configuration-edit-status[data-invalid="true"] { border-inline-start: 3px solid var(--error); }
+.configuration-save-hint { display: block; font-size: 11px; font-weight: normal; color: var(--text-muted); margin-top: 4px; }
+.presentation-inspector-section > summary > .configuration-section-status { font-weight: 600; color: var(--text); margin-top: 6px; }
+.configuration-edit-status[hidden] { display: none; }
+.map-rule-disclosure[data-grouped="false"] { display: contents; }
+.map-rule-disclosure[data-grouped="true"] { border: 1px solid var(--border); border-radius: 6px; padding: 8px; min-width: 0; }
+.map-rule-disclosure > summary { cursor: pointer; overflow-wrap: anywhere; font-size: 12px; }
+.map-rule-disclosure > summary[hidden] { display: none; }
+.map-rule-disclosure > summary > span { display: block; margin-top: 4px; }
+.map-rule-disclosure > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.map-rule-disclosure[data-grouped="true"] > .map-rule { margin-top: 10px; }
 .presentation-vnet-field { display: grid; gap: 4px; font-size: 11.5px; }
 .simulator-shell[data-ui-preview] :is(.aznet-topbar, .unified-topbar) {
   display: grid; grid-template-columns: minmax(0, 1fr) auto;
-  flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px; padding: 8px 12px;
+  flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 4px; padding: 4px 12px;
   max-height: none; overflow: visible;
 }
 .simulator-shell[data-ui-preview] .unified-topbar-left {
-  flex-wrap: wrap; align-self: auto; flex-basis: auto; flex-shrink: 1; gap: 8px;
+  flex-wrap: wrap; align-self: auto; flex-basis: auto; flex-shrink: 1; gap: 4px;
 }
 .simulator-shell[data-ui-preview] .unified-brand { width: auto; margin-right: 8px; }
 .simulator-shell[data-ui-preview] :is(.aznet-topbar-controls, .unified-topbar-controls) {
   grid-column: 1 / -1;
-  flex-basis: auto; flex-shrink: 1; flex-wrap: wrap; gap: 8px;
+  flex-basis: auto; flex-shrink: 1; flex-wrap: wrap; gap: 4px;
 }
+.workspace-header-toggle { display: none; }
+.simulator-shell[data-ui-preview] .unified-brand h1,
+.simulator-shell.canvas-maximized .unified-brand h1 {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+.simulator-shell[data-ui-preview] :is(.aznet-topbar-controls, .unified-topbar-controls) :is(button, summary) {
+  padding: 6px 9px; min-height: 32px;
+}
+.simulator-shell[data-ui-preview] .presentation-group-content :is(button, select) { min-height: 44px; }
+.simulator-shell.canvas-maximized :is(header.aznet-topbar, header.unified-topbar) { display: none; }
 .workspace-account-status { grid-column: 2; grid-row: 1; align-self: start; max-width: min(420px, 46vw); display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: flex-start; gap: 4px; }
 .workspace-account-status :is(.learning-status-trigger, .account-status-trigger, .account-status-unavailable) { justify-content: flex-start; text-align: left; min-height: 44px; max-width: 100%; box-sizing: border-box; white-space: normal; overflow-wrap: anywhere; }
+.workspace-account-status .learning-status-trigger { padding: 4px 8px; }
+.workspace-account-status .learning-status-next {
+  flex-basis: auto; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .workspace-account-status .account-status-unavailable { display: grid; align-content: center; gap: 4px; font-size: 12px; }
 .account-status-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .account-status-unavailable small { font-size: 11px; color: var(--text-muted); }
+.document-save-state { display: grid; gap: 3px; max-width: 260px; min-height: 44px; align-content: center; padding: 6px 9px; box-sizing: border-box; text-align: left; font-size: 11px; white-space: normal; overflow-wrap: anywhere; }
+.document-save-state small { font-size: 10px; color: var(--text-muted); }
 .learning-status-identity { width: 100%; overflow-wrap: anywhere; }
 .learning-status-belt { display: inline-flex; align-items: center; gap: 4px; }
 .simulator-shell[data-ui-preview] [data-testid="ui-preview-toggle"] { border-color: var(--accent); color: var(--accent); }
 @media (max-width: 760px) {
   .simulator-shell[data-ui-preview] .unified-topbar-left { display: flex; min-width: 0; }
   .simulator-shell[data-ui-preview] :is(.aznet-topbar-controls, .unified-topbar-controls) { display: flex; min-width: 0; }
-  .simulator-shell[data-ui-preview] .unified-brand { width: auto; margin-right: 0; }
-  .simulator-shell[data-ui-preview] .unified-brand h1 { font-size: 14px; white-space: normal; }
+  .simulator-shell[data-ui-preview] .unified-brand { width: auto; margin-right: 0; min-width: 0; flex-shrink: 1; }
+  .simulator-shell[data-ui-preview] .unified-brand h1 { font-size: 14px; white-space: normal; min-width: 0; }
   .presentation-group { position: static; }
   .presentation-group-content { position: fixed; top: 16px; right: 16px; max-height: calc(100dvh - 32px); }
+  .simulator-shell[data-ui-preview] .workspace-header-toggle { display: inline-block; }
+  .simulator-shell[data-ui-preview] .workspace-account-status,
+  .simulator-shell.canvas-maximized .workspace-account-status {
+    grid-column: 1 / -1; grid-row: 1; max-width: none;
+  }
+  .simulator-shell[data-ui-preview] .unified-topbar-left,
+  .simulator-shell.canvas-maximized .unified-topbar-left { grid-column: 1 / -1; grid-row: 2; }
+  .simulator-shell[data-ui-preview] .unified-brand { display: none; }
+  .simulator-shell[data-ui-preview]:not([data-header-actions]) .unified-topbar-left > :not(.workspace-header-toggle, .document-artifact-details, [data-testid="workspace-library-open"], [data-testid="workspace-azure-button"]) { display: none; }
+  .simulator-shell[data-ui-preview]:not([data-header-actions]) :is(.aznet-topbar-controls, .unified-topbar-controls) { display: none; }
 }

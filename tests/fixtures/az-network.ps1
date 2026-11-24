@@ -130,8 +130,10 @@ if ($command -eq 'network nic show-effective-route-table') {
         }
     }
     ConvertTo-Json -InputObject @($result) -Depth 10 -Compress
-} elseif ($command -eq 'network vnet-gateway list' -and ($env:MOCK_NETWORK_MODE -like 'vpn-nat-*' -or $env:MOCK_NETWORK_MODE -eq 'bgp-neighbors')) {
+} elseif ($command -eq 'network vnet-gateway list' -and ($env:MOCK_NETWORK_MODE -like 'vpn-nat-*' -or $env:MOCK_NETWORK_MODE -like 'bgp-*')) {
     $gateway = @{ id = "$prefix/virtualNetworkGateways/vpn"; name = 'vpn'; gatewayType = 'Vpn'; enableBgp = $true
+        vpnType = 'RouteBased'; activeActive = $true; vpnGatewayGeneration = 'Generation2'; enablePrivateIpAddress = $true
+        sku = @{ name = 'VpnGw4AZ'; tier = 'VpnGw4AZ'; secret = 'must-not-be-exported' }
         bgpSettings = @{ asn = 65515; bgpPeeringAddress = '10.82.253.4' }
         ipConfigurations = @(@{ id = "$prefix/virtualNetworkGateways/vpn/ipConfigurations/default"
             subnet = @{ id = "$prefix/virtualNetworks/vnet-first/subnets/GatewaySubnet" } })
@@ -142,22 +144,30 @@ if ($command -eq 'network nic show-effective-route-table') {
             externalMappings = @(@{ addressSpace = 'must-not-be-exported' }); secret = 'must-not-be-exported' })
     }
     ConvertTo-Json -InputObject @($gateway) -Depth 10 -Compress
-} elseif ($command -eq 'network vpn-connection list' -and $env:MOCK_NETWORK_MODE -like 'vpn-nat-*') {
+} elseif ($command -eq 'network vpn-connection list' -and ($env:MOCK_NETWORK_MODE -like 'vpn-nat-*' -or $env:MOCK_NETWORK_MODE -like 'bgp-*')) {
     $connection = @{ id = "$prefix/connections/site"; name = 'site'; enableBgp = $true
         virtualNetworkGateway1 = @{ id = "$prefix/virtualNetworkGateways/vpn" }
         localNetworkGateway2 = @{ id = "$prefix/localNetworkGateways/site" }
-        ingressNatRules = @(); egressNatRules = @(); sharedKey = 'must-not-be-exported' }
+        ingressNatRules = @(); egressNatRules = @(); useLocalAzureIpAddress = $true; sharedKey = 'must-not-be-exported' }
     if ($env:MOCK_NETWORK_MODE -in @('vpn-nat-ingress', 'vpn-nat-egress')) {
         $key = if ($env:MOCK_NETWORK_MODE -eq 'vpn-nat-ingress') { 'ingressNatRules' } else { 'egressNatRules' }
         $connection[$key] = @(@{ id = "$prefix/virtualNetworkGateways/vpn/natRules/overlap"; secret = 'must-not-be-exported' })
     }
     ConvertTo-Json -InputObject @($connection) -Depth 10 -Compress
-} elseif ($command -eq 'network local-gateway list' -and $env:MOCK_NETWORK_MODE -like 'vpn-nat-*') {
+} elseif ($command -eq 'network local-gateway list' -and ($env:MOCK_NETWORK_MODE -like 'vpn-nat-*' -or $env:MOCK_NETWORK_MODE -like 'bgp-*')) {
     ConvertTo-Json -InputObject @(@{ id = "$prefix/localNetworkGateways/site"; name = 'site'
         localNetworkAddressSpace = @{ addressPrefixes = @('10.90.0.0/16') }
         bgpSettings = @{ asn = 65001; bgpPeeringAddress = '10.90.0.4' } }) -Depth 10 -Compress
-} elseif ($command -eq 'network vnet-gateway list-bgp-peer-status' -and $env:MOCK_NETWORK_MODE -eq 'bgp-neighbors') {
-    '{"value":[{"localAddress":"10.82.253.4","neighbor":"192.0.2.9","asn":65001,"state":"Connected","routesReceived":0,"connectedDuration":"00:01:00","messagesSent":12,"messagesReceived":11,"secret":"must-not-be-exported"}]}'
+} elseif ($command -eq 'network vnet-gateway list-bgp-peer-status' -and $env:MOCK_NETWORK_MODE -like 'bgp-*') {
+    '{"value":[{"localAddress":"10.82.253.4","neighbor":"192.0.2.9","asn":65001,"state":"Connected","routesReceived":0,"connectedDuration":"00:01:00","messagesSent":12,"messagesReceived":11,"secret":"must-not-be-exported"},{"localAddress":"10.82.253.5","neighbor":"192.0.2.9","asn":65001},{"localAddress":"10.82.253.4","neighbor":"10.82.253.4","state":"Unknown"},{"localAddress":"10.82.253.4","neighbor":"192.0.2.10","state":"Connected","routesReceived":0},{"localAddress":"10.82.253.4","state":"Unknown"}]}'
+} elseif ($command -eq 'network vnet-gateway list-advertised-routes') {
+    $destination = $args[[Array]::IndexOf($args, '--peer') + 1]
+    if ($destination -eq '192.0.2.9' -and $env:MOCK_NETWORK_MODE -eq 'bgp-advertised-denied') {
+        [Console]::Error.WriteLine('AuthorizationFailed 403 must-not-be-exported'); exit 1
+    }
+    if ($destination -eq '192.0.2.9') {
+        '{"value":[{"localAddress":"10.82.253.4","network":"203.0.113.0/24","nextHop":"198.51.100.1","asPath":"65515-65001","origin":"Incomplete","weight":0,"secret":"must-not-be-exported"},{"localAddress":"10.82.253.5","network":"203.0.113.0/24","nextHop":"198.51.100.2","asPath":""}]}'
+    } else { '{"value":[]}' }
 } elseif ($command -in @('network vnet-gateway list-learned-routes', 'network vnet-gateway list-bgp-peer-status')) {
     '{"value":[]}'
 } elseif ($command -eq 'network public-ip list') {

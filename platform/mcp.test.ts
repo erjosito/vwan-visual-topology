@@ -12,10 +12,57 @@ import { haRoutingRequirements, haRoutingTopology } from '../tests/fixtures/ha-r
 import { haBackend, haPacket, haPortsTopology } from '../tests/fixtures/ha-ports'
 import { nvaBgpTopology } from '../tests/fixtures/nva-bgp'
 import { readFileSync } from 'node:fs'
+import { vpnErTopology } from '../tests/fixtures/vpn-er'
+
+const serverPath = resolve(process.env.MCP_PACKAGE_DIR ?? 'platform-dist', 'mcp.cjs')
+
+it('exposes private VPN ER dependencies and directional protection through the actual stdio worker', async () => {
+  const client = new Client({ name: 'vpn-over-er-contract-test', version: '1' })
+  await client.connect(new StdioClientTransport({ command: process.execPath, args: [serverPath], stderr: 'pipe' }))
+  const call = async (name: string, args: Record<string, unknown> = {}) => {
+    const response = await client.callTool({ name, arguments: args })
+    if (response.isError) throw new Error(JSON.stringify(response.content))
+    return response.structuredContent as Record<string, any>
+  }
+  const read = async (handle: string, section: string) => {
+    const chunks: string[] = []
+    for (let offset = 0; offset < 1_000_000;) {
+      const chunk = await call('get_evidence', { handle, section, offset, limit: 4000 })
+      chunks.push(chunk.jsonText)
+      if (chunk.complete) return JSON.parse(chunks.join(''))
+      expect(chunk.jsonText.length).toBeGreaterThan(0)
+      offset += chunk.jsonText.length
+    }
+    throw new Error('Private VPN evidence exceeded the test retrieval bound.')
+  }
+  try {
+    expect((await call('get_schema', { mode: 'full' })).optionalVpnOverEr.connection.underlay.kind).toBe('express-route')
+    const topology = vpnErTopology()
+    const request = { contractVersion: 1 as const, operation: 'evaluate' as const, document: { mode: 'full' as const, topology },
+      requirements: [{ id: 'private-workload', kind: 'flow' as const, source: { kind: 'subnet' as const, vnetId: 'hub', subnetId: 'app' },
+        target: { kind: 'site' as const, siteId: 'site' }, sourceAddress: '10.0.1.4', destinationAddress: '192.168.10.4', expectation: 'allow' as const }] }
+    const { handle } = await call('start_simulation', { request })
+    let state
+    for (let attempt = 0; attempt < 100; attempt++) {
+      state = await call('get_job', { handle })
+      if (state.status === 'finished') break
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    expect(state?.status).toBe('finished')
+    expect(state?.resultStatus).toBe('complete')
+    const expected = executePlatform(request)
+    expect(await read(handle, 'simulation')).toEqual(expected.simulation)
+    const assessments = await read(handle, 'assessments')
+    expect(assessments).toEqual(expected.assessments)
+    expect(assessments[0].outcome).toBe('satisfied')
+    expect(assessments[0].evidence.forward.vpnProtection[0].protection).toBe('intended-ipsec')
+    expect(assessments[0].evidence.reverse.vpnProtection[0].underlay.onPremEndpoint).toBe('172.16.0.4')
+  } finally { await client.close() }
+}, 20000)
 
 it('qualifies subnet-peering route visibility separately from forwarding through the actual stdio engine', async () => {
   const client = new Client({ name: 'subnet-peering-contract-test', version: '1' })
-  await client.connect(new StdioClientTransport({ command: process.execPath, args: [resolve('platform-dist', 'mcp.cjs')], stderr: 'pipe' }))
+  await client.connect(new StdioClientTransport({ command: process.execPath, args: [serverPath], stderr: 'pipe' }))
   const call = async (name: string, args: Record<string, unknown> = {}) => {
     const response = await client.callTool({ name, arguments: args })
     if (response.isError) throw new Error(JSON.stringify(response.content))
@@ -60,7 +107,7 @@ it('qualifies subnet-peering route visibility separately from forwarding through
 
 it('exposes original per-NVA received-route evidence through the freshly built stdio engine without implying subnet injection', async () => {
   const client = new Client({ name: 'nva-bgp-contract-test', version: '1' })
-  await client.connect(new StdioClientTransport({ command: process.execPath, args: [resolve('platform-dist', 'mcp.cjs')], stderr: 'pipe' }))
+  await client.connect(new StdioClientTransport({ command: process.execPath, args: [serverPath], stderr: 'pipe' }))
   const call = async (name: string, args: Record<string, unknown> = {}) => {
     const response = await client.callTool({ name, arguments: args })
     if (response.isError) throw new Error(JSON.stringify(response.content))
@@ -90,6 +137,17 @@ it('exposes original per-NVA received-route evidence through the freshly built s
       { id: 'bgp-reception-does-not-inject-host-subnet', kind: 'route' as const, table: 'reader-subnet', prefix: '198.18.0.0/24', expectation: 'absent' as const },
     ] }
     const handle = await run(request)
+    const neighborChunks: string[] = []
+    for (let offset = 0; offset < 1_000_000;) {
+      const chunk = await call('get_evidence', { handle, section: 'bgpNeighbors', offset, limit: 16000 })
+      neighborChunks.push(chunk.jsonText)
+      if (chunk.complete) break
+      expect(chunk.jsonText.length).toBeGreaterThan(0)
+      offset += chunk.jsonText.length
+    }
+    const neighbors = JSON.parse(neighborChunks.join(''))
+    expect(neighbors).toEqual(executePlatform(request).bgpNeighbors)
+    expect(neighbors.neighbors.filter((neighbor: any) => neighbor.localResourceKey === JSON.stringify(['appliance', 'reader']))).toHaveLength(4)
     const chunks: string[] = []
     for (let offset = 0; offset < 1_000_000;) {
       const chunk = await call('get_evidence', { handle, section: 'simulation', offset, limit: 2000 })
@@ -102,19 +160,43 @@ it('exposes original per-NVA received-route evidence through the freshly built s
     expect(simulation).toEqual(executePlatform(request).simulation)
     expect(simulation.nvaBgpPeers.reader).toHaveLength(2)
     expect(simulation.nvaBgpPeers.reader[0].gatewaySummaryAssessment).toMatchObject({
-      status: 'not-assessed', configuredPrefixes: ['10.0.0.0/12', '203.0.113.0/24'], gatewayIds: [], branchToBranch: false,
+      status: 'not-assessed', configuredPrefixes: ['10.0.0.0/12', '203.0.113.0/24'], gatewayIds: [], branchToBranch: true,
     })
     expect(simulation.nvaBgpPeers.reader[1].gatewaySummaryAssessment).toBeUndefined()
     expect(simulation.nvaBgpPeers.reader.flatMap((peer: any) => peer.routes.filter((route: any) => route.prefix === '198.18.0.0/24'))).toHaveLength(2)
+    expect(simulation.nvaBgpPeers.reader[0].routes.find((route: any) => route.prefix === '198.18.0.0/24')).toMatchObject({
+      asPath: [65515, 65020], nextHopId: 'west-ars', wireAttributes: { nextHop: 'not-assessed' },
+      sourceRoute: { nextHopId: 'west-source', nextHopIp: '10.10.1.4', asPath: [65020] },
+    })
     const assessments = await call('get_evidence', { handle, section: 'assessments', limit: 16000 })
     expect(assessments.complete).toBe(true)
     expect(JSON.parse(assessments.jsonText)[0].outcome).toBe('satisfied')
+    topology.vnets[0].routeServer!.branchToBranchTraffic = false
+    const offRequest = { ...base, operation: 'simulate' }
+    const offHandle = await run(offRequest)
+    const offChunks: string[] = []
+    for (let offset = 0; offset < 1_000_000;) {
+      const chunk = await call('get_evidence', { handle: offHandle, section: 'bgpNeighbors', offset, limit: 16000 })
+      offChunks.push(chunk.jsonText)
+      if (chunk.complete) break
+      expect(chunk.jsonText.length).toBeGreaterThan(0)
+      offset += chunk.jsonText.length
+    }
+    const directOff = executePlatform(offRequest).bgpNeighbors!
+    expect(JSON.parse(offChunks.join(''))).toEqual(directOff)
+    const readerNeighbors = directOff.neighbors.filter((neighbor) => neighbor.localResourceKey === JSON.stringify(['appliance', 'reader']))
+    expect(readerNeighbors).toHaveLength(4)
+    expect(readerNeighbors.every((neighbor) => neighbor.availability === 'available')).toBe(true)
+    expect(readerNeighbors.filter((neighbor) => neighbor.remoteResourceKey === JSON.stringify(['route-server', 'west-ars']))
+      .map((neighbor) => neighbor.received!.routes.length)).toEqual([1, 1])
+    expect(readerNeighbors.filter((neighbor) => neighbor.remoteResourceKey === JSON.stringify(['route-server', 'east-ars']))
+      .map((neighbor) => neighbor.received!.routes.length)).toEqual([3, 3])
   } finally { await client.close() }
 }, 20000)
 
 it('qualifies owned HA-port forwarding and fail-closed alternatives through the actual stdio engine', async () => {
   const client = new Client({ name: 'ha-ports-contract-test', version: '1' })
-  await client.connect(new StdioClientTransport({ command: process.execPath, args: [resolve('platform-dist', 'mcp.cjs')], stderr: 'pipe' }))
+  await client.connect(new StdioClientTransport({ command: process.execPath, args: [serverPath], stderr: 'pipe' }))
   const call = async (name: string, args: Record<string, unknown> = {}) => {
     const response = await client.callTool({ name, arguments: args })
     if (response.isError) throw new Error(JSON.stringify(response.content))
@@ -158,7 +240,7 @@ it('qualifies owned HA-port forwarding and fail-closed alternatives through the 
 
 it('serves actual stdio discovery, validation, grading, bounded evidence and cancellation without privileged tools', async () => {
   const client = new Client({ name: 'platform-contract-test', version: '1' })
-  const transport = new StdioClientTransport({ command: process.execPath, args: [resolve('platform-dist', 'mcp.cjs')], stderr: 'pipe' })
+  const transport = new StdioClientTransport({ command: process.execPath, args: [serverPath], stderr: 'pipe' })
   let stderr = ''
   transport.stderr?.on('data', (chunk) => { stderr += chunk })
   await client.connect(transport)
@@ -287,7 +369,7 @@ it('serves actual stdio discovery, validation, grading, bounded evidence and can
 
 it('exports real custom-routing bypass and inspected GIF artifacts through bounded MCP chunks', async () => {
   const client = new Client({ name: 'flow-export-test', version: '1' })
-  const transport = new StdioClientTransport({ command: process.execPath, args: [resolve('platform-dist', 'mcp.cjs')], stderr: 'pipe' })
+  const transport = new StdioClientTransport({ command: process.execPath, args: [serverPath], stderr: 'pipe' })
   await client.connect(transport)
   const call = async (name: string, args: Record<string, unknown> = {}) => {
     const response = await client.callTool({ name, arguments: args })
@@ -365,7 +447,7 @@ it('exports real custom-routing bypass and inspected GIF artifacts through bound
 
 it('assesses static hub Firewall required/bypassed legs through actual stdio with the same evidence as the local API', async () => {
   const client = new Client({ name: 'static-hub-firewall-test', version: '1' })
-  const transport = new StdioClientTransport({ command: process.execPath, args: [resolve('platform-dist', 'mcp.cjs')], stderr: 'pipe' })
+  const transport = new StdioClientTransport({ command: process.execPath, args: [serverPath], stderr: 'pipe' })
   await client.connect(transport)
   const call = async (name: string, args: Record<string, unknown> = {}) => {
     const response = await client.callTool({ name, arguments: args })

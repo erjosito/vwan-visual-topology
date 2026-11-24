@@ -8,6 +8,7 @@ const { version } = JSON.parse(readFileSync(new URL('./package.json', import.met
 // https://vite.dev/config/
 export default defineConfig({
   base: './',
+  define: { 'import.meta.env.VITE_APP_VERSION': JSON.stringify(version) },
   server: { watch: { ignored: ['**/test-artifacts/**', '**/test-results/**', '**/release/**', '**/dist/**'] } },
   plugins: [
     react(),
@@ -17,6 +18,11 @@ export default defineConfig({
     },
   ],
   build: {
+    modulePreload: {
+      // Dynamic ESM imports load their JavaScript; preserve CSS preloads for first-open styles.
+      resolveDependencies: (_filename, dependencies, { hostType }) =>
+        hostType === 'html' ? dependencies : dependencies.filter(path => path.endsWith('.css')),
+    },
     rollupOptions: {
       input: { main: resolve('index.html'), 'auth-redirect': resolve('auth-redirect.html') },
       output: {

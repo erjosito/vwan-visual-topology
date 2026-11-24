@@ -3,6 +3,7 @@ import { courseScenarios } from './course-scenarios'
 import { peeringCheckpoint, previewCourse } from './course-profile'
 import { routingChecks, routingGuidance, routingLessons } from './course-routing'
 import { wanChecks, wanGuidance, wanLessons } from './course-wan'
+import { teachCourse } from './course-teaching'
 
 // Historical export name retained while the curriculum grows in content-only batches.
 export const exampleCourse: CourseBundle = {
@@ -155,7 +156,7 @@ export const exampleCourse: CourseBundle = {
         choices: [
           { id: 'always-udr', text: { en: 'Its user-defined source makes it more specific than the peering route.', ja: 'ユーザー定義の生成元により、ピアリング ルートより具体的になります。' },
             feedback: { en: 'Longest-prefix matching happens first; do not ignore prefix length.', ja: '最長プレフィックス一致が最初に行われます。プレフィックス長を無視しないでください。' } },
-          { id: 'same-prefix', text: { en: 'For these equal prefixes, the user-defined route has higher preference.', ja: 'この同じプレフィックス同士では、ユーザー定義ルートの優先順位が高くなります。' },
+          { id: 'same-prefix', text: { en: 'At equal prefixes, the user-defined route has higher preference.', ja: '同じプレフィックス同士では、ユーザー定義ルートの優先順位が高くなります。' },
             feedback: { en: 'Correct. Equal-prefix preference selects the UDR; None drops the traffic.', ja: '正解です。同じプレフィックスの優先順位で UDR が選択され、None が通信を破棄します。' } },
         ],
       },
@@ -195,3 +196,4 @@ for (const check of exampleCourse.checks) {
   const order = quizOrder[check.params.correctChoiceId]
   check.params.choices = order.map((id) => check.params.choices.find((choice) => choice.id === id)!)
 }
+teachCourse(exampleCourse)

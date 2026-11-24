@@ -128,6 +128,26 @@ Click **Check routing** in the toolbar and then **Review routing issues** to see
 
 ![Routing Diagnostics Asymmetric Finding](./images/06-routing-diagnostics-asymmetric.png)
 
+### Acknowledging reviewed warnings
+Use **Acknowledge warning** on an eligible warning to remove its attention decoration
+without changing severity, routing, grading or diagnostic evidence. The readable
+**Acknowledged warnings** group follows all active findings; trace and inspection
+actions remain available. **Restore attention** reverses an individual decision;
+**Restore all warning attention** also clears saved decisions for warnings no longer
+in the current results. Errors, connectivity failures, informational findings and
+unassessed/model-limit results cannot be acknowledged.
+
+Acknowledgements are optional `warningAcknowledgements` metadata in the design:
+they follow local autosave, JSON export/import, cloud saves and undo/redo, not the
+global analysis profile or account. New designs do not inherit them. Unchanged
+analysis preserves them; changed structural evidence or relevant resource/route
+configuration requires attention again. Fingerprints exclude display names,
+translation and layout, and normalize unordered finding groups. Changes elsewhere
+on an involved resource can conservatively require review again. Up to 4096
+decisions are retained; restore existing decisions to free space. Existing files
+without the field remain supported. Informational peering-bypass messages keep
+their existing severity and are not promoted to warnings by this feature.
+
 ### Interactive Path Explorer
 Right-click any node and select **Open path explorer** to trace specific source-to-destination flows and expand **"Why this path?"** for hop-by-hop explanations:
 

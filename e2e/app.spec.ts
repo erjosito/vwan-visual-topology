@@ -1,4 +1,6 @@
+import { downloadTopologyCopy } from './document-action-helpers'
 import { expect, test } from './vwan-example-fixture'
+import { replaceActiveSavedTopology } from './workspace-storage-helpers'
 import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import type { Page } from '@playwright/test'
@@ -22,6 +24,38 @@ async function action(page: Page, object: string, command: string) {
   await page.getByRole('menu').getByRole('menuitem', { name: command, exact: true }).click()
 }
 const dialog = (page: Page, name: string) => page.getByRole('dialog', { name, exact: true })
+test('VWAN rename and Undo retain routing caches while refreshing native path prose', async ({ page }) => {
+  await page.addInitScript(() => { window.__AZNET_METRICS__ = { counts: {}, durations: {} } })
+  await page.goto('/?mode=vwan&ui=new')
+  const original = await readTopology(page)
+  const source = original.spokes[0], destination = original.spokes.at(-1)!, hub = original.hubs.find(entry => entry.id === source.hubId)!
+  const trace = async () => {
+    await action(page, `Select spoke ${source.name}`, 'Open path explorer')
+    await page.getByLabel('Destination node', { exact: true }).selectOption(`spoke:${destination.id}`)
+    await page.getByLabel('Destination prefix', { exact: true }).selectOption(destination.prefixes[0])
+    await page.getByRole('button', { name: 'Show preferred path', exact: true }).click()
+  }
+  await trace()
+  await action(page, `Select hub ${hub.name}`, 'Edit configuration')
+  const editor = dialog(page, 'Edit hub')
+  const renamed = `${hub.name} renamed`
+  await editor.getByLabel('Name', { exact: true }).fill(renamed)
+  await page.evaluate(() => { window.__AZNET_METRICS__ = { counts: {}, durations: {} } })
+  await editor.getByRole('button', { name: 'Save changes', exact: true }).click()
+  expect((await readTopology(page)).hubs.find(entry => entry.id === hub.id)!.name).toBe(renamed)
+  expect(await page.evaluate(() => window.__AZNET_METRICS__!.counts.simulation ?? 0)).toBe(0)
+  expect(await page.evaluate(() => window.__AZNET_METRICS__!.counts.trace ?? 0)).toBe(0)
+  await trace()
+  await expect(page.locator('.flow-results ol').first()).toContainText(renamed)
+  await page.evaluate(() => { window.__AZNET_METRICS__ = { counts: {}, durations: {} } })
+  await page.getByRole('button', { name: /Undo$/, exact: false }).click()
+  expect(await readTopology(page)).toEqual(original)
+  expect(await page.evaluate(() => window.__AZNET_METRICS__!.counts.simulation ?? 0)).toBe(0)
+  expect(await page.evaluate(() => window.__AZNET_METRICS__!.counts.trace ?? 0)).toBe(0)
+  await expect(page.locator('.flow-results ol').first()).toContainText(hub.name)
+  await expect(page.locator('.flow-results ol').first()).not.toContainText(renamed)
+})
+
 async function showRoutes(page: Page, hub = 'Europe hub') { await action(page, `Select hub ${hub}`, 'BGP table') }
 function spokeNvaTopology(): Topology {
   return {
@@ -46,7 +80,8 @@ async function createMap(page: Page, name: string) {
 }
 async function downloadTopology(page: Page, button = 'Export JSON'): Promise<Topology> {
   const event = page.waitForEvent('download')
-  await page.getByRole('button', { name: button, exact: true }).click()
+  if (button === 'Export JSON') await downloadTopologyCopy(page)
+  else await page.getByRole('button', { name: button, exact: true }).click()
   const chunks: Buffer[] = []
   for await (const chunk of (await (await event).createReadStream())!) chunks.push(chunk)
   return JSON.parse(Buffer.concat(chunks).toString())
@@ -130,7 +165,7 @@ test('the public workspace does not expose a feedback link to a private GitHub i
   await page.goto('/')
   await expect(page.getByRole('link', { name: 'File issue', exact: true })).toHaveCount(0)
   await expect(page.locator('a[href*="github.com"][href*="/issues"]')).toHaveCount(0)
-  for (const name of ['Export JSON', 'Import JSON', 'Azure files', 'Clear topology']) {
+  for (const name of ['Load', 'Save', 'Save As', 'Azure files', 'Clear topology']) {
     await expect(page.getByRole('button', { name, exact: true })).toBeVisible()
   }
 })
@@ -532,10 +567,14 @@ test('ER BGP table shows best paths, alternatives and ties, filters prefixes and
   await expect(page.getByLabel('Inspect router', { exact: true })).toHaveValue('erLocation:er')
   await expect(table.locator('tr[data-prefix="10.80.0.0/16"]')).toHaveCount(3)
   await expect(table.locator('tr[data-prefix="10.80.0.0/16"][data-preferred="true"]')).toHaveCount(2)
+  await expect(table.locator('tr[data-prefix="10.80.0.0/16"] .route-state')).toHaveText(['=', '=', '-'])
+  await expect(table.getByRole('cell', { name: 'Model tie', exact: true })).toHaveCount(2)
   await expect(table.locator('tr[data-prefix="10.80.0.0/16"][data-preferred="false"]')).toContainText('Backup circuit')
   await expect(table.locator('tr[data-prefix="10.1.0.0/16"]')).toContainText('Europe hub')
   await table.getByLabel('Filter by prefix', { exact: true }).fill('10.80')
   await expect(table.locator('tr[data-prefix]')).toHaveCount(3)
+  await table.getByText('Copyable route text', { exact: true }).click()
+  await expect(table.getByRole('textbox', { name: 'Select route text to copy' })).toHaveValue(/^=\t10\.80\.0\.0\/16\t/m)
   await table.locator('.prefix-button').click()
   await expect(page.getByTestId('er-link-er-primary')).toHaveClass(/preferred-link/)
   await expect(page.getByTestId('er-link-er-equal')).toHaveClass(/preferred-link/)
@@ -563,6 +602,8 @@ test('ER BGP table shows best paths, alternatives and ties, filters prefixes and
   await action(page, 'Select ER location Test ER location', 'BGP table')
   await expect(table.locator('tr[data-prefix="10.80.0.0/16"]')).toHaveCount(1)
   await expect(table.locator('tr[data-prefix="10.80.0.0/16"][data-preferred="true"]')).toContainText('Backup circuit')
+  await expect(table.locator('tr[data-prefix="10.80.0.0/16"] .route-state')).toHaveText('*')
+  await expect(table.getByRole('cell', { name: 'Model tie', exact: true })).toHaveCount(0)
   await action(page, 'Edit ER connection Backup circuit', 'Disable connection')
   await action(page, 'Edit ER connection Azure attachment', 'Disable connection')
   await action(page, 'Select ER location Test ER location', 'BGP table')
@@ -882,7 +923,7 @@ test('multi-prefix imports succeed and invalid saved browser data can be downloa
   await importTopology(page, invalid)
   await expect(page.getByRole('alert')).toContainText('Invalid IPv4 network CIDR')
   expect(await readTopology(page)).toEqual(before)
-  await page.evaluate((topology) => localStorage.setItem('vwan-visual-topology:v1', JSON.stringify(topology)), invalid)
+  await replaceActiveSavedTopology(page, 'vwan', JSON.stringify(invalid))
   await page.reload()
   await expect(page.getByRole('alert')).toContainText('saved data has not been overwritten')
   expect(await readTopology(page)).toEqual( invalid)
@@ -1130,7 +1171,7 @@ test('ECMP alternatives remain visible and connection failure withdraws only the
   await page.goto('/'); await importTopology(page, t); await showRoutes(page)
   const rows = page.locator('.effective-routes tr[data-prefix="10.20.0.0/16"]')
   await expect(rows).toHaveCount(3)
-  await expect(rows.locator('.route-state')).toHaveText(['*', '*', '-'])
+  await expect(rows.locator('.route-state')).toHaveText(['=', '=', '-'])
   await action(page, 'Edit connection VPN 1', 'Disable connection')
   await expect(rows).toHaveCount(2)
   await expect(rows.locator('.route-state')).toHaveText(['*', '-'])
@@ -1239,16 +1280,77 @@ test('context editing preserves IDs, advertisements and migrated route maps', as
   await expect(page.getByLabel('Select site London campus', { exact: true })).toContainText('ASN 65110')
 })
 
+test('new VWAN connection defaults follow transport, except ER, and retain saved opt-outs', async ({ page }) => {
+  await page.goto('/')
+  await importTopology(page, structuredClone(example))
+  const original = await readTopology(page)
+  await action(page, 'Select hub Europe hub', 'Connect existing site')
+  const editor = dialog(page, 'Add connection')
+  const flag = editor.getByLabel('Propagate default route (0.0.0.0/0)', { exact: true })
+  await expect(flag).not.toBeChecked()
+  for (const transport of ['VPN', 'SDWAN', 'SpokeNVA']) {
+    await editor.getByLabel('Transport', { exact: true }).selectOption(transport)
+    await expect(flag).toBeChecked()
+  }
+  await editor.getByLabel('Transport', { exact: true }).selectOption('ExpressRoute')
+  await expect(flag).not.toBeChecked()
+  await editor.getByLabel('Transport', { exact: true }).selectOption('SDWAN')
+  await editor.getByLabel('Name', { exact: true }).fill('New SDWAN')
+  await editor.getByRole('button', { name: 'Create object', exact: true }).click()
+  expect((await readTopology(page)).connections.find((entry) => entry.name === 'New SDWAN')?.propagateDefaultRoute).toBe(true)
+  await action(page, 'Edit connection New SDWAN', 'Edit configuration')
+  const savedEditor = dialog(page, 'Edit connection')
+  await savedEditor.getByLabel('Propagate default route (0.0.0.0/0)', { exact: true }).uncheck()
+  await savedEditor.getByRole('button', { name: 'Save changes', exact: true }).click()
+  await page.reload()
+  await action(page, 'Edit connection New SDWAN', 'Edit configuration')
+  await expect(savedEditor.getByLabel('Propagate default route (0.0.0.0/0)', { exact: true })).not.toBeChecked()
+  expect((await readTopology(page)).connections.filter((entry) => entry.name !== 'New SDWAN')).toEqual(original.connections)
+  await page.keyboard.press('Escape')
+  await action(page, 'Select hub Europe hub', 'Add connected site')
+  const site = dialog(page, 'Add connected site')
+  await site.getByLabel('Name', { exact: true }).fill('New SDWAN site')
+  await site.getByLabel('Site ASN', { exact: true }).fill('65042')
+  await site.getByLabel('Transport', { exact: true }).selectOption('SDWAN')
+  await site.getByRole('button', { name: 'Create object', exact: true }).click()
+  expect((await readTopology(page)).connections.find((entry) => entry.name === 'New SDWAN site connection')?.propagateDefaultRoute).toBe(true)
+})
+
+for (const fromHub of [true, false]) {
+  test(`new VWAN attachment from ${fromHub ? 'hub' : 'spoke'} opts in without changing existing attachments`, async ({ page }) => {
+    const topology = structuredClone(example)
+    topology.spokes.push({ id: 'loose', name: 'Unattached VNet', prefixes: ['10.99.0.0/16'] })
+    await page.goto('/')
+    await importTopology(page, topology)
+    await action(page, fromHub ? 'Select hub Europe hub' : 'Select spoke Unattached VNet',
+      fromHub ? 'Connect to spoke' : 'Connect to virtual hub')
+    await page.getByRole('menuitem', { name: fromHub ? 'Unattached VNet' : 'Europe hub', exact: true }).click()
+    const editor = dialog(page, 'Edit spoke')
+    const flag = editor.getByLabel('Propagate default route (0.0.0.0/0)', { exact: true })
+    await expect(flag).toBeChecked()
+    await editor.getByRole('button', { name: 'Save changes', exact: true }).click()
+    expect((await readTopology(page)).spokes.find((entry) => entry.id === 'loose')).toMatchObject({ hubId: 'eu', propagateDefaultRoute: true })
+    await action(page, 'Select spoke Unattached VNet', 'Configure virtual hub connection')
+    const connection = dialog(page, 'Virtual WAN VNet connection')
+    await connection.getByLabel('Propagate default route (0.0.0.0/0)', { exact: true }).uncheck()
+    await page.keyboard.press('Escape')
+    await action(page, 'Select spoke Unattached VNet', 'Configure virtual hub connection')
+    await expect(connection.getByLabel('Propagate default route (0.0.0.0/0)', { exact: true })).not.toBeChecked()
+    expect((await readTopology(page)).spokes.filter((entry) => entry.id !== 'loose')).toEqual(topology.spokes.filter((entry) => entry.id !== 'loose'))
+  })
+}
+
 test('creates nodes through canvas menus, validates prefixes and confirms cascading deletion', async ({ page }) => {
   await page.goto('/')
   await importTopology(page, { version: 1, name: 'Empty', hubs: [], spokes: [], sites: [], connections: [], siteLinks: [] })
   await page.locator('.diagram').focus(); await page.keyboard.press('Shift+F10')
   await page.getByRole('menuitem', { name: 'Add hub', exact: true }).click()
   await dialog(page, 'Add hub').getByLabel('Name', { exact: true }).fill('Lab hub')
-  await dialog(page, 'Add hub').getByLabel('Region', { exact: true }).fill('West Europe')
+  await dialog(page, 'Add hub').getByRole('combobox', { name: 'Region', exact: true }).selectOption('West Europe')
   await dialog(page, 'Add hub').getByRole('button', { name: 'Create object', exact: true }).click()
   await action(page, 'Select hub Lab hub', 'Add spoke')
   const spoke = dialog(page, 'Add spoke')
+  await expect(spoke.getByLabel('Propagate default route (0.0.0.0/0)', { exact: true })).toBeChecked()
   await spoke.getByLabel('Name', { exact: true }).fill('Lab spoke')
   await spoke.getByLabel('Prefixes', { exact: true }).fill('10.90.0.7/16')
   await spoke.getByRole('button', { name: 'Create object', exact: true }).click()
@@ -1256,6 +1358,7 @@ test('creates nodes through canvas menus, validates prefixes and confirms cascad
   await spoke.getByLabel('Prefixes', { exact: true }).fill('10.90.0.0/16')
   await spoke.getByRole('button', { name: 'Create object', exact: true }).click()
   await action(page, 'Select hub Lab hub', 'Add connected site')
+  expect((await readTopology(page)).spokes[0].propagateDefaultRoute).toBe(true)
   const site = dialog(page, 'Add connected site')
   await site.getByLabel('Name', { exact: true }).fill('Lab branch')
   await site.getByLabel('Site ASN', { exact: true }).fill('65042')
@@ -1266,6 +1369,7 @@ test('creates nodes through canvas menus, validates prefixes and confirms cascad
   await site.getByLabel('Transport', { exact: true }).selectOption('VPN')
   await site.getByRole('button', { name: 'Create object', exact: true }).click()
   await expect(page.getByLabel('Select site Lab branch', { exact: true }).locator('.node-prefixes > text')).toHaveText('10.91.0.0/16 +1')
+  expect((await readTopology(page)).connections[0].propagateDefaultRoute).toBe(true)
   await showRoutes(page, 'Lab hub')
   await expect(page.locator('.effective-routes table')).toContainText('10.91.0.0/16')
   await expect(page.locator('.effective-routes table')).toContainText('10.92.0.0/16')
@@ -1399,6 +1503,7 @@ test('spoke NVA creation auto-infers peer IP, embeds the NVA icon on the spoke, 
   await page.goto('/'); await importTopology(page, structuredClone(example))
   await action(page, 'Select spoke Europe applications', 'Edit configuration')
   await page.getByRole('dialog').getByRole('button', { name: 'Add BGP NVA', exact: true }).click()
+  await expect(page.getByLabel('Propagate default route (0.0.0.0/0)', { exact: true })).toBeChecked()
   await expect(page.getByLabel('Originated prefix', { exact: true })).toHaveCount(0)
   await expect(page.getByLabel('NVA BGP advertisements', { exact: true })).toHaveCount(0)
   await expect(page.getByLabel('NVA BGP interface IPv4', { exact: true })).toHaveValue('10.1.0.4')
@@ -1416,7 +1521,7 @@ test('spoke NVA creation auto-infers peer IP, embeds the NVA icon on the spoke, 
   await page.getByRole('button', { name: 'Create object', exact: true }).click()
   await expect(page.locator('.object-editor')).toHaveCount(0)
   const saved = await readTopology(page), peer = saved.connections.find((connection) => connection.transport === 'SpokeNVA')!
-  expect(peer).toMatchObject({ spokeId: 'eu-apps', hubId: 'eu', peerIp: '10.1.0.4' })
+  expect(peer).toMatchObject({ spokeId: 'eu-apps', hubId: 'eu', peerIp: '10.1.0.4', propagateDefaultRoute: true })
   expect(saved.sites.find((site) => site.id === peer.siteId)!).toMatchObject({ prefixes: [], role: 'spoke-nva' })
   await expect(page.locator('.workspace-heading .stats')).toContainText('3  sites1  spoke NVAs')
   await expect(page.locator(`[data-node-id="${peer.siteId}"]`)).toHaveCount(0)
@@ -2038,7 +2143,7 @@ for (const id of ['b2b-on-baseline', 'er-only-summary']) {
     }
     const before = await readTopology(page)
     const downloading = page.waitForEvent('download')
-    await page.getByRole('button', { name: 'Export JSON', exact: true }).click()
+    await downloadTopologyCopy(page)
     const exported = JSON.parse(await readFile((await (await downloading).path())!, 'utf8')) as Topology
     expect(exported).toEqual(before)
     await importTopology(page, exported)
@@ -2064,7 +2169,7 @@ test('JSON import/export, mobile overlays and Escape preserve user data', async 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await page.getByLabel('Topology name').fill('Portable workspace')
   const downloadPromise = page.waitForEvent('download')
-  await page.getByRole('button', { name: 'Export JSON', exact: true }).click()
+  await downloadTopologyCopy(page)
   const path = await (await downloadPromise).path()
   await page.getByLabel('Open model notes and warnings').click()
   await page.getByRole('button', { name: 'Load example (replaces workspace)', exact: true }).click()
@@ -2232,7 +2337,7 @@ test('clearing requires confirmation, persists an empty workspace and allows sta
   await page.goto('/'); await importTopology(page, topology)
   const original = await readTopology(page)
   await page.getByRole('button', { name: 'Clear topology', exact: true }).click()
-  await expect(dialog(page, 'Clear topology')).toContainText('cannot be undone')
+  await expect(dialog(page, 'Clear topology')).toContainText('A blank topology will open in a new document.')
   await dialog(page, 'Clear topology').getByRole('button', { name: 'Cancel clearing', exact: true }).click()
   expect(await readTopology(page)).toEqual(original)
   await page.getByRole('button', { name: 'Clear topology', exact: true }).click()
@@ -2240,6 +2345,7 @@ test('clearing requires confirmation, persists an empty workspace and allows sta
   expect(await readTopology(page)).toEqual(original)
   await page.getByRole('button', { name: 'Clear topology', exact: true }).click()
   await dialog(page, 'Clear topology').getByRole('button', { name: 'Clear all objects', exact: true }).click()
+  await dialog(page, 'Save changes before closing?').getByRole('button', { name: 'Discard and close', exact: true }).click()
   const empty = await readTopology(page)
   expect(empty).toEqual({ version: 1, name: 'New topology', hubs: [], sites: [], spokes: [], connections: [], siteLinks: [], routeMaps: [] })
   await expect(page.locator('.diagram [data-node-id]')).toHaveCount(0)
@@ -2250,7 +2356,7 @@ test('clearing requires confirmation, persists an empty workspace and allows sta
   await expect(page.locator('.empty-diagram')).toBeVisible()
   await page.getByRole('button', { name: '+ Hub', exact: true }).click()
   await dialog(page, 'Add hub').getByLabel('Name', { exact: true }).fill('Fresh hub')
-  await dialog(page, 'Add hub').getByLabel('Region', { exact: true }).fill('West Europe')
+  await dialog(page, 'Add hub').getByRole('combobox', { name: 'Region', exact: true }).selectOption('West Europe')
   await dialog(page, 'Add hub').getByRole('button', { name: 'Create object', exact: true }).click()
   expect((await readTopology(page)).hubs).toHaveLength(1)
   await importTopology(page, original)

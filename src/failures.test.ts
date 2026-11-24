@@ -7,6 +7,8 @@ import { simulateAzNet, traceAzNetPair } from './azure-net/engine'
 import { analyzeAzResilience, analyzeVwanResilience, groupResilienceGaps, resilienceMarkers } from './failure-analysis'
 import { projectAzFailures, projectVwanFailures, regionKey, type FailureDomain } from './failures'
 import { validateTopology } from './validation'
+import { admitJson } from './platform/service'
+import { parseAzNetTopology } from './azure-net/admission'
 
 export function vwanFailureFixture(): Topology {
   return {
@@ -68,6 +70,35 @@ const faults: FailureDomain[] = [
 ]
 
 describe('reversible offline failure overlays', () => {
+  it.each([undefined, '', 'Future Azure Region 2099'])('retains unassessed hub region %s through admission without inventing placement', (region) => {
+    const native = vwanFailureFixture(), mixed = azFailureFixture(true)
+    if (region === undefined) { delete native.hubs[0].region; delete mixed.vwanHubs[0].region }
+    else { native.hubs[0].region = region; mixed.vwanHubs[0].region = region }
+    const validated = validateTopology(native)
+    expect(validated.hubs[0].region).toBe(region)
+    expect(Object.hasOwn(validated.hubs[0], 'region')).toBe(region !== undefined)
+    const admitted = parseAzNetTopology(mixed)
+    expect(admitted.vwanHubs[0].region).toBe(region)
+    expect(Object.hasOwn(admitted.vwanHubs[0], 'region')).toBe(region !== undefined)
+    expect(projectVwanFailures(validated).unassessed.some((message) => message.startsWith('west:'))).toBe(true)
+    expect(projectAzFailures(mixed).unassessed.some((message) => message.startsWith('West Virtual Hub:'))).toBe(true)
+  })
+  it.each([{ region: null }, { region: 42 }, { region: [] }])('still rejects a malformed hub region $region', ({ region }) => {
+    const native = vwanFailureFixture(), mixed = azFailureFixture(true)
+    expect(() => validateTopology({ ...native, hubs: [{ ...native.hubs[0], region }, native.hubs[1]] })).toThrow()
+    expect(() => parseAzNetTopology({ ...mixed, vwanHubs: [{ ...mixed.vwanHubs[0], region }] })).toThrow()
+  })
+  it('keeps live baseline and failed projections admissible without a JSON round-trip', () => {
+    const vwan = vwanFailureFixture()
+    const mixed = azFailureFixture(true)
+    for (const fault of [[], [faults[0]], [faults[1]]] as FailureDomain[][]) {
+      expect(() => admitJson(projectVwanFailures(vwan, fault).active)).not.toThrow()
+      expect(() => admitJson(projectAzFailures(mixed, fault).active)).not.toThrow()
+    }
+    expect(Object.hasOwn(projectVwanFailures(vwan).active.spokes[0], 'nvaSpokeIds')).toBe(false)
+    expect(Object.hasOwn(projectAzFailures(mixed, [faults[0]]).active.vnets[0], 'vwanHubAttachment')).toBe(false)
+    expect(mixed.vnets[1].vwanHubAttachment).toBeDefined()
+  })
   it('withdraws each VWAN transit domain, selects a surviving alternate, and preserves baseline/administrative flags', () => {
     const t = vwanFailureFixture(), original = JSON.stringify(t)
     const trace = (active: Topology) => traceNodePath(active, simulate(active), { kind: 'site', id: 'a' }, '10.1.0.1')

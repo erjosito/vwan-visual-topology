@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { AzureNetDiagram, type AzRouteMapSelection, type AzSelectedEntity } from '../src/azure-net/AzureNetDiagram'
 import { CanvasPresentationProvider } from '../src/CanvasPresentation'
 import { denseVisualizationTopology, visualizationLayout, visualizationVariants, type VisualizationVariant } from '../tests/fixtures/dense-visualization'
+import { RelationshipMatrix, RegionalOverview } from './DenseRelationshipViews'
 import '../src/index.css'
 import '../src/App.css'
 import '../src/azure-net/azure-net.css'
@@ -17,6 +18,7 @@ export function Comparison() {
   const [scenario, setScenario] = useState('complete')
   const [selected, setSelected] = useState<AzSelectedEntity>()
   const [policy, setPolicy] = useState<AzRouteMapSelection>()
+  const [neighborhood, setNeighborhood] = useState('hub-0')
   const canvas = useRef<HTMLDivElement>(null)
   const topology = visualizationLayout(original, variant)
   const emphasized = new Set(scope === 'chain' ? ['spoke-peering-0', 'mesh-0-1', 'spoke-peering-1']
@@ -27,6 +29,8 @@ export function Comparison() {
   const actualIds = new Set([...original.vnetPeerings, ...original.erLinks].map(link => link.id))
   const total = original.vnetPeerings.length + original.erLinks.length
   const strong = variant === 'focus' ? [...emphasized].filter(id => actualIds.has(id)).length : total
+  const summaryView = variant === 'matrix' || variant === 'regions'
+  const neighborhoodId = original.vnets.some(vnet => vnet.id === neighborhood) ? neighborhood : 'hub-0'
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme
     for (const group of canvas.current?.querySelectorAll<SVGGElement>('.aznet-edge-group') ?? []) {
@@ -52,16 +56,27 @@ export function Comparison() {
         {visualizationVariants.map(v => <option key={v}>{v}</option>)}
       </select></label>
       <label>Theme<select aria-label="Theme" value={theme} onChange={e => setTheme(e.target.value)}><option>light</option><option>dark</option></select></label>
-      <label>Focus scope<select aria-label="Focus scope" value={scope} onChange={e => setScope(e.target.value)}>
-        <option value="hub">Hub 1 neighborhood</option><option value="chain">Connection chain: spoke 1 - hub 1 - hub 2 - spoke 2</option>
+      <label>Focus scope<select aria-label="Focus scope" aria-describedby="research-focus-help" disabled={variant !== 'focus'} value={scope} onChange={e => setScope(e.target.value)}>
+        <option value="hub">Hub 1 direct connections</option><option value="chain">Connection chain: spoke 1 - hub 1 - hub 2 - spoke 2</option>
       </select></label>
       <button onClick={() => { setVariant('saved'); setScope('hub') }}>Restore saved overview</button>
     </div>
-    <p role="status">{total} connections retained; {strong} emphasized; {total - strong} dimmed; 0 hidden.
-      {' '}One administratively OFF ER link remains prominent. Dimmed links regain full emphasis on hover or keyboard focus.</p>
+    <p id="research-focus-help">{variant === 'focus'
+      ? 'Focus scope changes connection emphasis, not node positions. The connection chain uses dashed strokes; unrelated connections become translucent.'
+      : 'Choose the focus alternative to enable Focus scope. This control does not change saved, geographic, lanes or neighborhood layouts.'}</p>
+    <p role="status" data-testid="research-view-status">{summaryView
+      ? `${total} original connection records retained. ${variant === 'matrix' ? 'The matrix displays only the selected relationship type; other transport and policy detail is not drawn here.' : 'Regional cards summarize devices, transport and policies; individual detail requires disclosure.'} Restore the original canvas in one action.`
+      : `${variant === 'focus' ? `Focus scope: ${scope === 'chain' ? 'Connection chain' : 'Hub 1 direct connections'}. ` : ''}${total} connections retained; ${strong} emphasized; ${total - strong} dimmed; 0 hidden. ${variant === 'neighborhood' ? 'Viewport focus can place other objects offscreen; restore the saved-coordinate canvas to inspect other objects.' : 'One administratively OFF ER link remains prominent. Dimmed links regain full emphasis on hover or keyboard focus.'}`}</p>
     <p>Chain emphasis is a connection-inspection aid, not an assessed forwarding path. Policy IN/OUT direction and all devices remain available.</p>
-    <div ref={canvas} className="research-canvas simulator-shell" data-variant={variant}>
+    {summaryView && <p data-testid="research-view-selection">Original selection: {JSON.stringify(selected ?? null)}; policy: {JSON.stringify(policy ?? null)}</p>}
+    {variant === 'matrix' && <RelationshipMatrix topology={original} onSelect={setSelected} onPolicy={setPolicy} />}
+    {variant === 'regions' && <RegionalOverview topology={original} onSelect={setSelected} onPolicy={setPolicy} />}
+    {variant === 'neighborhood' && <label>Viewport focus<select aria-label="Viewport focus" value={neighborhoodId} onChange={event => setNeighborhood(event.target.value)}>
+      {original.vnets.filter(vnet => vnet.role === 'hub').map(vnet => <option key={vnet.id} value={vnet.id}>{vnet.name}</option>)}
+    </select></label>}
+    <div ref={canvas} className="research-canvas simulator-shell" data-variant={variant} hidden={summaryView}>
       <AzureNetDiagram key={`${variant}-${original.vnets.length}`} topology={topology} selected={selected}
+        frameRequest={variant === 'neighborhood' ? { vnetId: neighborhoodId, revision: original.vnets.findIndex(vnet => vnet.id === neighborhoodId) } : undefined}
         onSelect={setSelected} onClearSelection={() => setSelected(undefined)} onMoveNode={() => {}}
         diagnostics={[]} showDiagnosticBadges={false} onShowIssues={() => {}} onClearHighlights={() => setSelected(undefined)}
         onShowRouteMapRules={setPolicy} onOpenEditorForEntity={setSelected} />

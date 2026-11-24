@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { executePlatform, validateRequest } from '../platform/service'
 import { scenarioBundle } from './scenario-course'
 import { validateCourse } from './course-validation'
@@ -8,6 +8,12 @@ import { hubFirewallTopology } from '../../tests/fixtures/hub-firewall'
 import { hybridLessonRequirements, hybridLessonTopology } from './hybrid-scenario'
 import { simulateAzNet } from '../azure-net/engine'
 import { multihubLessonRequirements, multihubLessonTopology } from './multihub-scenario'
+import { prepareCourseScenario } from './course-transition'
+import type { PracticeWorkspace } from './practice-workspace'
+import { transferLessonRequirements, transferLessonTopology } from './transfer-scenario'
+import { createCourseRunner, orderedTasks, type LearningWorkspace } from './runner'
+import { beltProgress, recordCompletion, type ProgressLedger } from './progress-ledger'
+import { scenarioAssessments } from './editions'
 
 const check = (id: string) => scenarioBundle.checks.find((entry) => entry.id === `${id}.repair-check`)! as Extract<CourseCheck, { kind: 'requirements.satisfied' }>
 const document = (id: string) => ({ mode: 'full' as const, topology: structuredClone(scenarioTopologies[id]) })
@@ -21,6 +27,8 @@ function repaired(id: string) {
     bToA: { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: false },
   })
   if (id === 'inspection-bypass') {
+    const connected = document('colocated-chain').topology.vnetPeerings
+    topology.vnetPeerings.push(...connected)
     for (const [index, prefix] of ['10.22.0.0/16', '10.21.0.0/16'].entries()) {
       topology.udrTables[index].routes.push({ id: `learner-specific-${index}`, name: 'Partner inspection',
         prefix, nextHopType: 'VirtualAppliance', nextHopIp: '10.20.1.4', enabled: true })
@@ -39,6 +47,213 @@ function repaired(id: string) {
 }
 
 describe('scenario edition routing qualification', () => {
+  it('requires a fresh exact inspection before the first scenario earns its five points', async () => {
+    vi.useFakeTimers()
+    const live: LearningWorkspace = { revision: 1, scope: 1, practice: { version: 1, active: true,
+      returnProvider: 'azure-net', courseId: scenarioBundle.course.id, scenarioId: 'private-link', document: document('private-link') } }
+    const runner = createCourseRunner(scenarioBundle, { workspace: () => live, changed: () => {},
+      evaluate: async (request) => executePlatform(request) })
+    try {
+      runner.setAutomatic(true)
+      await vi.advanceTimersByTimeAsync(2000)
+      expect(runner.getSnapshot().completions).toEqual([])
+      expect(runner.getSnapshot().awaitingNext).toBe(false)
+      await runner.assess()
+      expect(runner.getSnapshot().feedback).toBe('inspect')
+      const stale = runner.getSnapshot().observation!
+      live.revision++
+      runner.workspaceChanged()
+      runner.observe(stale)
+      runner.observe({ ...runner.getSnapshot().observation!, prefix: '10.22.0.0/16' })
+      await runner.assess()
+      expect(runner.getSnapshot().completions).toEqual([])
+      expect(runner.getSnapshot().feedback).toBe('inspect')
+      runner.observe(runner.getSnapshot().observation!)
+      await runner.assess()
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(runner.getSnapshot().awaitingNext).toBe(true)
+      expect(runner.getSnapshot().celebration?.points).toBe(5)
+      expect(runner.getSnapshot().completions[0]).toMatchObject({ taskId: 'private-link.load', assessmentVersion: 2, points: 5 })
+    } finally {
+      runner.setAutomatic(false)
+      vi.useRealTimers()
+    }
+  })
+  it('grounds the new private-default and two-destination predictions in native route selection', () => {
+    const starter = simulateAzNet(document('private-link').topology)
+    expect(starter.subnetTables['a-work'].routes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ prefix: '10.0.0.0/8', source: 'System', nextHopType: 'None', active: true }),
+      expect.objectContaining({ prefix: '0.0.0.0/0', nextHopType: 'Internet', active: true }),
+    ]))
+    expect(assess('private-link').assessments[0]).toMatchObject({
+      outcome: 'violated', evidence: { forward: { status: 'dropped-blackhole', hops: expect.arrayContaining([
+        expect.objectContaining({ matchedRoute: expect.objectContaining({ prefix: '10.0.0.0/8', nextHopType: 'None' }) }),
+      ]) } },
+    })
+    const input = repaired('inspection-bypass')
+    input.topology.udrTables[0].routes = [
+      { id: 'summary', name: 'Summary', prefix: '10.0.0.0/8', nextHopType: 'VirtualAppliance', nextHopIp: '10.20.1.4', enabled: true },
+    ]
+    input.topology.udrTables[1].routes = []
+    const requirements = [
+      ...check('private-link').params.requirements.slice(0, 2),
+      { ...check('private-link').params.requirements[0], id: 'batch', target: { kind: 'subnet' as const, vnetId: 'b', subnetId: 'b-batch' }, destinationAddress: '10.22.2.4' },
+    ]
+    const evaluate = () => executePlatform({ contractVersion: 1, operation: 'evaluate', document: input, requirements })
+    const before = evaluate()
+    expect(before.assessments.map((entry) => entry.outcome)).toEqual(['satisfied', 'satisfied', 'satisfied'])
+    expect(before.assessments[0].evidence).toMatchObject({ forward: { hops: expect.arrayContaining([
+      expect.objectContaining({ matchedRoute: expect.objectContaining({ prefix: '10.22.0.0/16', nextHopType: 'VNetPeering' }) }),
+    ]) } })
+  })
+
+  it('reopens the revised permission quiz without repaying its historical award', async () => {
+    const tasks = orderedTasks(scenarioBundle), taskId = 'inspection-bypass.predict-subnet'
+    const position = tasks.findIndex(({ task }) => task.id === taskId)
+    let ledger: ProgressLedger = { version: 1, policyVersion: 1, completions: tasks.slice(0, position + 1).map(({ lesson, task }, revision) => ({
+      courseId: scenarioBundle.course.id, contentVersion: task.id === taskId ? 8 : scenarioBundle.course.contentVersion, lessonId: lesson.id,
+      taskId: task.id, assessmentVersion: task.id === taskId ? 1 : task.assessmentVersion, checkId: task.checkId,
+      awardId: task.awardId, points: task.points, title: task.title, sessionId: 'prior-quiz', revision, scope: 1,
+      engineVersion: 'prior', completedAt: '2026-11-19T10:00:00.000Z',
+    })) }
+    const before = beltProgress(ledger, scenarioBundle.course, scenarioAssessments)
+    const live: LearningWorkspace = { revision: 1, scope: 1, practice: { version: 1, active: true,
+      returnProvider: 'azure-net', courseId: scenarioBundle.course.id, scenarioId: 'inspection-bypass', document: document('inspection-bypass') } }
+    const runner = createCourseRunner(scenarioBundle, { workspace: () => live, completions: ledger.completions, changed: () => {},
+      evaluate: async (request) => executePlatform(request), completed: (completion) => { ledger = recordCompletion(ledger, completion) } })
+    expect(runner.getSnapshot().taskId).toBe(taskId)
+    await runner.assess('workload-only')
+    expect(runner.getSnapshot().feedback).toBe('answer')
+    await runner.assess('policy-separate')
+    expect(runner.advance()).toBe(true)
+    expect(runner.getSnapshot().celebration?.points).toBe(0)
+    expect(ledger.completions.at(-1)).toMatchObject({ taskId, assessmentVersion: 2 })
+    expect(beltProgress(ledger, scenarioBundle.course, scenarioAssessments)).toEqual(before)
+  })
+
+  it.each(['inspection-bypass.forward', 'tiered-incident.entry'])('awards staged %s without claiming the still-unmet full repair', async (taskId) => {
+    const tasks = orderedTasks(scenarioBundle), position = tasks.findIndex(({ task }) => task.id === taskId)
+    let ledger: ProgressLedger = { version: 1, policyVersion: 1, completions: tasks.slice(0, position).map(({ lesson, task }, revision) => ({
+      courseId: scenarioBundle.course.id, contentVersion: scenarioBundle.course.contentVersion, lessonId: lesson.id,
+      taskId: task.id, assessmentVersion: task.assessmentVersion, checkId: task.checkId, awardId: task.awardId, points: task.points,
+      title: task.title, sessionId: 'prior-tasks', revision, scope: 1, engineVersion: 'prior',
+      completedAt: '2026-11-19T10:00:00.000Z',
+    })) }
+    const { lesson, task } = tasks[position], input = document(lesson.scenarioId)
+    if (lesson.id === 'inspection-bypass') {
+      input.topology.vnetPeerings.push(...document('colocated-chain').topology.vnetPeerings)
+      for (const table of input.topology.udrTables) table.routes.push({
+        id: `summary-${table.id}`, name: 'Summary', prefix: '10.0.0.0/8', nextHopType: 'VirtualAppliance', nextHopIp: '10.20.1.4', enabled: true,
+      })
+    }
+    const live: LearningWorkspace = { scope: 1, revision: 1, practice: { version: 1, active: true,
+      courseId: scenarioBundle.course.id, scenarioId: lesson.scenarioId, returnProvider: 'azure-net', document: input } }
+    const runner = createCourseRunner(scenarioBundle, { workspace: () => live, completions: ledger.completions, changed: () => {},
+      evaluate: async (request) => executePlatform(request), completed: (completion) => { ledger = recordCompletion(ledger, completion) } })
+    expect(runner.getSnapshot().taskId).toBe(taskId)
+    await runner.assess()
+    expect(runner.getSnapshot().feedback).toBe('requirements')
+    if (lesson.id === 'inspection-bypass') input.topology.udrTables[0].routes.push({
+      id: 'specific', name: 'Specific', prefix: '10.22.0.0/16', nextHopType: 'VirtualAppliance', nextHopIp: '10.20.1.4', enabled: true,
+    })
+    else input.topology.udrTables.find((table) => table.id === 'indirect-egress')!.routes[0].enabled = true
+    live.revision++; runner.workspaceChanged()
+    await runner.assess()
+    expect(runner.getSnapshot().feedback).toBe('passed')
+    expect(assess(lesson.id, input).assessments[0].outcome).toBe('violated')
+    expect(runner.advance()).toBe(true)
+    expect(ledger.completions.at(-1)?.awardId).toBe(task.awardId)
+    expect(runner.getSnapshot().taskId).toBe(`${lesson.id}.repair`)
+  })
+
+  it.each(['disable-rule', 'remove-rule', 'remove-association'])('qualifies the changed-prefix return diagnosis and %s alternative', (repair) => {
+    const topology = transferLessonTopology()
+    const evaluate = () => executePlatform({ contractVersion: 1, operation: 'evaluate',
+      document: { mode: 'full', topology }, requirements: transferLessonRequirements })
+    const starter = evaluate()
+    expect(starter).toMatchObject({ status: 'complete', errors: [] })
+    expect(starter.assessments.map((entry) => entry.outcome)).toEqual(['violated', 'satisfied', 'satisfied', 'satisfied', 'satisfied'])
+    expect(starter.assessments[0].evidence).toMatchObject({
+      forward: { status: 'delivered' }, reverse: { status: 'dropped-blackhole', hops: expect.arrayContaining([
+        expect.objectContaining({ matchedRoute: expect.objectContaining({ prefix: '10.141.3.0/24', nextHopType: 'None' }) }),
+      ]) },
+    })
+    if (repair === 'disable-rule') topology.udrTables[1].routes[0].enabled = false
+    if (repair === 'remove-rule') topology.udrTables[1].routes = []
+    if (repair === 'remove-association') delete topology.vnets[1].subnets[0].routeTableId
+    expect(evaluate().assessments.map((entry) => entry.outcome)).toEqual(transferLessonRequirements.map(() => 'satisfied'))
+  })
+
+  it.each(['wrong-source', 'broken-operations', 'tenant-leak', 'changed-owner'])('rejects the handover %s non-fix', (change) => {
+    const topology = transferLessonTopology()
+    if (change !== 'wrong-source') topology.udrTables[1].routes[0].enabled = false
+    if (change === 'wrong-source') delete topology.vnets[0].subnets[0].routeTableId
+    if (change === 'broken-operations') topology.udrTables[0].routes.push({
+      id: 'ops-drop', name: 'Broken witness', prefix: '10.141.4.0/24', nextHopType: 'None', enabled: true,
+    })
+    if (change === 'tenant-leak') topology.vnetPeerings.push({ ...structuredClone(topology.vnetPeerings[0]),
+      id: 'bad-tenant-link', name: 'Tenant leak', vnetBId: 'tenant' })
+    if (change === 'changed-owner') topology.vnets[1].subnets[0].prefix = '10.142.8.0/24'
+    const result = executePlatform({ contractVersion: 1, operation: 'evaluate', document: { mode: 'full', topology }, requirements: transferLessonRequirements })
+    expect(result.errors).toEqual([])
+    expect(result.assessments.some((entry) => entry.outcome !== 'satisfied')).toBe(true)
+    if (change === 'changed-owner') expect(result.assessments[0].outcome).toBe('not assessed')
+  })
+
+  it('retains historical black belts and rechecks revised loading without announcing or awarding duplicate XP', async () => {
+    const inserted = new Set(['private-link.address-range', 'private-link.default-route', 'private-link.predict-default',
+      'inspection-bypass.predict', 'inspection-bypass.predict-subnet', 'inspection-bypass.forward', 'tiered-incident.entry'])
+    const completions = orderedTasks(scenarioBundle).filter(({ lesson, task }) => lesson.id !== 'routing-handover' && !inserted.has(task.id))
+      .map(({ lesson, task }, revision) => ({
+        courseId: scenarioBundle.course.id, contentVersion: 6, lessonId: lesson.id, taskId: task.id,
+        assessmentVersion: task.id === 'private-link.load' ? 1 : task.assessmentVersion, checkId: task.checkId, awardId: task.awardId, points: task.points,
+        title: task.title, sessionId: 'historical-journey', revision, scope: 1, engineVersion: 'historical',
+        completedAt: '2026-11-19T10:00:00.000Z',
+      }))
+    let ledger: ProgressLedger = { version: 1, policyVersion: 1, completions }
+    expect(beltProgress(ledger, scenarioBundle.course, scenarioAssessments)).toMatchObject({ belt: { id: 'black' }, points: 2120 })
+    const before = structuredClone(ledger)
+    const live: LearningWorkspace = { revision: 1, scope: 1, practice: { version: 1, active: true,
+      returnProvider: 'azure-net', courseId: scenarioBundle.course.id, scenarioId: 'private-link', document: document('private-link') } }
+    const runner = createCourseRunner(scenarioBundle, { workspace: () => live, completions,
+      changed: () => {}, evaluate: async (request) => executePlatform(request),
+      completed: (completion) => { ledger = recordCompletion(ledger, completion); return true } })
+    expect(runner.getSnapshot().taskId).toBe('private-link.load')
+    expect(ledger).toEqual(before)
+    runner.observe(runner.getSnapshot().observation!)
+    await runner.assess()
+    expect(runner.advance()).toBe(true)
+    expect(runner.getSnapshot().celebration?.points).toBe(0)
+    expect(beltProgress(ledger, scenarioBundle.course, scenarioAssessments)).toMatchObject({ belt: { id: 'black' }, points: 2120 })
+    expect(ledger.completions.slice(0, completions.length)).toEqual(before.completions)
+  })
+
+  it('extends the learner network into the hub exercise without replacing edits or creating its peerings and UDRs', () => {
+    const previous: PracticeWorkspace = { version: 1, active: true, returnProvider: 'azure-net', courseId: scenarioBundle.course.id,
+      scenarioId: 'private-link', document: repaired('private-link') }
+    if (previous.document.mode === 'vwan') throw new Error('Mixed fixture required')
+    previous.document.topology.vnets[0].name = 'Learner application'
+    const before = structuredClone(previous)
+    const next = prepareCourseScenario(scenarioBundle, 'inspection-bypass', previous)
+    if (next.mode === 'vwan') throw new Error('Mixed fixture required')
+    expect(next.topology.vnets[0].name).toBe('Learner application')
+    expect(next.topology.vnetPeerings).toEqual(previous.document.topology.vnetPeerings)
+    expect(next.topology.vnets).toHaveLength(4)
+    expect(next.topology.vnets[3].appliances[0].id).toBe('fw')
+    expect(next.topology.udrTables.map((table) => table.routes)).toEqual([[], []])
+    expect(previous).toEqual(before)
+    previous.document.topology.vnets.push(structuredClone(next.topology.vnets[3]))
+    expect(() => prepareCourseScenario(scenarioBundle, 'inspection-bypass', previous)).toThrow('conflicts')
+  })
+
+  it('does not extend a normal design, another course or an unrelated scenario', () => {
+    const previous: PracticeWorkspace = { version: 1, active: true, returnProvider: 'azure-net', courseId: scenarioBundle.course.id,
+      scenarioId: 'private-link', document: repaired('private-link') }
+    for (const change of [{ active: false }, { courseId: 'another-course' }, { scenarioId: 'another-scenario' }]) {
+      expect(prepareCourseScenario(scenarioBundle, 'inspection-bypass', { ...previous, ...change })).toEqual(document('inspection-bypass'))
+    }
+  })
+
   it('qualifies multi-hub destination labels, independent return tables and two native repair alternatives', () => {
     const topology = multihubLessonTopology()
     const evaluate = () => executePlatform({ contractVersion: 1, operation: 'evaluate',

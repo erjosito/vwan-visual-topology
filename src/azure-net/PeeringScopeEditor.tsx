@@ -23,10 +23,14 @@ export default function PeeringScopeEditor({ topology, peering, onApply }: {
   const [bIds, setBIds] = useState(peering.scope?.type === 'subnets' ? peering.scope.subnetBIds : [])
   const scope: NonNullable<AzVnetPeering['scope']> = type === 'subnets'
     ? { type, subnetAIds: aIds, subnetBIds: bIds } : { type }
+  const saved = peering.scope ?? { type: 'whole-vnet' }
+  const pending = scope.type !== saved.type || scope.type === 'subnets' && saved.type === 'subnets'
+    && (JSON.stringify([...aIds].sort()) !== JSON.stringify([...saved.subnetAIds].sort())
+      || JSON.stringify([...bIds].sort()) !== JSON.stringify([...saved.subnetBIds].sort()))
   const proposed = { ...topology, vnetPeerings: topology.vnetPeerings.map((item) => item.id === peering.id ? { ...item, scope } : item) }
   const errors = validateSubnetPeeringScopes(proposed)
   const sides: [string, string[], (ids: string[]) => void][] = [[peering.vnetAId, aIds, setAIds], [peering.vnetBId, bIds, setBIds]]
-  return <fieldset data-testid="peering-scope-editor" className="peering-scope-editor">
+  return <fieldset data-testid="peering-scope-editor" className="peering-scope-editor" data-configuration-pending={pending} data-configuration-invalid={errors.length > 0}>
     <legend>{t('Peering scope')}</legend>
     <label className="field"><span>{t('Peering scope')}</span><select aria-label={t('Peering scope')} value={type} onChange={(event) => setType(event.target.value as typeof type)}>
       <option value="whole-vnet">{t('Whole VNet')}</option><option value="subnets">{t('Selected subnets')}</option>

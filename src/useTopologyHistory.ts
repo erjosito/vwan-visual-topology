@@ -1,7 +1,9 @@
 import { useEffect, useLayoutEffect, useState } from 'react'
 import type { Topology } from './model'
 import { validateTopology } from './validation'
-import { useWorkspaceSession } from './workspace-context'
+import { useWorkspaceSession, useWorkspaceStorage } from './workspace-context'
+import { measureAzWork } from './azure-net/performance'
+import { applyRoutingIntentEdit } from './native-routing-intent'
 
 export interface UseTopologyHistoryOptions {
   storageKey: string
@@ -20,6 +22,7 @@ export function useTopologyHistory({
   onAfterChange,
 }: UseTopologyHistoryOptions) {
   const session = useWorkspaceSession()
+  const storage = useWorkspaceStorage()
   const [cached] = useState(() => session?.getEditorHistory?.())
   const [initial] = useState(() => {
     if (cached?.provider === 'vwan') return cached
@@ -28,11 +31,12 @@ export function useTopologyHistory({
     }
     let saved: string | null = null
     try {
-      saved = localStorage.getItem(storageKey)
+      saved = storage.getItem(storageKey)
       return {
         topology: validateTopology(saved ? JSON.parse(saved) : structuredClone(initialTopology)),
         error: '',
         backup: '',
+        stored: saved !== null,
       }
     } catch (error) {
       return {
@@ -49,6 +53,10 @@ export function useTopologyHistory({
   const [error, setError] = useState(initial.error)
   const [saveError, setSaveError] = useState(() => cached?.provider === 'vwan' ? cached.saveError : '')
   useLayoutEffect(() => {
+    if (!cached && 'stored' in initial && initial.stored) session?.documentSave?.local(initial.topology, 'saved')
+    else if (!cached && initial.error) session?.documentSave?.local(initial.topology, 'unavailable')
+  }, [cached, initial, session?.documentSave])
+  useLayoutEffect(() => {
     session?.rememberEditorHistory?.({
       provider: 'vwan', topology, past: history.past, future: history.future, error, saveError, backup: initial.backup,
     })
@@ -57,16 +65,19 @@ export function useTopologyHistory({
   const persist = (next: Topology) => {
     try {
       if (session?.practice && session.savePractice) session.savePractice({ mode: 'vwan', topology: next })
-      else localStorage.setItem(storageKey, JSON.stringify(next))
+      else measureAzWork('persist', () => storage.setItem(storageKey, JSON.stringify(next)))
+      session?.documentSave?.local(next, 'saved')
       setSaveError('')
     } catch {
-      setSaveError('Browser storage is unavailable or full. Export JSON to preserve your topology.')
+      session?.documentSave?.local(next, 'unavailable')
+      setSaveError(session?.documentSave ? '' : 'Browser storage is unavailable or full. Use Save As to preserve your topology.')
     }
   }
 
   const save = (next: Topology, recordHistory = true) => {
-    if (recordHistory && JSON.stringify(next) !== JSON.stringify(topology)) {
-      const snapshot = structuredClone(topology)
+    if (recordHistory) applyRoutingIntentEdit(topology, next)
+    if (recordHistory && measureAzWork('history-compare', () => JSON.stringify(next) !== JSON.stringify(topology))) {
+      const snapshot = measureAzWork('history-clone', () => structuredClone(topology))
       setHistory((current) => ({ past: [...current.past.slice(-(maxHistory - 1)), snapshot], future: [] }))
     }
     setTopology(next)
@@ -78,10 +89,10 @@ export function useTopologyHistory({
   const canUndo = history.past.length > 0
   const canRedo = history.future.length > 0
 
-  const undo = () => {
+  const undo = () => measureAzWork('undo', () => {
     const previous = history.past.at(-1)
     if (!previous) return
-    const currentSnapshot = structuredClone(topology)
+    const currentSnapshot = measureAzWork('history-clone', () => structuredClone(topology))
     setHistory((current) => ({
       past: current.past.slice(0, -1),
       future: [currentSnapshot, ...current.future].slice(0, maxHistory),
@@ -91,12 +102,12 @@ export function useTopologyHistory({
     onBeforeUndoRedo?.(previous)
     onAfterChange?.(previous)
     persist(previous)
-  }
+  })
 
-  const redo = () => {
+  const redo = () => measureAzWork('redo', () => {
     const [next, ...rest] = history.future
     if (!next) return
-    const currentSnapshot = structuredClone(topology)
+    const currentSnapshot = measureAzWork('history-clone', () => structuredClone(topology))
     setHistory((current) => ({
       past: [...current.past.slice(-(maxHistory - 1)), currentSnapshot],
       future: rest,
@@ -106,7 +117,7 @@ export function useTopologyHistory({
     onBeforeUndoRedo?.(next)
     onAfterChange?.(next)
     persist(next)
-  }
+  })
 
   const clearHistory = () => setHistory({ past: [], future: [] })
 

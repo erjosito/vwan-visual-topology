@@ -1,5 +1,6 @@
 import type { Hub, HubRouteTable, HubRoutingConfiguration, Topology } from './model'
-import { cidr } from './validation'
+import { cidr } from './ipv4'
+import { routingIntentConfigurationMatches, routingIntentConflicts } from './routing-intent'
 
 export const DEFAULT_HUB_TABLE = 'defaultRouteTable'
 export const NONE_HUB_TABLE = 'noneRouteTable'
@@ -26,7 +27,7 @@ type FirewallHub = Pick<Hub, 'firewall'> & { routingIntent: Pick<Hub['routingInt
 
 export function supportsHubStaticTable(hub: FirewallHub, table: HubRouteTable, hubCount: number): boolean {
   return hubCount === 1 && !!hub.firewall?.id.trim() && !!hub.firewall.name.trim()
-    && !hub.routingIntent.private && !hub.routingIntent.internet && table.id !== NONE_HUB_TABLE
+    && (!(hub.routingIntent.private || hub.routingIntent.internet) || table.id === DEFAULT_HUB_TABLE) && table.id !== NONE_HUB_TABLE
     && !!table.staticRoutes?.length && table.staticRoutes.every((route) =>
       route.destinationType === 'CIDR' && route.nextHopType === 'ResourceId' && route.nextHop === hub.firewall!.id
       && !!route.name.trim() && route.destinations.length > 0 && route.destinations.every((prefix) => !!cidr(prefix)))
@@ -67,6 +68,11 @@ export function hubTableCoverage(topology: Topology): Record<string, Record<stri
   const attachments = [...topology.spokes, ...topology.connections, ...(topology.erLinks ?? [])]
     .filter((entry) => !('enabled' in entry) || entry.enabled)
   const unknownPropagation = topology.hubs.some((hub) => hub.routeTablesStatus === 'unknown')
+    || attachments.some((entry) => {
+      const hub = topology.hubs.find((hub) => hub.id === entry.hubId)
+      return hub && !routingIntentConfigurationMatches(hub, entry.hubRouting)
+    })
+    || topology.interWanVpns?.some((vpn) => vpn.enabled && vpn.status === 'unknown')
     || topology.azureImport?.hubs.some((hub) => hub.routingScopeComplete === false || hub.limitations.length > 0)
     || attachments.some((entry) => entry.hubRouting?.status === 'unknown' || entry.hubRouting?.limitations?.length)
   const remoteOnlySources = attachments.filter((entry) => {
@@ -93,7 +99,8 @@ export function hubTableCoverage(topology: Topology): Record<string, Record<stri
         && propagationLabels(attachmentHubRouting(topology, source.id)).some((label) => table.labels.includes(label)))
       || (table.id !== DEFAULT_HUB_TABLE && table.id !== NONE_HUB_TABLE
         && topology.hubs.some((origin) => origin.routingIntent.private || origin.routingIntent.internet))
-    const complete = !unknownPropagation && !unsupported
-    return [table.id, { complete, limitations: complete ? [] : [hubRoutingCoverageMessage] }]
+    const conflicts = hub.routingIntent.private || hub.routingIntent.internet ? routingIntentConflicts(hub) : []
+    const complete = !unknownPropagation && !unsupported && !conflicts.length
+    return [table.id, { complete, limitations: complete ? [] : [hubRoutingCoverageMessage, ...conflicts] }]
   }))]))
 }

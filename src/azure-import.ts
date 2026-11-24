@@ -1,6 +1,8 @@
 import type { AzureImportInfo, Hub, HubRouteTable, HubRoutingConfiguration, Topology } from './model'
 import { parseVnetBgpCommunities } from './vnet-communities'
-import { armKey, parseAzureObservation } from './azure-observation'
+import { armKey, azureObjectId as stableId } from './azure-identity'
+import { azureObservationEnvelope, parseAzureObservationData } from './azure-observation-data'
+export { azureObjectId } from './azure-identity'
 import { cidr, validateTopology } from './validation'
 import { VWAN_MAX_SPOKES } from './topology-limits'
 
@@ -25,21 +27,48 @@ function resourceId(value: unknown, type: string): string {
   if (!match || match[1].toLowerCase() !== type.toLowerCase()) throw new Error(`Expected a ${type} Azure resource ID.`)
   return result
 }
-function stableId(kind: string, armId: string): string {
-  let hash = 14695981039346656037n
-  for (const char of armId.toLowerCase()) hash = BigInt.asUintN(64, (hash ^ BigInt(char.charCodeAt(0))) * 1099511628211n)
-  return `az-${kind}-${hash.toString(16)}`
-}
-export { stableId as azureObjectId }
-
 export function importAzureCapture(input: unknown): Topology {
   const root = object(input, 'Azure capture')
+  if (root.kind === 'azure-vwan-federation') {
+    if (root.version !== 1) throw new Error('Unsupported federation version.')
+    const captures = list(root.captures, 'WAN captures', 2)
+    if (captures.length !== 2 || captures.some((capture) => object(capture, 'WAN capture').kind !== 'azure-vwan-capture')) throw new Error('Federation requires two separate WAN captures.')
+    const parts = captures.map(importAzureCapture)
+    const infos = parts.map((part) => part.azureImport!)
+    if (armKey(infos[0].wanId) === armKey(infos[1].wanId)) throw new Error('Federation requires two different WANs.')
+    const references = captures.reduce<number>((sum, capture) => sum + (object(capture, 'WAN capture').hubs as { connections: unknown[] }[])
+      .reduce((count, hub) => count + hub.connections.length, 0), 0)
+    if (references > VWAN_MAX_SPOKES) throw new Error(`Federation exceeds ${VWAN_MAX_SPOKES} aggregate VNet references.`)
+    const wanIds = infos.map((info) => info.wanId)
+    return validateTopology({
+      version: 1, name: text(root.name, 'Federation name'),
+      wans: parts.map((part, index) => ({ id: stableId('wan', wanIds[index]), name: part.name,
+        resourceId: wanIds[index], capturedAt: infos[index].capturedAt, collectorVersion: infos[index].collectorVersion,
+        ...(part.allowBranchToBranchTraffic === undefined ? {} : { allowBranchToBranchTraffic: part.allowBranchToBranchTraffic }) })),
+      hubs: parts.flatMap((part, index) => part.hubs.map((hub) => ({ ...hub, wanId: stableId('wan', wanIds[index]) }))),
+      spokes: parts.flatMap((part) => part.spokes), sites: [], connections: [], siteLinks: [],
+      interWanVpns: list(root.interWanVpns, 'Inter-WAN VPNs', 1).map((value) => {
+        const vpn = object(value, 'Inter-WAN VPN')
+        return { ...vpn, aHubId: stableId('hub', resourceId(vpn.aHubId, 'virtualHubs')),
+          bHubId: stableId('hub', resourceId(vpn.bHubId, 'virtualHubs')) }
+      }),
+      azureImport: {
+        ...infos[0], wanIds,
+        warnings: [...new Set([...infos.flatMap((info) => info.warnings),
+          'Federated captures are non-atomic. Inter-WAN S2S VPN exports are manually configured assumptions, not captured gateway advertisements. P2S clients, authentication, client routes and remote-access forwarding are unsupported.'])],
+        hubs: infos.flatMap((info) => info.hubs), spokes: infos.flatMap((info) => info.spokes ?? []),
+        tables: infos.flatMap((info) => info.tables ?? []),
+      },
+    })
+  }
   if (root.kind !== 'azure-vwan-capture' || (root.version !== 1 && root.version !== 2)) throw new Error('Unsupported Azure capture format/version. Use the supplied collector.')
   if (root.version === 2) {
-    const observation = parseAzureObservation(input)
+    azureObservationEnvelope(input)
     const topology = importAzureCapture({ ...root, version: 1 })
+    const observation = parseAzureObservationData(input, topology)
+    const spokeIds = new Set(topology.spokes.map((spoke) => spoke.id))
     const spokes = observation.hubs.flatMap((hub) => hub.spokes)
-      .filter((spoke) => topology.spokes.some((item) => item.id === spoke.importedId))
+      .filter((spoke) => spokeIds.has(spoke.importedId))
       .map((spoke) => ({ spokeId: spoke.importedId, resourceId: spoke.resourceId, virtualNetworkId: spoke.virtualNetworkId }))
     const tables = observation.tables.flatMap((table) => {
       const hub = observation.hubs.find((item) => armKey(item.resourceId) === armKey(table.hubResourceId))

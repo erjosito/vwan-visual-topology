@@ -2,6 +2,12 @@ import { t, localizeDiagnostic } from './i18n'
 import { useState } from 'react'
 import type { Topology } from './model'
 import { CanvasOverlay } from './CanvasOverlay'
+import { AzureCaptureTools } from './AzureCaptureTools'
+import { AzureComparisonPanel } from './AzureComparisonPanel'
+import type { ComparisonSession } from './AzureComparisonPanel'
+import { parseAzureObservation } from './azure-observation'
+import { defaultComparisonProfile } from './azure-comparison'
+import type { ObjectSelection } from './model'
 import { bicepDefaults, generateBicep, hubExportBlocker, spokeExportBlocker } from './bicep-export'
 import type { BicepExport, BicepSettings, SpokeAttachmentDeployment } from './bicep-export'
 import collectorUrl from './collect-azure-vwan.ps1?url'
@@ -13,9 +19,12 @@ function download(text: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-export function AzureFilesPanel({ topology, pendingImport, onImportFile, onCompare, onConfirmImport, onCancelImport, onClose }: {
+export function AzureFilesPanel({ topology, pendingImport, onImportFile, onCompare, onConfirmImport, onCancelImport, onClose, comparing, onFiles, session, onSession, onSelect, onCapture }: {
   topology: Topology; pendingImport?: Topology; onImportFile: () => void
   onCompare: () => void; onConfirmImport: () => void; onCancelImport: () => void; onClose: () => void
+  comparing: boolean; onFiles: () => void; session?: ComparisonSession
+  onSession: (session?: ComparisonSession) => void; onSelect: (selection?: ObjectSelection) => void
+  onCapture: (session: ComparisonSession) => void
 }) {
   const [settings, setSettings] = useState(() => bicepDefaults(topology))
   const [acknowledged, setAcknowledged] = useState(false)
@@ -24,20 +33,30 @@ export function AzureFilesPanel({ topology, pendingImport, onImportFile, onCompa
   const change = (next: BicepSettings) => { setSettings(next); setPreview(undefined); setAcknowledged(false); setError('') }
   const currentPreview = preview?.topology === topology && preview.settings === settings ? preview.result : undefined
   const report = pendingImport?.azureImport ?? topology.azureImport
-  return <CanvasOverlay title={t("Azure files")} className="azure-files" onClose={onClose}>
-    <p className="muted">{t("Offline files only. No Azure sign-in, credentials, API calls or deployment from this app.")}</p>
-    <p><button onClick={onCompare}>{t('Compare with Azure capture')}</button></p>
+  return <CanvasOverlay title={t("Azure files")} className="azure-files" onClose={onClose} restoreFocus>
+    <nav aria-label={t('Azure workflows')} className="row">
+      <button aria-pressed={!comparing} onClick={onFiles}>{t('Export Bicep / Import as new design')}</button>
+      <button aria-pressed={comparing} onClick={onCompare}>{t('Compare with Azure capture')}</button>
+    </nav>
+    <p className="muted">{t('Offline files work on web and Windows. Local Azure reads require the Windows desktop app. No deployment or deletion is performed.')}</p>
+    <AzureCaptureTools mode="vwan" onCapture={async (file, current) => {
+      if (!current()) return
+      const observation = parseAzureObservation(JSON.parse(file.content))
+      onCapture({ observation, profile: defaultComparisonProfile(topology, observation) })
+    }} />
+    {comparing ? <AzureComparisonPanel embedded topology={topology} session={session} onSession={onSession} onSelect={onSelect} onClose={onClose} /> : <>
     {pendingImport ? <>
       <h3>{t("Review Azure capture")}</h3>
       <p><strong>{pendingImport.name}</strong> · {t('{0} hubs · {1} IPv4 spokes. Confirming replaces the current workspace. Export its JSON first if needed.', pendingImport.hubs.length, pendingImport.spokes.length)}</p>
     </> : <>
       <h3>{t("Import from Azure")}</h3>
       <p>{t("Run the reviewable, read-only collector with PowerShell 7 and an already signed-in Azure CLI, locally or in Cloud Shell PowerShell. It reads one Standard WAN in public Azure, with no secrets or effective-route queries.")}</p>
-      <p><a className="button-link" href={collectorUrl} download="collect-azure-vwan.ps1">{t("Download Azure collector")}</a> <a className="button-link" href="https://github.com/erjosito/vwan-visual-topology/blob/main/public/scripts/collect-azure-vwan.ps1" target="_blank" rel="noopener noreferrer">{t("View script on GitHub")}</a> <button onClick={onImportFile}>{t("Import Azure capture")}</button></p>
+      <p><a className="button-link" href={collectorUrl} download="collect-azure-vwan.ps1">{t("Download Azure collector")}</a> <a className="button-link" href="https://github.com/erjosito/vwan-visual-topology/blob/main/public/scripts/collect-azure-vwan.ps1" target="_blank" rel="noopener noreferrer">{t("View script on GitHub")}</a> <button onClick={onImportFile}>{t("Import Azure as a new design")}</button></p>
       <pre className="azure-code">{`Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/erjosito/vwan-visual-topology/main/public/scripts/collect-azure-vwan.ps1' -OutFile ./collect-azure-vwan.ps1\n./collect-azure-vwan.ps1 -VirtualWanId '/subscriptions/SUB/resourceGroups/RG/providers/Microsoft.Network/virtualWans/WAN' -OutputFile ./vwan-capture.json`}</pre>
-      <p className="muted">{t("Cross-subscription VNet reads require explicit -AllowCrossSubscriptionVnets. Only referenced VNets are read. Permission failures and unsupported configurations remain visible in the capture preview.")}</p>
+      <p className="muted">{t("Cross-subscription VNet reads require explicit -AllowCrossSubscriptionVnets. Only referenced VNets are exported. Permission failures and unsupported configurations remain visible in the capture preview.")}</p>
     </>}
-    {report && <section aria-label={t("Azure import report")}><h3>{t("Structure-only import report")}</h3><p>{t("Captured")} {report.capturedAt}  {t("· collector")} {report.collectorVersion}</p><p className="azure-resource-id">{report.wanId}</p>
+    <p className="muted">Large inventories: up to 1000 aggregate VNet references, with at most 1000 IPv4 prefixes above 60 spokes. Use -BulkVnetReads to explicitly allow resource-group VNet listing within the unchanged 500-request budget. Two-WAN composition and directional S2S exports: <a href="https://github.com/erjosito/vwan-visual-topology/blob/main/docs/azure-files.md" target="_blank" rel="noopener noreferrer">capture federation guide</a>. P2S remote-access forwarding is unsupported.</p>
+    {report && <section aria-label={t("Azure import report")}><h3>{t("Structure-only import report")}</h3><p>{t("Captured")} {report.capturedAt}  {t("· collector")} {report.collectorVersion}</p><p className="azure-resource-id">{(report.wanIds ?? [report.wanId]).join(' · ')}</p>
       <div className="table-scroll"><table><thead><tr><th>{t("Hub")}</th><th>{t("Infrastructure prefix")}</th><th>{t("Capture status")}</th></tr></thead><tbody>{report.hubs.map((source) => <tr key={source.hubId}><td title={source.resourceId}>{(pendingImport ?? topology).hubs.find((hub) => hub.id === source.hubId)?.name ?? source.hubId}</td><td>{source.addressPrefix}</td><td>{source.limitations.length ? t("Partial / unsupported routing") : t("Captured structure only")}</td></tr>)}</tbody></table></div>
       {report.tables !== undefined && <p className="muted">{t("Observed effective-route snapshots")}: {report.tables.map((table) => `${(pendingImport ?? topology).hubs.find((hub) => hub.id === table.hubId)?.name ?? table.hubId} (${table.status}, ${table.routes.length} routes)`).join(' · ') || t("none")}</p>}
       {report.warnings.map((warning, index) => <p className="notice" key={index}>{localizeDiagnostic(warning)}</p>)}</section>}
@@ -101,6 +120,7 @@ export function AzureFilesPanel({ topology, pendingImport, onImportFile, onCompa
         <button className="primary" disabled={!acknowledged} onClick={() => download(currentPreview.text)}>{t("Download main.bicep")}</button>
       </section>}
       {preview && !currentPreview && <p className="notice">{t("Workspace changed. Review the export again before downloading.")}</p>}
+    </>}
     </>}
   </CanvasOverlay>
 }

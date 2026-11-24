@@ -1,31 +1,36 @@
 import { lazy, Suspense, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { InputHTMLAttributes } from 'react'
+import { flushSync } from 'react-dom'
 import { projectAzFailures, regionKey, failureKey, failureLabel, type FailureDomain } from '../failures'
 import { analyzeAzResilience, resilienceMarkers, type ResilienceReport } from '../failure-analysis'
 import { FailurePanel } from '../FailurePanel'
-import { FlowExportControls } from '../FlowExportControls'
 import './azure-net.css'
 import { AZNET_MAX_JSON_LENGTH, parseAzNetJson, parseAzNetTopology } from './admission'
-import { AZNET_STORAGE_KEY, consumeAzSnapshotUrl, downloadAzText, loadAzWorkspace, workspaceError } from './workspace'
+import { downloadAzText, workspaceError } from './workspace'
+import { useAzDocument } from './useAzDocument'
+import { useAzTraceSession } from './useAzTraceSession'
+import { useAzDiagnosisSession } from './useAzDiagnosisSession'
+import { defaultSelected, useAzSelection } from './useAzSelection'
 import { azDisplayResult, azRoutingInput } from './routing-input'
-import { measureAzWork, recordAzWork } from './performance'
-import { t, useLanguage, documentTitles, localizeDiagnostic } from '../i18n'
+import { canAcknowledgeWarning, orderWarningFindings, setWarningAcknowledgement } from '../warning-acknowledgements'
+import { measureAzWork, useMeasuredRender } from './performance'
+import { t, translate, useLanguage, documentTitles, localizeDiagnostic } from '../i18n'
 import { LearningTools } from '../learning/LearningTools'
-import { LearningInspection } from '../learning/LearningInspection'
 import { AZURE_NET_SAMPLE_GALLERY, resolveSampleIdAlias } from '../sample-catalog'
 import { guidanceAnchor, resolveGuidance } from '../learning/guidance'
-import { Explain } from '../learning/Explain'
 import type { SimulatorMode } from '../SimulatorModeSwitch'
 import { WorkspaceAccountStatus, WorkspaceMenu } from '../WorkspaceSession'
-import { InspectorSection, PresentationGroup, PresentationToggle } from '../WorkspacePresentation'
-import { previewVnetActions } from '../context-actions'
-import { useWorkspaceSession } from '../workspace-context'
+import { ConfigurationEditStatus, InspectorSection, PresentationGroup, PresentationToggle } from '../WorkspacePresentation'
+import { previewSubnetActions, previewVnetActions } from '../context-actions'
+import { useWorkspaceEditorState, useWorkspaceSession } from '../workspace-context'
+import { DocumentActions } from '../DocumentActions'
+import { WorkspaceCanvasTabs, WorkspaceTabPanel } from '../WorkspaceTabs'
 import type { ContextAction } from '../TopologyContextMenu'
 import type { DetailTarget } from '../network-detail-projection'
 import { WorkspaceTools } from '../WorkspaceTools'
-import { azWorkspaceIdentity, azWorkspaceObjects } from '../workspace-objects'
+import { azWorkspaceIdentity, azWorkspaceObjects, workspaceIdentityKey } from '../workspace-objects'
+import { udrAssociationError } from './udr-regions'
+import type { UdrManagerRequest } from './UdrTableManager'
 import { CanvasOverlay } from '../CanvasOverlay'
-import VnetCommunityEditor from '../VnetCommunityEditor'
 import { azHubGatewayConnections } from '../hub-gateways'
 import { useDeleteShortcut } from '../useDeleteShortcut'
 import {
@@ -39,37 +44,27 @@ import {
   type AzContextMenuTarget,
   type AzSelectedEntity,
 } from './AzureNetDiagram'
-import {
-  compareAzNetWithObservations,
-  importAzNetCapture,
-  type AzCapturedObservations,
-  type AzNetComparisonReport,
+import type {
+  AzCapturedObservations,
+  AzNetComparisonReport,
 } from './azure-import'
-import { validateVpnNat } from '../vpn-nat'
-import { pruneDeletedInventory, validateInventory } from '../inventory'
-import { validateApplicationInventory } from '../application-inventory'
 import { DEFAULT_HUB_TABLE, hubRouteTables } from '../hub-routing'
-
-import { pruneAzSiteRouteMaps } from './route-maps'
 import { pruneAzArsRouteMaps } from './ars-route-maps'
+import { confirmConfigurationSwitch } from '../configuration-selection'
+
 import {
   AZ_NET_PAIR_LIMIT,
   azFindingImpact,
-  azFindingFlows,
   groupAzNetFindings,
-  runAzNetDiagnostics,
-  type AzConnectivityScope,
-  type AzConnectivityReport,
+  runAzNetStaticDiagnostics,
   type AzDiagnosticFinding,
 } from './diagnostics'
-import { azEndpointKey, getAzNetEndpoints, type AzEndpointOption } from './endpoints'
-import { cidr, contains, ipv4 } from '../validation'
+import { azEndpointKey, type AzEndpointOption } from './endpoints'
+import { contains, ipv4 } from '../validation'
 import {
   checkErLocationAzureRegionAccess,
   lookupSubnetEffectiveRoute,
   simulateAzNet,
-  traceAzNetFlow,
-  traceAzNetPair,
   type AzBgpRibEntry,
 } from './engine'
 import {
@@ -77,210 +72,113 @@ import {
   cloneAzNetTopology,
   createEmptyAzNetTopology,
   validateAzNetTopology,
-  validateAdvertisedGatewayPrefixes,
-  type AzArsPreference,
   type AzErCircuitSku,
   type AzNetTopology,
   type AzPeeringDirectionFlags,
-  type AzUdrNextHopType,
 } from './model'
-
-type InspectorTab = 'routes' | 'tracer' | 'diagnostics' | 'editor' | 'azure'
-
-function encodeTopologyToUrlHash(topology: AzNetTopology): string {
-  const json = JSON.stringify(topology)
-  const bytes = new TextEncoder().encode(json)
-  let binary = ''
-  for (const b of bytes) {
-    binary += String.fromCharCode(b)
-  }
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-}
-
-function resolveInitialUrlSample() {
-  if (typeof window === 'undefined') return null
-  const requested = resolveSampleIdAlias(new URLSearchParams(window.location.search).get('sample') ?? '')
-  if (!requested) return null
-  return AZURE_NET_SAMPLES.find((s) => s.id === requested) ?? null
-}
 
 interface AzureNetAppProps {
   simulatorMode?: SimulatorMode
   onChangeSimulatorMode?: (mode: SimulatorMode) => void
 }
 
-function defaultSelected(topology: AzNetTopology): AzSelectedEntity {
-  const firstVnet = topology.vnets[1] ?? topology.vnets[0]
-  if (firstVnet && firstVnet.subnets[0]) {
-    return {
-      kind: 'subnet',
-      vnetId: firstVnet.id,
-      subnetId: firstVnet.subnets[0].id,
-    }
-  }
-  if (firstVnet) {
-    return {
-      kind: 'vnet',
-      vnetId: firstVnet.id,
-    }
-  }
-  if (topology.erLocations[0]) {
-    return {
-      kind: 'er-location',
-      locationId: topology.erLocations[0].id,
-    }
-  }
-  if (topology.sites[0]) {
-    return {
-      kind: 'site',
-      siteId: topology.sites[0].id,
-    }
-  }
-  return {
-    kind: 'vnet',
-    vnetId: 'vnet-1',
-  }
-}
-
 const NetworkDetail = lazy(() => import('../NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
+const AzurePanel = lazy(() => import('./AzurePanel').then((module) => ({ default: module.AzurePanel })))
+const Explain = lazy(() => import('../learning/Explain').then((module) => ({ default: module.Explain })))
+const WarningAcknowledgement = lazy(() => import('../WarningAcknowledgement').then((module) => ({ default: module.WarningAcknowledgement })))
+const FlowExportControls = lazy(() => import('../FlowExportControls').then(module => ({ default: module.FlowExportControls }))
+  .catch(() => ({ default: () => <p role="status">{t('Flow export controls unavailable. Reconnect and reload to retry; routing results remain available.')}</p> })))
 const VpnNatGatewayEditor = lazy(() => import('../VpnNatEditor').then((module) => ({ default: module.VpnNatGatewayEditor })))
 const BgpRouteTable = lazy(() => import('./BgpRouteTable').then((module) => ({ default: module.BgpRouteTable })))
 const SampleGallery = lazy(() => import('../SampleGallery').then((module) => ({ default: module.SampleGallery })))
 const ErLocationInfoModal = lazy(() => import('../ErLocationInfoModal').then((module) => ({ default: module.ErLocationInfoModal })))
-const AzBicepExport = lazy(() => import('./AzBicepExport').then((module) => ({ default: module.AzBicepExport })))
 const RouterSnatDialog = lazy(() => import('../RouterSnatEditor').then((module) => ({ default: module.RouterSnatDialog })))
-const HubTablesEditor = lazy(() => import('./HubTablesEditor').then((module) => ({ default: module.HubTablesEditor })))
+const VnetConnectionEditor = lazy(() => import('./VnetConnectionEditor'))
+const GatewayCoexistenceAutoFix = lazy(() => import('./GatewayCoexistenceAutoFix'))
+const HubConfiguration = lazy(() => import('./HubConfiguration').then((module) => ({ default: module.HubConfiguration })))
 const HubCapabilitiesDialog = lazy(() => import('../HubCapabilitiesDialog'))
 const ClearTopologyDialog = lazy(() => import('../ClearTopologyDialog').then((module) => ({ default: module.ClearTopologyDialog })))
+const CloneVnetDialog = lazy(() => import('../CloneVnetDialog').then((module) => ({ default: module.CloneVnetDialog })))
+const UdrTableManager = lazy(() => import('./UdrTableManager'))
+const UdrTablesEditor = lazy(() => import('./UdrTableEditor').then((module) => ({ default: module.UdrTablesEditor })))
 const TopologyContextMenu = lazy(() => import('../TopologyContextMenu').then((module) => ({ default: module.TopologyContextMenu })))
 const HybridConnectionEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.HybridConnectionEditor })))
 const HybridNvaEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.HybridNvaEditor })))
 const ManagedVnraEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.ManagedVnraEditor })))
+const NvaCreationEditor = lazy(() => import('./VnetRoutingSettings').then((module) => ({ default: module.NvaCreationEditor })))
 const AzRouteMapsPanel = lazy(() => import('./RouteMapsPanel').then((module) => ({ default: module.AzRouteMapsPanel })))
 const NvaBgpPanel = lazy(() => import('./NvaBgpPanel'))
+const BgpNeighborsPanel = lazy(() => import('../BgpNeighborsPanel'))
 const PeeringScopeEditor = lazy(() => import('./PeeringScopeEditor'))
-const GatewayBgpNeighborsPanel = lazy(() => import('./GatewayBgpNeighborsPanel'))
-const CapturedArsRoutesPanel = lazy(() => import('./CapturedArsRoutesPanel'))
-const VpnGatewaySettings = lazy(() => import('./VpnGatewaySettings'))
+const VnetRoutingSettings = lazy(() => import('./VnetRoutingSettings'))
+const SubnetPrefixEditor = lazy(() => import('./AddressPrefixEditors').then((module) => ({ default: module.SubnetPrefixEditor })))
+const LearningInspection = lazy(() => import('../learning/LearningInspection').then(module => ({ default: module.LearningInspection })))
+const FindingEvidence = lazy(() => import('./FindingEvidence'))
 
-function PrefixInput({ value, deferred, onCommit, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'defaultValue' | 'onChange' | 'onBlur'> & {
-  value: string; deferred: boolean; onCommit: (value: string) => void
-}) {
-  const [draft, setDraft] = useState(value)
-  return <input {...props} value={deferred ? draft : value}
-    onChange={(event) => deferred ? setDraft(event.target.value) : onCommit(event.target.value)}
-    onBlur={() => { if (deferred && draft !== value) onCommit(draft) }} />
+function useSubnetAddressEditing(commit: (updater: (draft: AzNetTopology) => void) => boolean, onError: (message: string) => void) {
+  const commitRef = useRef(commit)
+  useLayoutEffect(() => { commitRef.current = commit })
+  return async (updater: (draft: AzNetTopology, tools: typeof import('./subnet-allocation')) => void) => {
+    try {
+      const tools = await import('./subnet-allocation')
+      // Apply against the latest workspace, including another action queued while tools loaded.
+      return flushSync(() => commitRef.current((draft) => updater(draft, tools)))
+    } catch (error) {
+      onError(workspaceError(error))
+      return false
+    }
+  }
 }
 
 export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
+  useMeasuredRender()
   const language = useLanguage()
   const workspaceSession = useWorkspaceSession()
   const [toolsOpenRequest, setToolsOpenRequest] = useState(0)
   const [toolsDismissRequest, setToolsDismissRequest] = useState(0)
-  const [cachedHistory] = useState(() => workspaceSession?.getEditorHistory?.())
-  const [initialResolved] = useState(() => {
-    if (cachedHistory?.provider === 'azure-net') return {
-      sampleId: cachedHistory.sampleId, topology: cachedHistory.topology,
-      snapshotImported: false, recovery: cachedHistory.recovery,
-    }
-    if (workspaceSession?.practice && workspaceSession.practice.document.mode !== 'vwan') return {
-      sampleId: '', topology: workspaceSession.practice.document.topology, snapshotImported: false, recovery: [],
-    }
-    // Access localStorage inside loadAzWorkspace's try/catch (the getter itself may throw).
-    const stored = loadAzWorkspace({ getItem: (key) => window.localStorage.getItem(key) }, window.location.hash)
-    if (stored.snapshotImported) return stored
-    const urlSample = resolveInitialUrlSample()
-    if (urlSample) {
-      return { ...stored, sampleId: urlSample.id, topology: parseAzNetTopology(urlSample.topology) }
-    }
-    return stored
-  })
-
-  const [sampleId, setSampleId] = useState<string>(initialResolved.sampleId)
-  const [topology, setTopology] = useState<AzNetTopology>(initialResolved.topology)
-  const [history, setHistory] = useState<AzNetTopology[]>(() => cachedHistory?.provider === 'azure-net' ? cachedHistory.past : [])
-  const [future, setFuture] = useState<AzNetTopology[]>(() => cachedHistory?.provider === 'azure-net' ? cachedHistory.future : [])
-  const [recoveryEntries, setRecoveryEntries] = useState(initialResolved.recovery)
-  const [recoveryAcknowledged, setRecoveryAcknowledged] = useState(() =>
-    cachedHistory?.provider === 'azure-net' ? cachedHistory.recoveryAcknowledged : initialResolved.recovery.length === 0)
-  const [saveError, setSaveError] = useState('')
   const [workspaceNotice, setWorkspaceNotice] = useState('')
-  const [pendingUrlSample, setPendingUrlSample] = useState(() => {
-    if (workspaceSession?.practice) return ''
-    if (cachedHistory?.provider === 'azure-net') return cachedHistory.pendingUrlSample
-    const requested = resolveSampleIdAlias(new URLSearchParams(window.location.search).get('sample') ?? '')
-    return !initialResolved.snapshotImported && /^[a-z0-9-]+$/.test(requested) && !resolveInitialUrlSample() ? requested : ''
-  })
-  useLayoutEffect(() => {
-    workspaceSession?.rememberEditorHistory?.({
-      provider: 'azure-net', topology, sampleId, past: history, future, recovery: recoveryEntries,
-      recoveryAcknowledged, pendingUrlSample,
-    })
-  }, [workspaceSession, topology, sampleId, history, future, recoveryEntries, recoveryAcknowledged, pendingUrlSample])
-  const [activeTab, setActiveTab] = useState<InspectorTab | null>(null)
+  const {
+    topology, sampleId, history, future, recoveryEntries, recoveryAcknowledged, setRecoveryAcknowledged,
+    saveError, pendingUrlSample, setPendingUrlSample, commitTopology, handleUndo, handleRedo, replaceTopology,
+  } = useAzDocument(setWorkspaceNotice, onTopologyChange)
   const [vnraCreationVnetId, setVnraCreationVnetId] = useState<string>()
+  const [nvaCreationVnetId, setNvaCreationVnetId] = useState<string>()
   const [guidanceNavigation, setGuidanceNavigation] = useState(false)
   const [guidanceRevision, setGuidanceRevision] = useState(0)
   const [frameRequest, setFrameRequest] = useState<{ vnetId: string; revision: number }>()
   const guidanceRoot = useRef<HTMLDivElement>(null)
-  const [selected, setInspectedEntity] = useState<AzSelectedEntity>(() =>
-    defaultSelected(initialResolved.topology),
-  )
-  const [canvasSelection, setCanvasSelection] = useState<AzSelectedEntity>()
-  const [detailOwner, setDetailOwner] = useState<string>()
+  const {
+    activeTab, setActiveTab, selected, setSelected, canvasSelection, setCanvasSelection,
+    routeInspection, routeSelection, selectCanvasObject, inspectRoutes, selectCreatedEntity, selectedExists,
+  } = useAzSelection(topology, () => {
+    setVnraCreationVnetId(undefined)
+    setNvaCreationVnetId(undefined)
+  }, () => setGuidanceNavigation(false))
+  const [detailOwner, setDetailOwner] = useWorkspaceEditorState<string>('aznet.detail')
+  const [detailLoadBalancer, setDetailLoadBalancer] = useState<string>()
   const [snatHubId, setSnatHubId] = useState<string>()
   const [detailReturnFocus, setDetailReturnFocus] = useState<Element | null>(null)
   const [contextReturnFocus, setContextReturnFocus] = useState<Element | null>(null)
   const openDetail = (id: string) => {
+    setDetailLoadBalancer(undefined)
     setDetailReturnFocus(document.activeElement?.closest('[role="menu"]') ? contextReturnFocus : document.activeElement)
     setContextReturnFocus(null)
     setDetailOwner(id)
   }
-  const [inventorySelection, setInventorySelection] = useState<string>()
+  const [inventorySelection, setInventorySelection] = useWorkspaceEditorState<string>('aznet.inventory')
+  const [vnetConnectionId, setVnetConnectionId] = useWorkspaceEditorState<string>('aznet.vnetConnection')
   const [deleteTarget, setDeleteTarget] = useState<AzSelectedEntity | null>(null)
   const [clearRequested, setClearRequested] = useState(false)
+  const [cloneVnetId, setCloneVnetId] = useState<string>()
+  const [udrManager, setUdrManager] = useState<UdrManagerRequest>()
   const [capabilitiesHubId, setCapabilitiesHubId] = useState<string>()
   const [firewallEditorHubId, setFirewallEditorHubId] = useState<string>()
-  const [routeInspection, setRouteInspection] = useState<AzSelectedEntity | null>(null)
   const [routeMapSiteId, setRouteMapSiteId] = useState<string>()
   const [routeMapArsId, setRouteMapArsId] = useState<string>()
   const [routeMapHubId, setRouteMapHubId] = useState<string>()
   const [routeMapInspection, setRouteMapInspection] = useState<AzRouteMapSelection>()
   const [nvaBgpInspection, setNvaBgpInspection] = useState<{ vnetId: string; applianceId: string }>()
-  const routeSelection = routeInspection ?? selected
-  const setSelected = (entity: AzSelectedEntity) => {
-    setInspectedEntity(entity)
-    setCanvasSelection(entity)
-  }
-  const inspectRoutes = (entity: AzSelectedEntity) => {
-    setGuidanceNavigation(false)
-    setSelected(entity)
-    setRouteInspection(entity)
-    setActiveTab('routes')
-  }
-  const selectedExists = (() => {
-    if ('vnetId' in selected) {
-      const vnet = topology.vnets.find((v) => v.id === selected.vnetId)
-      if (!vnet) return false
-      switch (selected.kind) {
-        case 'subnet': return vnet.subnets.some((s) => s.id === selected.subnetId)
-        case 'gateway': return vnet.gateways.some((g) => g.id === selected.gatewayId)
-        case 'appliance': return vnet.appliances.some((a) => a.id === selected.applianceId)
-        case 'route-server': return vnet.routeServer?.id === selected.routeServerId
-        default: return true
-      }
-    }
-    switch (selected.kind) {
-      case 'site': return topology.sites.some((s) => s.id === selected.siteId)
-      case 'er-location': return topology.erLocations.some((l) => l.id === selected.locationId)
-      case 'vwan-hub': return topology.vwanHubs.some((h) => h.id === selected.hubId)
-      case 'peering': return topology.vnetPeerings.some((p) => p.id === selected.peeringId)
-      case 'er-link': return topology.erLinks.some((l) => l.id === selected.linkId)
-      case 'er-global-reach-link': return topology.erGlobalReachLinks?.some((l) => l.id === selected.linkId)
-      case 'vpn-connection': return topology.vpnConnections.some((c) => c.id === selected.connectionId)
-      case 'site-link': return topology.siteLinks.some((l) => l.id === selected.siteLinkId)
-    }
-  })()
+  const [bgpInspection, setBgpInspection] = useState<{ resource?: import('../bgp-neighbors').BgpResourceRef; revision: number }>()
   const [erLocationModalState, setErLocationModalState] = useState<{
     open: boolean
     hasOpened?: boolean
@@ -289,82 +187,20 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     targetLocationId?: string
   }>({ open: false })
 
-  const persistCurrentWorkspace = useEffectEvent(() => {
-    if (!recoveryAcknowledged || pendingUrlSample) return
-    try {
-      parseAzNetTopology(topology)
-      if (workspaceSession?.practice && workspaceSession.savePractice) {
-        workspaceSession.savePractice({ mode: workspaceSession.practice.document.mode === 'hub-spoke' ? 'hub-spoke' : 'full', topology })
-      } else {
-        measureAzWork('persist', () => window.localStorage.setItem(
-          AZNET_STORAGE_KEY,
-          JSON.stringify({ sampleId, topology }),
-        ))
-      }
-      setSaveError('')
-      if (!workspaceSession?.practice) consumeAzSnapshotUrl()
-    } catch (error) {
-      setSaveError(`Workspace could not be saved (storage unavailable/full or invalid design): ${workspaceError(error)}. Export JSON to preserve this design; saved originals and URL snapshots have not been overwritten.`)
-    }
-  })
-  useEffect(() => {
-    // Report the outcome of synchronizing external browser storage, including quota failures.
-    // oxlint-disable-next-line react/set-state-in-effect
-    persistCurrentWorkspace()
-  }, [sampleId, topology, recoveryAcknowledged, pendingUrlSample])
-
-  const [testIpQuery, setTestIpQuery] = useState<string>('')
-  const [hubTableInspection, setHubTableInspection] = useState<{ hubId: string; tableId: string; prefix?: string; firewall?: boolean }>()
-  const [showDiagnosticBadges, setShowDiagnosticBadges] = useState<boolean>(true)
-  const [captureComparison, setCaptureComparison] = useState<AzNetComparisonReport | null>(null)
-  const [captureNotices, setCaptureNotices] = useState<string[]>([])
-  const [captureObservations, setCaptureObservations] = useState<AzCapturedObservations | null>(null)
+  const [testIpQuery, setTestIpQuery] = useWorkspaceEditorState('aznet.testIp', '')
+  const [hubTableInspection, setHubTableInspection] = useWorkspaceEditorState<{ hubId: string; tableId: string; prefix?: string; firewall?: boolean }>('aznet.hubTable')
+  const [showDiagnosticBadges, setShowDiagnosticBadges] = useWorkspaceEditorState('aznet.diagnosticBadges', true)
+  const [captureComparison, setCaptureComparison] = useWorkspaceEditorState<AzNetComparisonReport | null>('aznet.captureComparison', null)
+  const [captureRevision, setCaptureRevision] = useWorkspaceEditorState<string>('aznet.captureRevision')
+  const [captureNotices, setCaptureNotices] = useWorkspaceEditorState<string[]>('aznet.captureNotices', [])
+  const [captureObservations, setCaptureObservations] = useWorkspaceEditorState<AzCapturedObservations | null>('aznet.captureObservations', null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const compareFileInputRef = useRef<HTMLInputElement | null>(null)
 
-  const commitTopology = (updater: (draft: AzNetTopology) => void) => {
-    let next: AzNetTopology
-    try {
-      next = measureAzWork('commit', () => {
-        const draft = cloneAzNetTopology(topology)
-        updater(draft)
-        pruneAzSiteRouteMaps(draft)
-        pruneAzArsRouteMaps(draft)
-        pruneDeletedInventory(draft, topology)
-        validateInventory(draft)
-        validateApplicationInventory(draft)
-        validateVpnNat(draft)
-        return draft
-      })
-    } catch (error) {
-      setWorkspaceNotice(error instanceof Error ? error.message : 'Inventory edit rejected.')
-      return
-    }
-    setHistory((prev) => [...prev.slice(-24), cloneAzNetTopology(topology)])
-    setFuture([])
-    setTopology(next)
-  }
-
-  const handleUndo = () => {
-    if (!history.length) return
-    const previous = history[history.length - 1]
-    setFuture((f) => [cloneAzNetTopology(topology), ...f])
-    setHistory((h) => h.slice(0, -1))
-    setTopology(previous)
-  }
-
-  const handleRedo = () => {
-    if (!future.length) return
-    const next = future[0]
-    setHistory((h) => [...h, cloneAzNetTopology(topology)])
-    setFuture((f) => f.slice(1))
-    setTopology(next)
-  }
-
-  const [faults, setFaults] = useState<FailureDomain[]>([])
-  const [resilience, setResilience] = useState<{ revision: string; report: ResilienceReport }>()
-  const [resilienceEndpoint, setResilienceEndpoint] = useState<string>()
-  const routingInput = useMemo(() => azRoutingInput(topology), [topology])
+  const [faults, setFaults] = useWorkspaceEditorState<FailureDomain[]>('aznet.faults', [])
+  const [resilience, setResilience] = useWorkspaceEditorState<{ revision: string; report: ResilienceReport }>('aznet.resilience')
+  const [resilienceEndpoint, setResilienceEndpoint] = useWorkspaceEditorState<string>('aznet.resilienceEndpoint')
+  const routingInput = useMemo(() => measureAzWork('routing-projection', () => azRoutingInput(topology)), [topology])
   const baselineRevision = routingInput.revision
   const risks = resilienceMarkers(resilience?.revision === baselineRevision ? resilience.report : undefined)
   // The revision is deliberately exhaustive except the documented presentation fields.
@@ -374,36 +210,34 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const unassessedFailures = useMemo(() => azDisplayResult(scenario.unassessed, displayNames), [scenario.unassessed, displayNames])
   const failureDomains = useMemo(() => azDisplayResult(scenario.domains, displayNames), [scenario.domains, displayNames])
   const activeTopology = scenario.active
+  const activeRevision = useMemo(() => azRoutingInput(activeTopology).revision, [activeTopology])
   const addFault = (fault: FailureDomain) => {
+    if (analysisRequest) setAnalysisEnabled(true)
     setFaults((current) => [...current.filter((f) => failureKey(f) !== failureKey(fault)), fault])
     setActiveTab(null)
     setDeleteTarget(null)
   }
-  const restoreFault = (fault: FailureDomain) => setFaults((current) => current.filter((f) => failureKey(f) !== failureKey(fault)))
+  const restoreFault = (fault: FailureDomain) => {
+    if (analysisRequest) setAnalysisEnabled(true)
+    setFaults((current) => current.filter((f) => failureKey(f) !== failureKey(fault)))
+  }
   const rawSimulation = useMemo(() => measureAzWork('simulation', () => simulateAzNet(activeTopology)), [activeTopology])
   const simulation = useMemo(() => azDisplayResult(rawSimulation, displayNames), [rawSimulation, displayNames])
   const validationErrors = useMemo(() => validateAzNetTopology(topology), [topology])
 
-  const rawEndpointOptions = useMemo(() => getAzNetEndpoints(routingTopology), [routingTopology])
-  const endpointOptions = useMemo(() => azDisplayResult(rawEndpointOptions, displayNames), [rawEndpointOptions, displayNames])
-
-  const [traceSourceKey, setTraceSourceKey] = useState<string>('')
-  const [traceDestKey, setTraceDestKey] = useState<string>('')
-  const [customDestIp, setCustomDestIp] = useState<string>('')
-  const [traceActive, setTraceActive] = useState<boolean>(false)
-  const [groupTrace, setGroupTrace] = useState<{
-    anchorKey: string
-    direction: 'to' | 'from'
-    group: 'workload' | 'site'
-  } | null>(null)
-  const [analysisScope, setAnalysisScope] = useState<AzConnectivityScope['scope']>('pair')
-  const [analysisRequest, setAnalysisRequest] = useState<AzConnectivityScope | null>(null)
-  const [analysisRun, setAnalysisRun] = useState<{
-    topology: AzNetTopology; request: AzConnectivityScope
-    status: 'running' | 'ready' | 'cancelled' | 'failed'; report?: AzConnectivityReport
-  }>()
-  const analysisWorker = useRef<Worker | undefined>(undefined)
-  const [reviewFindingIds, setReviewFindingIds] = useState<string[] | null>(null)
+  const {
+    endpointOptions, setTraceSourceKey, setTraceDestKey,
+    customDestIp, setCustomDestIp, setTraceActive, groupTrace, setGroupTrace,
+    resolvedSourceOpt, resolvedDestOpt, hasInvalidCustomIp, pairAnalysis, singleFlowForCustomIp, groupedPaths,
+  } = useAzTraceSession(routingTopology, activeTopology, rawSimulation, displayNames)
+  const {
+    analysisScope, setAnalysisScope, analysisRequest, setAnalysisRequest, setAnalysisEnabled,
+    currentAnalysisRun, rawAnalysis, analysisRunning, continueAnalysis, cancelAnalysis, analysis,
+  } = useAzDiagnosisSession(activeTopology, activeRevision, displayNames)
+  function onTopologyChange(next: AzNetTopology) {
+    if (analysisRequest && azRoutingInput(next).revision !== routingInput.revision) setAnalysisEnabled(true)
+  }
+  const [reviewFindingIds, setReviewFindingIds] = useWorkspaceEditorState<string[] | null>('aznet.reviewFindings', null)
   const [sampleGalleryOpen, setSampleGalleryOpen] = useState<boolean>(false)
   const sampleRequest = useRef(0)
   const mounted = useRef(false)
@@ -411,140 +245,58 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     mounted.current = true
     return () => { mounted.current = false }
   }, [])
-  const [shareCopied, setShareCopied] = useState<boolean>(false)
   const [contextMenu, setContextMenu] = useState<AzContextMenuTarget | null>(null)
 
+  const editSubnetAddresses = useSubnetAddressEditing(commitTopology, setWorkspaceNotice)
+
   const handleShareUrl = () => {
-    try {
-      parseAzNetTopology(topology)
-      const encoded = encodeTopologyToUrlHash(topology)
-      const url = new URL(window.location.href)
-      url.hash = `s=${encoded}`
-      // Do not install a snapshot in the active address: reload must restore newer local edits.
-      if (navigator.clipboard?.writeText) {
-        void navigator.clipboard.writeText(url.toString()).then(() => {
-          setShareCopied(true)
-          setWorkspaceNotice('Share link copied: it contains the full design, without encryption or redaction. Anyone with the link can read it. No topology was uploaded. Reload restores local edits; opening the copied link imports that snapshot once.')
-        }).catch((error) => {
-          setWorkspaceNotice(`Could not copy share link: ${workspaceError(error)}. Export JSON instead.`)
-        })
-      } else {
-        setWorkspaceNotice('Clipboard is unavailable. Export JSON to share this design.')
-      }
-      window.setTimeout(() => setShareCopied(false), 2500)
-    } catch (error) {
-      setWorkspaceNotice(`Could not share topology: ${workspaceError(error)}`)
-    }
+    if (window.desktopSimulator) return
+    window.dispatchEvent(new Event('aznet-open-cloud-sharing'))
+    setWorkspaceNotice(language === 'ja'
+      ? '共有リンクはクラウドの保存から作成します。クラウド アカウントでサインインし、保存したバージョンを共有してください。この環境でサインインを利用できない場合は「名前を付けて保存」でコピーをダウンロードしてください。未保存の編集は共有されません。'
+      : 'Create shared links from a cloud save: sign in through Cloud account, then Share saved version. If sign-in is unavailable in this build, use Save As to download a copy instead. Unsaved edits are not shared.')
   }
 
-  const rawSourceOpt =
-    traceSourceKey ? rawEndpointOptions.find((o) => o.key === traceSourceKey) : rawEndpointOptions.find((o) => o.group === 'workload') ?? rawEndpointOptions[0]
-  const rawDestOpt =
-    traceDestKey ? rawEndpointOptions.find((o) => o.key === traceDestKey) :
-    rawEndpointOptions[rawEndpointOptions.length - 1] ?? rawEndpointOptions[0]
-  const resolvedSourceOpt = endpointOptions.find((o) => o.key === rawSourceOpt?.key)
-  const resolvedDestOpt = endpointOptions.find((o) => o.key === rawDestOpt?.key)
-
-  const customIpNumber = customDestIp.trim() ? ipv4(customDestIp.trim()) : undefined
-  const hasInvalidCustomIp = Boolean(customDestIp.trim()) && customIpNumber === undefined
-  const customIpInEndpoint = Boolean(resolvedDestOpt && customIpNumber !== undefined &&
-    contains(resolvedDestOpt.prefix, customIpNumber))
-
-  const rawPairAnalysis = useMemo(() => {
-    if (!traceActive || groupTrace || hasInvalidCustomIp || !rawSourceOpt || !rawDestOpt) return null
-    const destIp = customDestIp.trim() || rawDestOpt.defaultIp
-    return measureAzWork('trace', () => traceAzNetPair(
-      activeTopology,
-      rawSimulation,
-      rawSourceOpt.ref,
-      rawSourceOpt.defaultIp,
-      rawDestOpt.ref,
-      destIp,
-    ))
-  }, [traceActive, groupTrace, hasInvalidCustomIp, rawSourceOpt, rawDestOpt, customDestIp, activeTopology, rawSimulation])
-  const pairAnalysis = useMemo(() => azDisplayResult(rawPairAnalysis, displayNames), [rawPairAnalysis, displayNames])
-
-  const rawSingleFlow = useMemo(() => {
-    if (!traceActive || groupTrace || hasInvalidCustomIp || !rawSourceOpt || !rawDestOpt || !customDestIp.trim() || customIpInEndpoint) return null
-    return measureAzWork('trace', () => traceAzNetFlow(activeTopology, rawSimulation, rawSourceOpt.ref, customDestIp.trim()))
-  }, [traceActive, groupTrace, hasInvalidCustomIp, rawSourceOpt, rawDestOpt, customDestIp, customIpInEndpoint, activeTopology, rawSimulation])
-  const singleFlowForCustomIp = useMemo(() => azDisplayResult(rawSingleFlow, displayNames), [rawSingleFlow, displayNames])
-
-  const rawGroupedPaths = useMemo(() => {
-    if (!traceActive || !groupTrace) return null
-    const anchor = rawEndpointOptions.find((e) => e.key === groupTrace.anchorKey)
-    if (!anchor) return { paths: [], total: 0 }
-    const others = rawEndpointOptions.filter((e) => e.group === groupTrace.group &&
-      azEndpointKey(e.ref) !== azEndpointKey(anchor.ref))
-    return {
-      total: others.length,
-      paths: others.slice(0, AZ_NET_PAIR_LIMIT).map((other) => {
-        const source = groupTrace.direction === 'to' ? anchor : other
-        const destination = groupTrace.direction === 'to' ? other : anchor
-        return { source, destination, pair: measureAzWork('trace', () => traceAzNetPair(activeTopology, rawSimulation, source.ref, source.defaultIp, destination.ref, destination.defaultIp)) }
-      }),
-    }
-  }, [traceActive, groupTrace, rawEndpointOptions, activeTopology, rawSimulation])
-  const groupedPaths = useMemo(() => azDisplayResult(rawGroupedPaths, displayNames), [rawGroupedPaths, displayNames])
-
-  useEffect(() => {
-    if (!analysisRequest) return
-    let next: Worker | undefined
-    let disposed = false
-    const failed = () => {
-      if (disposed || (next && analysisWorker.current !== next)) return
-      setAnalysisRun({ topology: activeTopology, request: analysisRequest, status: 'failed' })
-      next?.terminate(); analysisWorker.current = undefined
-    }
-    try {
-      next = new Worker(new URL('./diagnostics-worker.ts', import.meta.url), { type: 'module' })
-      const current = next
-      analysisWorker.current = current
-      current.onmessage = ({ data }: MessageEvent<{ report?: AzConnectivityReport; elapsedMillis?: number }>) => {
-        if (analysisWorker.current !== current) return
-        if (!data.report) { failed(); return }
-        if (typeof data.elapsedMillis === 'number') recordAzWork('connectivity', data.elapsedMillis)
-        setAnalysisRun({ topology: activeTopology, request: analysisRequest, status: 'ready', report: data.report })
-        if (data.report.continuation.status !== 'paused') { current.terminate(); analysisWorker.current = undefined }
-      }
-      current.onerror = failed
-      current.postMessage({ type: 'start', topology: activeTopology, scope: analysisRequest })
-    } catch { queueMicrotask(failed) }
-    return () => {
-      disposed = true
-      next?.terminate()
-      if (analysisWorker.current === next) analysisWorker.current = undefined
-    }
-  }, [analysisRequest, activeTopology])
-  const currentAnalysisRun = analysisRun?.topology === activeTopology && analysisRun.request === analysisRequest ? analysisRun : undefined
-  const rawAnalysis = currentAnalysisRun?.report ?? null
-  const analysisRunning = Boolean(analysisRequest && (!currentAnalysisRun || currentAnalysisRun.status === 'running'))
-  const continueAnalysis = () => {
-    if (!analysisWorker.current || !currentAnalysisRun || analysisRunning || rawAnalysis?.continuation.status !== 'paused') return
-    setAnalysisRun({ ...currentAnalysisRun, status: 'running' })
-    analysisWorker.current.postMessage({ type: 'continue' })
-  }
-  const cancelAnalysis = () => {
-    analysisWorker.current?.terminate(); analysisWorker.current = undefined
-    if (!analysisRequest) return
-    setAnalysisRun({
-      topology: activeTopology, request: analysisRequest, status: 'cancelled',
-      report: rawAnalysis ? { ...rawAnalysis, complete: false, continuation: { ...rawAnalysis.continuation, status: 'cancelled' } } : undefined,
-    })
-  }
-  const analysis = useMemo(() => azDisplayResult(rawAnalysis, displayNames), [rawAnalysis, displayNames])
   const rawDiagnostics = useMemo(() => {
-    const staticFindings = measureAzWork('diagnostics', () => runAzNetDiagnostics(activeTopology, rawSimulation, { includePairAnalysis: false }))
+    const staticFindings = measureAzWork('diagnostics', () => runAzNetStaticDiagnostics(activeTopology, rawSimulation))
     const flowFindings = rawAnalysis?.findings ?? []
     return groupAzNetFindings([...staticFindings, ...flowFindings])
   }, [activeTopology, rawSimulation, rawAnalysis])
   const diagnostics = useMemo(() => azDisplayResult(rawDiagnostics, displayNames), [rawDiagnostics, displayNames])
-  const actionableCount = diagnostics.filter((f) => f.severity !== 'info').length
-  const visibleDiagnostics = reviewFindingIds
-    ? diagnostics.filter((finding) => reviewFindingIds.includes(finding.id)) : diagnostics
-  const connectivityFailures = diagnostics.filter((f) => f.category === 'connectivity-failure').length
-  const statefulAsymmetries = diagnostics.filter((f) => f.category === 'asymmetric-firewall-bypass').length
-  const affectedFlowCount = azFindingImpact(diagnostics.filter((f) => f.severity !== 'info'), endpointOptions).pairs
+  const rawFindingById = useMemo(() => new Map(rawDiagnostics.map((finding) => [finding.id, finding])), [rawDiagnostics])
+  const [warningTriage, setWarningTriage] = useState<typeof import('./warning-triage')>()
+  useEffect(() => {
+    if (warningTriage || (activeTab !== 'diagnostics' && !topology.warningAcknowledgements?.length)) return
+    let active = true
+    void import('./warning-triage').then((module) => { if (active) setWarningTriage(module) })
+      .catch(() => { if (active) setWorkspaceNotice(t('Could not load warning triage. Reopen diagnostics to retry.')) })
+    return () => { active = false }
+  }, [activeTab, topology.warningAcknowledgements?.length, warningTriage])
+  const warningTokens = new Map<string, string>()
+  const acknowledgedTokens = useMemo(() => new Set(topology.warningAcknowledgements ?? []), [topology.warningAcknowledgements])
+  const warningToken = (finding: AzDiagnosticFinding) => {
+    if (!warningTriage) return undefined
+    let token = warningTokens.get(finding.id)
+    if (!token) {
+      token = warningTriage.azWarningToken(activeTopology, rawSimulation, rawFindingById.get(finding.id) ?? finding)
+      warningTokens.set(finding.id, token)
+    }
+    return token
+  }
+  const isAcknowledged = (finding: AzDiagnosticFinding) => canAcknowledgeWarning(finding)
+    && acknowledgedTokens.size > 0 && acknowledgedTokens.has(warningToken(finding) ?? '')
+  const attentionDiagnostics = diagnostics.filter((finding) => !isAcknowledged(finding))
+  const actionableCount = attentionDiagnostics.filter((f) => f.severity !== 'info').length
+  const visibleDiagnostics = orderWarningFindings(reviewFindingIds
+    ? diagnostics.filter((finding) => reviewFindingIds.includes(finding.id)) : diagnostics, isAcknowledged)
+  const connectivityFailures = attentionDiagnostics.filter((f) => f.category === 'connectivity-failure').length
+  const statefulAsymmetries = attentionDiagnostics.filter((f) => f.category === 'asymmetric-firewall-bypass').length
+  const affectedFlowCount = azFindingImpact(attentionDiagnostics.filter((f) => f.severity !== 'info'), endpointOptions).pairs
+  const acknowledgeWarning = (finding: AzDiagnosticFinding, acknowledged: boolean) => {
+    if (!canAcknowledgeWarning(finding)) return
+    const token = warningToken(finding)
+    if (token) commitTopology((draft) => setWarningAcknowledgement(draft, token, acknowledged))
+  }
   const traceFinding = (finding: AzDiagnosticFinding) => {
     const sf = finding.sampleFlow
     if (!sf) return
@@ -589,13 +341,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   }
 
   const applyLoadedTopology = (id: string, nextTopology: AzNetTopology) => {
-    nextTopology = parseAzNetTopology(nextTopology)
+    nextTopology = replaceTopology(id, nextTopology)
     setCaptureObservations(null)
     sampleRequest.current++
-    setSampleId(id)
-    setTopology(nextTopology)
-    setHistory([])
-    setFuture([])
     setTraceActive(false)
     setGroupTrace(null)
     setAnalysisRequest(null)
@@ -612,7 +360,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       })
     }
   }
-  const applyCapture = (raw: unknown) => {
+  const applyCapture = (raw: unknown, { importAzNetCapture, compareAzNetWithObservations }: typeof import('./azure-import')) => {
     const imported = importAzNetCapture(raw)
     const admitted = parseAzNetTopology(imported.topology)
     const importedComparison = imported.observations
@@ -620,39 +368,32 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     applyLoadedTopology('', admitted)
     setCaptureNotices(imported.warnings)
     setCaptureComparison(importedComparison)
+    setCaptureRevision(azRoutingInput(imported.topology).revision)
     setCaptureObservations(imported.observations ?? null)
     setWorkspaceNotice('')
     setActiveTab('azure')
   }
-  const importSessionCapture = useEffectEvent(() => { if (workspaceSession?.capture) applyCapture(workspaceSession.capture) })
-  useEffect(() => {
-    // Apply the capture handed off by the external workspace session.
-    // oxlint-disable-next-line react/set-state-in-effect
-    if (workspaceSession?.capture) importSessionCapture()
-  }, [workspaceSession?.capture])
-
-  const importLiveSnapshot = useEffectEvent(() => {
-    if (workspaceSession?.practice) return
-    if (!/(?:#|&)s=/.test(window.location.hash)) return
-    const loaded = loadAzWorkspace({ getItem: () => null }, window.location.hash)
-    if (loaded.recovery.length) {
-      setRecoveryEntries((entries) => [...entries, ...loaded.recovery].slice(-8))
-      setRecoveryAcknowledged(false)
-      setWorkspaceNotice('Shared snapshot rejected; the active design is unchanged. Export the original URL snapshot from recovery.')
-      return
+  const importSessionCapture = useEffectEvent((module: typeof import('./azure-import')) => {
+    if (workspaceSession?.capture) {
+      applyCapture(workspaceSession.capture, module)
+      workspaceSession.consumeCapture?.()
     }
-    applyLoadedTopology('shared-topology', loaded.topology)
-    setWorkspaceNotice('Shared snapshot imported once. It contains full design data without encryption or redaction; subsequent reloads restore saved local edits.')
   })
   useEffect(() => {
-    const onHashChange = () => importLiveSnapshot()
-    window.addEventListener('hashchange', onHashChange)
-    return () => window.removeEventListener('hashchange', onHashChange)
-  }, [])
+    if (!workspaceSession?.capture) return
+    let cancelled = false
+    void import('./azure-import').then((module) => {
+      if (!cancelled) importSessionCapture(module)
+    }).catch((error) => {
+      if (!cancelled) setWorkspaceNotice(`Import rejected; the active design is unchanged. ${workspaceError(error)}`)
+    })
+    return () => { cancelled = true }
+  }, [workspaceSession?.capture])
 
   const loadSample = async (id: string, signal?: AbortSignal) => {
     id = resolveSampleIdAlias(id)
     const request = ++sampleRequest.current
+    const scope = workspaceSession?.getRequestVersion()
     try {
       if (id && !/^[a-z0-9-]+$/.test(id)) return false
       const found = AZURE_NET_SAMPLES.find((s) => s.id === id)
@@ -662,8 +403,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           if (!res.ok) throw new Error(`Sample "${id}" not found.`)
           return parseAzNetJson(await res.text())
         })
-      if (signal?.aborted || request !== sampleRequest.current) return false
-      applyLoadedTopology(id, next)
+      if (signal?.aborted || !mounted.current || request !== sampleRequest.current || workspaceSession && scope !== workspaceSession.getRequestVersion()) return false
+      if (id && workspaceSession && !workspaceSession.practice) await workspaceSession.openDocument(next, undefined, { sampleId: id })
+      else applyLoadedTopology(id, next)
       return true
     } catch (error) {
       if (!signal?.aborted && request === sampleRequest.current) setWorkspaceNotice(`Sample rejected: ${workspaceError(error)}`)
@@ -689,6 +431,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     }
   }, [])
 
+  const applyUrlSample = useEffectEvent((requested: string, loaded: AzNetTopology) => {
+    applyLoadedTopology(requested, loaded)
+  })
   useEffect(() => {
     if (urlSampleLoaded.current) return
     const requested = pendingUrlSample
@@ -697,32 +442,21 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     if (AZURE_NET_SAMPLES.some((s) => s.id === requested)) {
       return
     }
-    void fetch(`/docs/samples/azure-net/${requested}.json`)
+    const controller = new AbortController()
+    void fetch(`/docs/samples/azure-net/${requested}.json`, { signal: controller.signal })
       .then(async (res) => {
         if (!res.ok) throw new Error(`Sample "${requested}" not found.`)
         return parseAzNetJson(await res.text())
       })
       .then((loaded) => {
-        loaded = parseAzNetTopology(loaded)
-        setSampleId(requested)
-        setCaptureObservations(null)
-        setTopology(loaded)
-        setHistory([])
-        setFuture([])
-        const defaultVnet = loaded.vnets[1] ?? loaded.vnets[0]
-        if (defaultVnet && defaultVnet.subnets[0]) {
-          setSelected({
-            kind: 'subnet',
-            vnetId: defaultVnet.id,
-            subnetId: defaultVnet.subnets[0].id,
-          })
-        }
+        if (!controller.signal.aborted) applyUrlSample(requested, loaded)
       })
       .catch((err) => {
-        setWorkspaceNotice(`Sample rejected: ${workspaceError(err)}`)
+        if (!controller.signal.aborted) setWorkspaceNotice(`Sample rejected: ${workspaceError(err)}`)
       })
-      .finally(() => setPendingUrlSample(''))
-  }, [pendingUrlSample])
+      .finally(() => { if (!controller.signal.aborted) setPendingUrlSample('') })
+    return () => { controller.abort(); urlSampleLoaded.current = false }
+  }, [pendingUrlSample, setPendingUrlSample])
 
   // One-click Auto-Remediation for diagnostic findings
   const applyAutoFix = (finding: AzDiagnosticFinding) => {
@@ -741,6 +475,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           rt = {
             id: `rt-gw-${hubVnet.id}`,
             name: `RT-${hubVnet.name}-GatewaySubnet`,
+            region: hubVnet.region,
             disableBgpRoutePropagation: false,
             routes: [],
           }
@@ -854,6 +589,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           rt = {
             id: `rt-nva-egress-${sub.id}`,
             name: `RT-${vnet.name}-${sub.name}`,
+            region: vnet.region,
             disableBgpRoutePropagation: false,
             routes: [],
           }
@@ -965,6 +701,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               rt = {
                 id: `rt-egress-${sub.id}`,
                 name: `RT-${vnet.name}-${sub.name}`,
+                region: vnet.region,
                 disableBgpRoutePropagation: false,
                 routes: [],
               }
@@ -1021,22 +758,23 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   }, [inspectedSubnetTable, testIpQuery])
 
   // Resolve control-plane RIB if a Gateway, Route Server, vWAN Hub, ER Location, or Site is selected
-  const inspectedControlRib = useMemo<{ title: string; entries: AzBgpRibEntry[]; available: boolean } | null>(() => {
+  const inspectedControlRib = useMemo<{ title: string; entries: AzBgpRibEntry[]; available: boolean; staticRouting?: boolean } | null>(() => {
     const selected = routeSelection
     if (selected.kind === 'gateway') {
       const vnet = topology.vnets.find((v) => v.id === selected.vnetId)
       const gw = vnet?.gateways.find((g) => g.id === selected.gatewayId)
       return {
-        title: `Virtual Network Gateway BGP RIB · ${gw?.name ?? selected.gatewayId}`,
+        title: `${translate(language, gw?.kind === 'Vpn' && gw.bgpEnabled === false ? 'Effective routes' : 'Virtual Network Gateway BGP table')} · ${gw?.name ?? selected.gatewayId}`,
         entries: simulation.gatewayRibs[selected.gatewayId] ?? [],
         available: Boolean(gw) && !scenario.affected[selected.gatewayId],
+        staticRouting: gw?.kind === 'Vpn' && gw.bgpEnabled === false,
       }
     }
     if (selected.kind === 'route-server') {
       const vnet = topology.vnets.find((v) => v.id === selected.vnetId)
       const ars = vnet?.routeServer
       return {
-        title: `Azure Route Server (ASN 65515) RIB · ${ars?.name ?? selected.routeServerId}`,
+        title: `${translate(language, 'Azure Route Server BGP table (ASN 65515)')} · ${ars?.name ?? selected.routeServerId}`,
         entries: simulation.routeServerRibs[selected.routeServerId] ?? [],
         available: ars?.id === selected.routeServerId && !scenario.affected[selected.routeServerId],
       }
@@ -1046,7 +784,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       const tableId = hubTableInspection?.hubId === selected.hubId ? hubTableInspection.tableId : DEFAULT_HUB_TABLE
       const firewall = hubTableInspection?.hubId === selected.hubId && hubTableInspection.firewall && hub?.firewall
       return {
-        title: `Virtual WAN Hub Effective RIB · ${hub?.name ?? selected.hubId} · ${firewall ? t('Firewall onward routes') : tableId}`,
+        title: `${translate(language, 'Virtual WAN Hub BGP table')} · ${hub?.name ?? selected.hubId} · ${firewall ? translate(language, 'Firewall onward routes') : tableId}`,
         entries: firewall ? simulation.vwanFirewallRibs[selected.hubId] ?? [] : simulation.vwanHubTables[selected.hubId]?.[tableId] ?? [],
         available: Boolean(hub && simulation.vwanHubTables[hub.id]?.[tableId]) && !scenario.affected[selected.hubId],
       }
@@ -1054,7 +792,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     if (selected.kind === 'er-location') {
       const loc = topology.erLocations.find((l) => l.id === selected.locationId)
       return {
-        title: `ExpressRoute location (ASN 12076) RIB · ${loc?.name ?? selected.locationId}`,
+        title: `${translate(language, 'ExpressRoute location BGP table (ASN 12076)')} · ${loc?.name ?? selected.locationId}`,
         entries: simulation.erLocationRibs[selected.locationId] ?? [],
         available: Boolean(loc) && !scenario.affected[selected.locationId],
       }
@@ -1062,13 +800,13 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     if (selected.kind === 'site') {
       const site = topology.sites.find((s) => s.id === selected.siteId)
       return {
-        title: `On-Premises Site BGP Table · ${site?.name ?? selected.siteId}`,
+        title: `${translate(language, 'On-premises site BGP table')} · ${site?.name ?? selected.siteId}`,
         entries: simulation.siteRibs[selected.siteId] ?? [],
         available: Boolean(site) && !scenario.affected[selected.siteId],
       }
     }
     return null
-  }, [routeSelection, topology, simulation, scenario.affected, hubTableInspection])
+  }, [routeSelection, topology, simulation, scenario.affected, hubTableInspection, language])
 
   const visibleCatalogEntries = useMemo(
     () =>
@@ -1184,9 +922,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           (p.vnetBId === vnetId && p.bToA.useRemoteGateways)),
     )
 
-  const addSubnetToVnet = (vnetId: string) => {
+  const addSubnetToVnet = async (vnetId: string) => {
     let createdId = ''
-    commitTopology((draft) => {
+    const committed = await editSubnetAddresses((draft, { availableSubnetPrefix }) => {
       const v = draft.vnets.find((x) => x.id === vnetId)
       if (!v) return
       let idx = v.subnets.length + 1
@@ -1195,16 +933,15 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         idx += 1
         candidateId = `snet-${v.id}-${idx}`
       }
+      const prefix = availableSubnetPrefix(v)
       createdId = candidateId
-      const baseMatch = (v.prefixes[0] ?? '10.0.0.0/16').match(/^(\d+\.\d+)\./)
-      const prefixBase = baseMatch ? baseMatch[1] : '10.99'
       v.subnets.push({
         id: createdId,
         name: `snet-tier-${idx}`,
-        prefix: `${prefixBase}.${10 + idx}.0/24`,
+        prefix,
       })
     })
-    if (createdId) {
+    if (committed && createdId) {
       setSelected({ kind: 'subnet', vnetId, subnetId: createdId })
     }
   }
@@ -1243,48 +980,21 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     setActiveTab(null)
   }
 
-  const addFirewallToVnet = (vnetId: string, kind: 'azure-firewall' | 'nva-vm' = 'azure-firewall') => {
-    commitTopology((draft) => {
-      const target = draft.vnets.find((v) => v.id === vnetId)
-      if (!target) return
-      const baseMatch = (target.prefixes[0] ?? '10.0.0.0/16').match(/^(\d+\.\d+)\./)
-      const prefixBase = baseMatch ? baseMatch[1] : '10.0'
-      const subnetName = kind === 'azure-firewall' ? 'AzureFirewallSubnet' : 'snet-nva'
-      let appSubnet = target.subnets.find((s) => s.name === subnetName)
-      if (!appSubnet) {
-        appSubnet = {
-          id: `${target.id}-${subnetName.toLowerCase()}-${target.subnets.length + 1}`,
-          name: subnetName,
-          prefix: `${prefixBase}.${200 + target.subnets.length}.0/24`,
-        }
-        target.subnets.push(appSubnet)
-      }
-      const idx = target.appliances.length + 1
-      const appOctet = 200 + target.subnets.length - 1
-      const appId = `${target.id}-${kind === 'azure-firewall' ? 'azfw' : 'nva'}-${idx}`
-      target.appliances.push({
-        id: appId,
-        name: kind === 'azure-firewall' ? `${target.name}-azfw-${idx}` : `${target.name}-nva-${idx}`,
-        kind,
-        subnetId: appSubnet.id,
-        privateIp: `${prefixBase}.${appOctet}.${3 + idx}`,
-        asn: kind === 'nva-vm' ? 65010 + idx : undefined,
-        bgpEnabled: kind === 'nva-vm',
-        enableIpForwarding: true,
-        inspectsTraffic: true,
-        staticRoutes: [],
-      })
-      if (kind === 'nva-vm' && target.routeServer) {
-        if (!target.routeServer.peerApplianceIds.includes(appId)) {
-          target.routeServer.peerApplianceIds.push(appId)
-        }
-      }
-    })
+  const addFirewallToVnet = (vnetId: string) => {
+    void editSubnetAddresses((draft, tools) => { tools.addAzureFirewall(draft, vnetId) })
+  }
+
+  const openNvaCreation = (vnetId: string) => {
+    if (!setSelected({ kind: 'vnet', vnetId })) return
+    setVnraCreationVnetId(undefined)
+    setNvaCreationVnetId(vnetId)
+    setActiveTab('editor')
   }
 
   const openVnraCreation = (vnetId: string) => {
+    if (!setSelected({ kind: 'vnet', vnetId })) return
+    setNvaCreationVnetId(undefined)
     setVnraCreationVnetId(vnetId)
-    setSelected({ kind: 'vnet', vnetId })
     setActiveTab('editor')
   }
 
@@ -1303,18 +1013,16 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   }
 
   const addGatewayToVnet = (vnetId: string, kind: 'ExpressRoute' | 'Vpn') => {
-    commitTopology((draft) => {
+    void editSubnetAddresses((draft, { availableSubnetPrefix }) => {
       const target = draft.vnets.find((v) => v.id === vnetId)
       if (!target) return
       if (vnetUsesRemoteGateways(vnetId, draft)) return
       if (target.gateways.some((g) => g.kind === kind)) return
-      const baseMatch = (target.prefixes[0] ?? '10.0.0.0/16').match(/^(\d+\.\d+)\./)
-      const prefixBase = baseMatch ? baseMatch[1] : '10.0'
       if (!target.subnets.some((s) => s.name === 'GatewaySubnet')) {
         target.subnets.push({
           id: `${target.id}-gw-snet`,
           name: 'GatewaySubnet',
-          prefix: `${prefixBase}.250.0/24`,
+          prefix: availableSubnetPrefix(target),
         })
       }
       target.gateways.push({
@@ -1324,7 +1032,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         asn: 65515,
         bgpEnabled: true,
         enabled: true,
-        ...(kind === 'Vpn' ? { activeActive: false } : {}),
+        sku: kind === 'Vpn' ? 'VpnGw1AZ' : 'ErGw1AZ',
+        ...(kind === 'Vpn' ? { activeActive: false, vpnType: 'RouteBased', vpnGatewayGeneration: 'Generation1' } : {}),
       })
     })
   }
@@ -1344,18 +1053,16 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   }
 
   const addRouteServerToVnet = (vnetId: string) => {
-    commitTopology((draft) => {
+    void editSubnetAddresses((draft, { availableSubnetPrefix }) => {
       const target = draft.vnets.find((v) => v.id === vnetId)
       if (!target || target.routeServer) return
       if (vnetUsesRemoteGateways(vnetId, draft)) return
-      const baseMatch = (target.prefixes[0] ?? '10.0.0.0/16').match(/^(\d+\.\d+)\./)
-      const prefixBase = baseMatch ? baseMatch[1] : '10.0'
       let rsSubnet = target.subnets.find((s) => s.name === 'RouteServerSubnet')
       if (!rsSubnet) {
         rsSubnet = {
           id: `${target.id}-rs-snet`,
           name: 'RouteServerSubnet',
-          prefix: `${prefixBase}.251.0/24`,
+          prefix: availableSubnetPrefix(target),
         }
         target.subnets.push(rsSubnet)
       }
@@ -1380,36 +1087,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   }
 
   const createAndAssociateRouteTable = (vnetId?: string, subnetId?: string) => {
-    commitTopology((draft) => {
-      const idx = draft.udrTables.length + 1
-      const rtId = `rt-custom-${idx}-${Date.now().toString(36).slice(-4)}`
-      const firstApp = draft.vnets.flatMap((v) => v.appliances)[0]
-      draft.udrTables.push({
-        id: rtId,
-        name: `rt-workload-${idx}`,
-        disableBgpRoutePropagation: false,
-        disablePeeringRoutePropagation: false,
-        routes: firstApp
-          ? [
-              {
-                id: `${rtId}-r1`,
-                name: 'default-to-fw',
-                prefix: '0.0.0.0/0',
-                nextHopType: 'VirtualAppliance',
-                nextHopIp: firstApp.privateIp,
-                enabled: true,
-              },
-            ]
-          : [],
-      })
-      if (vnetId && subnetId) {
-        const vnet = draft.vnets.find((v) => v.id === vnetId)
-        const subnet = vnet?.subnets.find((s) => s.id === subnetId)
-        if (subnet) {
-          subnet.routeTableId = rtId
-        }
-      }
-    })
+    setToolsDismissRequest((request) => request + 1)
+    setContextMenu(null)
+    setUdrManager({ create: true, associate: vnetId && subnetId ? { vnetId, subnetId } : undefined })
   }
 
   const pathContextActions = (anchors: AzEndpointOption[]): ContextAction[] => {
@@ -1477,10 +1157,11 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     setSelected({ kind: 'vnet', vnetId: newId })
   }
   const addVwanHub = (x?: number, y?: number) => {
-    commitTopology((draft) => {
+    const id = `vhub-custom-${topology.vwanHubs.length + 1}`
+    const created = commitTopology((draft) => {
       const idx = draft.vwanHubs.length + 1
       draft.vwanHubs.push({
-        id: `vhub-custom-${idx}`,
+        id,
         name: `vWAN-Hub-${idx}`,
         region: 'West Europe',
         prefix: `10.${190 + idx}.0.0/23`,
@@ -1489,12 +1170,13 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         ...(x === undefined || y === undefined ? {} : { x, y }),
       })
     })
+    if (created && setSelected({ kind: 'vwan-hub', hubId: id })) setActiveTab('editor')
   }
   const attachVnetToHub = (vnetId: string, hubId: string) => {
     commitTopology((draft) => {
       const vnet = draft.vnets.find((entry) => entry.id === vnetId)
       if (vnet && !vnet.vwanHubAttachment && draft.vwanHubs.some((hub) => hub.id === hubId)) {
-        vnet.vwanHubAttachment = { hubId, enabled: true }
+        vnet.vwanHubAttachment = { hubId, enabled: true, propagateDefaultRoute: true }
       }
     })
   }
@@ -1502,6 +1184,12 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     setFirewallEditorHubId(focusFirewall ? hubId : undefined)
     setSelected({ kind: 'vwan-hub', hubId })
     setActiveTab('editor')
+  }
+  const openVnetConnection = (vnetId: string) => {
+    if (!confirmConfigurationSwitch('.aznet-app .object-editor')) return
+    if (!setSelected({ kind: 'vnet', vnetId })) return
+    setActiveTab(null)
+    setVnetConnectionId(vnetId)
   }
   const getOrdinaryContextMenuSpec = (
     target: AzSelectedEntity | { kind: 'canvas'; svgX: number; svgY: number },
@@ -1579,10 +1267,11 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         title: `VNet · ${vnet.name} (${vnet.region})`,
         actions: [
           { label: t('Open VNet detail'), previewPrimary: true, onSelect: () => openDetail(vnet.id) },
+          { label: t('Clone VNet...'), previewPrimary: true, onSelect: () => setCloneVnetId(vnet.id) },
           ...(vnet.vwanHubAttachment ? [{
             label: t('Configure virtual hub connection'),
             previewPrimary: true,
-            onSelect: () => openHubConnections(vnet.vwanHubAttachment!.hubId),
+            onSelect: () => openVnetConnection(vnet.id),
           }] : [{
             label: t('Connect to virtual hub'), previewPrimary: true, allowDisabledChildren: true,
             children: topology.vwanHubs.length ? topology.vwanHubs.map((hub) => ({
@@ -1638,11 +1327,12 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             children: [
               {
                 label: '+ Add Azure Firewall',
-                onSelect: () => addFirewallToVnet(vnet.id, 'azure-firewall'),
+                disabled: vnet.appliances.some((app) => app.kind === 'azure-firewall'),
+                onSelect: () => addFirewallToVnet(vnet.id),
               },
               {
-                label: '+ Add BGP NVA Appliance',
-                onSelect: () => addFirewallToVnet(vnet.id, 'nva-vm'),
+                label: '+ Add NVA',
+                onSelect: () => openNvaCreation(vnet.id),
               },
               {
                 label: 'Add Managed VNRA',
@@ -1763,10 +1453,11 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       return {
         title: `Subnet · ${vnet.name} / ${subnet.name}`,
         actions: [
-          { label: t('Open VNet detail'), onSelect: () => openDetail(vnet.id) },
-          ...pathContextActions(endpointOptions.filter((e) => e.key === `subnet:${vnet.id}:${subnet.id}`)),
+          { label: t('Open VNet detail'), previewPrimary: true, onSelect: () => openDetail(vnet.id) },
+          ...pathContextActions(endpointOptions.filter((e) => e.key === `subnet:${vnet.id}:${subnet.id}`)).map((action) => ({ ...action, previewPrimary: true })),
           {
             label: 'Configure Subnet (Name, Prefix, Route Table, PE Policies)...',
+            previewPrimary: true,
             onSelect: () => {
               setSelected({ kind: 'subnet', vnetId: vnet.id, subnetId: subnet.id })
               setActiveTab('editor')
@@ -1774,6 +1465,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           },
           {
             label: 'Inspect Subnet Effective Routes',
+            previewPrimary: true,
             onSelect: () => {
               inspectRoutes({ kind: 'subnet', vnetId: vnet.id, subnetId: subnet.id })
             },
@@ -1802,6 +1494,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 : []),
               ...topology.udrTables.map((candidateRt) => ({
                 label: `${candidateRt.name}${candidateRt.id === subnet.routeTableId ? ' (Associated)' : ''}`,
+                disabled: !!udrAssociationError(topology, vnet, candidateRt),
                 onSelect: () => {
                   commitTopology((draft) => {
                     const targetV = draft.vnets.find((v) => v.id === vnet.id)
@@ -1881,8 +1574,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       return {
         title: `Gateway · ${gw.name} (${gw.kind.toUpperCase()})`,
         actions: [
+          ...(workspaceSession?.presentationPreview ? [{ label: t('Open VNet detail'), onSelect: () => openDetail(vnet.id) }] : []),
           {
-            label: 'Inspect Gateway BGP RIB',
+            label: t('Inspect Gateway BGP table'),
             onSelect: () => {
               inspectRoutes({ kind: 'gateway', vnetId: vnet.id, gatewayId: gw.id })
             },
@@ -1912,7 +1606,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         actions: [
           { label: 'Manage ARS Route Maps', onSelect: () => { setActiveTab(null); setRouteMapInspection(undefined); setRouteMapHubId(undefined); setRouteMapSiteId(undefined); setRouteMapArsId(ars.id) } },
           {
-            label: 'Inspect Route Server RIB (ASN 65515)',
+            label: t('Inspect Route Server BGP table (ASN 65515)'),
             onSelect: () => {
               inspectRoutes({ kind: 'route-server', vnetId: vnet.id, routeServerId: ars.id })
             },
@@ -2162,7 +1856,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             onSelect: () => { setActiveTab(null); setRouteMapInspection(undefined); setRouteMapSiteId(undefined); setRouteMapArsId(undefined); setRouteMapHubId(hub.id) },
           },
           {
-            label: 'Inspect Virtual WAN Hub Effective RIB',
+            label: t('Inspect Virtual WAN Hub BGP table'),
             onSelect: () => {
               inspectRoutes({ kind: 'vwan-hub', hubId: hub.id })
             },
@@ -2275,7 +1969,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             },
           },
           {
-            label: 'Inspect ExpressRoute Location BGP RIB',
+            label: t('Inspect ExpressRoute Location BGP table'),
             onSelect: () => {
               inspectRoutes({ kind: 'er-location', locationId: loc.id })
             },
@@ -2548,6 +2242,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                         bgpEnabled: true,
                         enabled: true,
                         transport,
+                        propagateDefaultRoute: true,
                       })
                     })
                   },
@@ -2722,6 +2417,19 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     : 'siteId' in target ? target.siteId : 'hubId' in target ? target.hubId
       : 'locationId' in target ? target.locationId : 'linkId' in target ? target.linkId
         : 'peeringId' in target ? target.peeringId : 'connectionId' in target ? target.connectionId : target.siteLinkId
+  const bgpResourceFor = (target?: AzSelectedEntity): import('../bgp-neighbors').BgpResourceRef | undefined =>
+    target?.kind === 'gateway' ? { kind: 'gateway', id: target.gatewayId }
+      : target?.kind === 'route-server' ? { kind: 'route-server', id: target.routeServerId }
+        : target?.kind === 'site' ? { kind: 'site', id: target.siteId }
+          : target?.kind === 'er-location' ? { kind: 'er-location', id: target.locationId }
+            : target?.kind === 'vwan-hub' ? { kind: 'vwan-hub', id: target.hubId }
+              : target?.kind === 'appliance' && topology.vnets.find((vnet) => vnet.id === target.vnetId)?.appliances.some((app) => app.id === target.applianceId && app.kind === 'nva-vm')
+                ? { kind: 'appliance', id: target.applianceId } : undefined
+  const openBgpNeighbors = (target?: AzSelectedEntity) => {
+    setActiveTab(null)
+    setToolsDismissRequest((request) => request + 1)
+    setBgpInspection((previous) => ({ resource: bgpResourceFor(target), revision: (previous?.revision ?? 0) + 1 }))
+  }
   const getContextMenuSpec = (target: AzSelectedEntity | { kind: 'canvas'; svgX: number; svgY: number }, fullActions = false): { title: string; actions: ContextAction[] } | null => {
     if (target.kind === 'canvas') return getOrdinaryContextMenuSpec(target)
     const id = entityId(target)
@@ -2730,8 +2438,14 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       label: `Restore ${failureLabel(fault)}`, onSelect: () => restoreFault(fault),
     })) }
     const ordinary = getOrdinaryContextMenuSpec(target)
-    const presented = ordinary && workspaceSession?.presentationPreview && !fullActions && target.kind === 'vnet'
-      ? previewVnetActions(ordinary.actions, () => setToolsOpenRequest((request) => request + 1)) : ordinary?.actions ?? []
+    let presented = ordinary ? [
+      ...(bgpResourceFor(target) ? [{ label: t('BGP neighbors'), onSelect: () => openBgpNeighbors(target) }] : []),
+      ...ordinary.actions,
+    ] : []
+    if (ordinary && workspaceSession?.presentationPreview && !fullActions) {
+      if (target.kind === 'vnet') presented = previewVnetActions(ordinary.actions, () => setToolsOpenRequest((request) => request + 1))
+      if (target.kind === 'subnet') presented = previewSubnetActions(ordinary.actions)
+    }
     const domain = failureDomains.find((f) =>
       (f.kind === 'site' && target.kind === 'site' || f.kind === 'er-location' && target.kind === 'er-location') && f.id === id ||
       f.kind === 'region' && ['vnet', 'subnet', 'gateway', 'route-server', 'appliance', 'vwan-hub'].includes(target.kind) &&
@@ -2779,11 +2493,12 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         name={topology.vwanHubs.find((hub) => hub.id === snatHubId)?.name ?? snatHubId}
         commit={(mutate) => commitTopology((next) => mutate(next))} onClose={() => setSnatHubId(undefined)} /></Suspense>}
       {detailOwner && <Suspense fallback={null}><NetworkDetail topology={topology} owner={{ kind: 'vnet', id: detailOwner }} simulation={simulation} returnFocus={detailReturnFocus}
+        initialLoadBalancerId={detailLoadBalancer}
         selectedId={inventorySelection} onSelect={setInventorySelection} commit={(mutate) => commitTopology((next) => mutate(next))}
         selectedTargetId={canvasSelection && ('subnetId' in canvasSelection ? canvasSelection.subnetId
           : 'applianceId' in canvasSelection ? canvasSelection.applianceId : 'gatewayId' in canvasSelection ? canvasSelection.gatewayId
             : 'routeServerId' in canvasSelection ? canvasSelection.routeServerId : entityId(canvasSelection))}
-        onSelectTarget={(target) => setCanvasSelection(detailEntity(target))}
+        onSelectTarget={(target) => selectCanvasObject(detailEntity(target))}
         getContextActions={(target) => {
           const entity = detailEntity(target)
           return (getContextMenuSpec(entity, true)?.actions ?? []).map(function wrap(action): ContextAction {
@@ -2806,7 +2521,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           ...(!singleFlowForCustomIp && pairAnalysis?.reverse ? [{ direction: 'reply' as const, destination: pairAnalysis.reverse.destinationIp,
             evidence: pairAnalysis.reverse.summaryReason, subnetIds: pairAnalysis.reverse.hops.flatMap((hop) => hop.subnetId ? [hop.subnetId] : []) }] : []),
         ]}
-        onClose={() => { setDetailOwner(undefined); setDetailReturnFocus(null) }} /></Suspense>}
+        onClose={() => { setDetailOwner(undefined); setDetailReturnFocus(null); setDetailLoadBalancer(undefined) }} /></Suspense>}
       {!recoveryAcknowledged && <div role="alert" data-testid="aznet-recovery-notice">
         <strong>Saved input could not be loaded. Originals have not been overwritten.</strong>
         {recoveryEntries.map((entry, index) => <div key={index}>
@@ -2832,22 +2547,26 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         <div className="unified-topbar-left">
           <div className="aznet-brand unified-brand">
             <div className="aznet-brand-icon" aria-hidden="true">
-              Az
+              AzNetSim
             </div>
             <h1>Azure Network Simulator</h1>
           </div>
 
           <WorkspaceMenu />
+          <button type="button" className="aznet-btn" data-testid="workspace-azure-button" onClick={() => setActiveTab('azure')}>{t('Azure')}</button>
         </div>
 
         <div className="aznet-topbar-controls">
           {canvasSelection && 'vnetId' in canvasSelection && <button type="button" className="aznet-btn"
             onClick={() => openDetail(canvasSelection.vnetId)}>{t('VNet detail')}</button>}
-          <WorkspaceTools openRequest={toolsOpenRequest} dismissRequest={guidanceRevision + toolsDismissRequest} creationActions={[
+          <WorkspaceTools openRequest={toolsOpenRequest} dismissRequest={guidanceRevision + toolsDismissRequest}
+            resourceActions={[{ label: t('Route-table library'), testId: 'aznet-route-table-library-btn', run: () => {
+              setToolsDismissRequest((request) => request + 1); setUdrManager({})
+            } }]} creationActions={[
             { label: t('+ VNet'), testId: 'aznet-add-vnet-btn', run: addDefaultVnet },
             { label: t('+ Site'), testId: 'aznet-add-site-btn', run: () => addSiteNode() },
             { label: t('+ ER location'), testId: 'aznet-add-erloc-btn', run: () => addErLocationNode() },
-            { label: t('+ Route Table'), testId: 'aznet-add-rt-topbar-btn', run: () => { createAndAssociateRouteTable(); setActiveTab('editor') } },
+            { label: t('+ Route Table'), testId: 'aznet-add-rt-topbar-btn', run: () => createAndAssociateRouteTable() },
             ...(simulatorMode === 'full' ? [{ label: t('+ Virtual WAN hub'), testId: 'aznet-add-vwan-hub-btn', run: () => addVwanHub() }] : []),
           ]} getSelection={() => {
             if (!canvasSelection) return
@@ -2858,34 +2577,43 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           }} inventory={{
             getObjects: () => azWorkspaceObjects(topology),
             selected: canvasSelection ? azWorkspaceIdentity(canvasSelection) : undefined,
-            onSelect: setCanvasSelection,
+            onSelect: selectCanvasObject,
           }} />
           <LearningTools key={simulatorMode} document={{ mode: simulatorMode === 'hub-spoke' ? 'hub-spoke' : 'full', topology }}
             onGuide={(cue) => {
               if (resolveGuidance({ mode: 'full', topology }, cue).reason) return
               setContextMenu(null)
-              setGuidanceRevision((revision) => revision + 1)
               if (cue.action === 'connection.configure') {
-                setSelected(cue.params.kind === 'er-link' ? { kind: 'er-link', linkId: cue.params.connectionId }
-                  : { kind: 'vpn-connection', connectionId: cue.params.connectionId })
+                if (!setSelected(cue.params.kind === 'er-link' ? { kind: 'er-link', linkId: cue.params.connectionId }
+                  : { kind: 'vpn-connection', connectionId: cue.params.connectionId })) return
                 setActiveTab('editor')
               } else if (cue.action === 'site-routes.open') {
-                inspectRoutes({ kind: 'site', siteId: cue.params.siteId })
+                if (!inspectRoutes({ kind: 'site', siteId: cue.params.siteId })) return
+              } else if (cue.action === 'gateway-routes.open') {
+                if (!inspectRoutes({ kind: 'gateway', vnetId: cue.params.vnetId, gatewayId: cue.params.gatewayId })) return
+              } else if (cue.action === 'er-routes.open') {
+                if (!inspectRoutes({ kind: 'er-location', locationId: cue.params.locationId })) return
               } else if (cue.action === 'packet-probe.open') {
                 openDetail(cue.params.vnetId)
+              } else if (cue.action === 'load-balancer.configure') {
+                openDetail(cue.params.vnetId)
+                setDetailLoadBalancer(cue.params.loadBalancerId)
               } else if (cue.action === 'hub.configure') {
-                setSelected({ kind: 'vwan-hub', hubId: cue.params.hubId })
+                if (!setSelected({ kind: 'vwan-hub', hubId: cue.params.hubId })) return
                 setActiveTab('editor')
               } else if (cue.action === 'hub-routes.open') {
-                inspectRoutes({ kind: 'vwan-hub', hubId: cue.params.hubId })
+                if (!inspectRoutes({ kind: 'vwan-hub', hubId: cue.params.hubId })) return
                 setHubTableInspection({ ...cue.params })
+              } else if (cue.action === 'peering.configure') {
+                if (!setSelected({ kind: 'peering', peeringId: cue.params.peeringId })) return
+                setActiveTab('editor')
               } else if (cue.action === 'network.configure') {
-                setSelected({ kind: 'vnet', vnetId: cue.params.vnetId })
+                if (!setSelected({ kind: 'vnet', vnetId: cue.params.vnetId })) return
                 setActiveTab('editor')
                 setFrameRequest({ vnetId: cue.params.vnetId, revision: guidanceRevision + 1 })
               } else if (cue.action === 'peering.command') {
                 const entity = { kind: 'vnet' as const, vnetId: cue.params.vnetAId }
-                setSelected(entity)
+                if (!setSelected(entity)) return
                 setActiveTab(null)
                 setContextReturnFocus(null)
                 const bounds = guidanceRoot.current?.querySelector('[data-learning-canvas]')?.getBoundingClientRect()
@@ -2893,10 +2621,11 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 setFrameRequest({ vnetId: cue.params.vnetAId, revision: guidanceRevision + 1 })
               } else {
                 const entity = { kind: 'subnet' as const, vnetId: cue.params.vnetId, subnetId: cue.params.subnetId }
-                if (cue.action === 'routes.open') inspectRoutes(entity)
-                else { setSelected(entity); setActiveTab('editor') }
+                if (cue.action === 'routes.open') { if (!inspectRoutes(entity)) return }
+                else { if (!setSelected(entity)) return; setActiveTab('editor') }
                 setFrameRequest({ vnetId: cue.params.vnetId, revision: guidanceRevision + 1 })
               }
+              setGuidanceRevision((revision) => revision + 1)
               setGuidanceNavigation(true)
             }} />
           <PresentationGroup label={t('Explore')}>
@@ -3011,21 +2740,12 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             data-testid="aznet-share-url-btn"
             disabled={!!window.desktopSimulator}
             onClick={handleShareUrl}
-            title="Copies a snapshot containing the full design. Not encrypted or redacted. Anyone with the link can read it. No topology is uploaded."
+            title={language === 'ja' ? 'クラウドの保存から取り消し可能な 30 日間のリンクを作成します。' : 'Create a revocable 30-day link from a cloud save. Unsaved edits are not shared.'}
           >
-            {shareCopied ? '✓ Link Copied' : '🔗 Share Link'}
+            {language === 'ja' ? 'クラウドの保存を共有' : 'Share cloud save'}
           </button>
 
-          <button type="button" className="aznet-btn" onClick={handleExportJson}>
-            ⬇ Export JSON
-          </button>
-          <button
-            type="button"
-            className="aznet-btn"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            ⬆ Import JSON
-          </button>
+          <DocumentActions />
           <button type="button" className="aznet-btn" data-testid="aznet-clear-topology-btn"
             onClick={() => setClearRequested(true)} title={t('Clear canvas to an empty topology')}>{t('Clear')}</button>
           </PresentationGroup>
@@ -3048,6 +2768,10 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 const text = await file.text()
                 if (!mounted.current || request !== sampleRequest.current || workspaceRequest !== workspaceSession?.getRequestVersion()) return
                 const raw: unknown = JSON.parse(text)
+                if (workspaceSession && !workspaceSession.practice) {
+                  await workspaceSession.openDocument(raw)
+                  return
+                }
                 if (raw && typeof raw === 'object' && 'kind' in raw && raw.kind === 'azure-vwan-capture' && workspaceSession) {
                   await workspaceSession.openDocument(raw)
                   return
@@ -3057,7 +2781,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                   return
                 }
                 if (raw && typeof raw === 'object' && 'kind' in raw && raw.kind === 'azure-network-capture') {
-                  applyCapture(raw)
+                  applyCapture(raw, await import('./azure-import'))
                   return
                 }
                 applyLoadedTopology('', parseAzNetJson(text))
@@ -3080,6 +2804,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 if (file.size > AZNET_MAX_JSON_LENGTH) throw new Error('JSON exceeds 4 MB limit.')
                 const raw = JSON.parse(await file.text()) as Record<string, unknown>
                 if (raw.kind === 'azure-network-capture') {
+                  const { importAzNetCapture, compareAzNetWithObservations } = await import('./azure-import')
                   const imported = importAzNetCapture(raw)
                   setCaptureNotices(imported.warnings)
                   setCaptureObservations(imported.observations ?? null)
@@ -3090,6 +2815,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                       imported.observations,
                     )
                     setCaptureComparison(report)
+                    setCaptureRevision(baselineRevision)
                     setActiveTab('azure')
                   }
                 }
@@ -3104,6 +2830,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
 
       {/* Main Split Workspace */}
       <div className="aznet-workspace" role="main">
+        <WorkspaceTabPanel>
         {/* Left: Interactive Compound Topology Canvas */}
         <section className="aznet-canvas-column">
           <div className="aznet-scenario-banner">
@@ -3126,12 +2853,13 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               ? t('Analysis cancelled; unassessed cases remain unverified.') : validationErrors.length ? 'Routing check incomplete: fix topology validation errors.'
               : !analysis.checked ? 'No eligible endpoint pairs were checked; connectivity has not been verified.'
                 : !analysis.complete ? 'Routing check incomplete; unchecked pairs are not verified.'
-                  : actionableCount ? 'Routing check completed.'
+                  : diagnostics.some((finding) => finding.severity !== 'info') ? 'Routing check completed.'
                     : 'No routing issues found within the checked model scope.'}</span>
             <span>{actionableCount} routing issues: {connectivityFailures} connectivity failures, {statefulAsymmetries} stateful asymmetries.
               {' '}{actionableCount} root-cause issue{actionableCount === 1 ? '' : 's'} affecting {affectedFlowCount} sampled flow pairs.
               {' '}Checked {analysis.checked} of {analysis.total} representative pairs ({analysis.checked * 2} directional traces).
               {' '}Results update when routing changes.</span>
+            {acknowledgedTokens.size > 0 && <span>{t('{0} findings need attention · {1} acknowledged · {2} total', actionableCount, diagnostics.filter(isAcknowledged).length, diagnostics.length)}</span>}
             <span>{t('{0} representative pairs remain unassessed.', analysis.continuation.remainingPairs)}
               {analysis.limitsReached.length > 0 && ` ${t('Reached limit: {0}', analysis.limitsReached.map((limit) => t(limit === 'maxPairs' ? 'Representative pairs per batch' : limit === 'maxMillis' ? 'Elapsed time' : 'Stored findings')).join(', '))}`}</span>
             {analysis.continuation.status === 'capacity' && <span>{t('Stored evidence capacity reached. Narrow the scope before starting another run.')}</span>}
@@ -3153,9 +2881,11 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             </p>}
           </div>}
 
+          <WorkspaceCanvasTabs />
           <AzureNetDiagram
             frameRequest={frameRequest}
             topology={topology}
+            vpnUnderlays={simulation.vpnUnderlays}
             onResetLayout={() => commitTopology((next) => {
               for (const node of [...next.vnets, ...next.vwanHubs, ...next.erLocations, ...next.sites]) {
                 delete node.x; delete node.y
@@ -3166,9 +2896,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             risks={risks}
             onRisk={setResilienceEndpoint}
             selected={canvasSelection}
-            onSelect={(entity) => {
-              setCanvasSelection(entity)
-            }}
+            onSelect={selectCanvasObject}
             onClearSelection={() => setCanvasSelection(undefined)}
             onMoveNode={(nodeKind, nodeId, x, y) => {
               commitTopology((next) => {
@@ -3203,7 +2931,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             reverseTrace={singleFlowForCustomIp ? null : (pairAnalysis?.reverse ?? null)}
             additionalForwardTraces={groupedPaths?.paths.map((path) => path.pair.forward)}
             additionalReverseTraces={groupedPaths?.paths.map((path) => path.pair.reverse)}
-            diagnostics={diagnostics}
+            diagnostics={attentionDiagnostics}
             showDiagnosticBadges={showDiagnosticBadges}
             onShowIssues={(findings) => {
               setReviewFindingIds(findings.map((finding) => finding.id))
@@ -3253,6 +2981,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               setSelected(entity)
               setActiveTab('editor')
             }}
+            onOpenVnetConnection={openVnetConnection}
           />
 
           {contextMenu && contextMenuSpec && (
@@ -3276,7 +3005,11 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           {clearRequested && <Suspense fallback={null}><ClearTopologyDialog
             workspace="azure-net"
             onClose={() => setClearRequested(false)}
-            onConfirm={() => { setClearRequested(false); void loadSample('') }} /></Suspense>}
+            onConfirm={() => {
+              setClearRequested(false)
+              if (workspaceSession?.clearDocument && !workspaceSession.practice) workspaceSession.clearDocument()
+              else void loadSample('')
+            }} /></Suspense>}
           {deletionSpec && deletionAction && (
             <CanvasOverlay title={deletionAction.label} className="object-editor" onClose={() => setDeleteTarget(null)}>
               <p>Delete <strong>{deletionSpec.title}</strong>? Associated elements and connections may also be removed. Other endpoint nodes are kept.</p>
@@ -3293,6 +3026,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           )}
         </section>
 
+        {bgpInspection && <Suspense fallback={null}><BgpNeighborsPanel key={bgpInspection.revision}
+          topology={topology} simulation={simulation} initialResource={bgpInspection.resource}
+          unavailableIds={Object.keys(scenario.affected)} onClose={() => setBgpInspection(undefined)} /></Suspense>}
         {nvaBgpInspection && <Suspense fallback={null}><NvaBgpPanel key={`${nvaBgpInspection.vnetId}:${nvaBgpInspection.applianceId}`}
           topology={topology} simulation={simulation} {...nvaBgpInspection}
           onPeerChange={(routeServerId, checked) => commitTopology((draft) => {
@@ -3307,11 +3043,13 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           siteId={routeMapSiteId} hubId={routeMapHubId} routeServerId={routeMapArsId} outbound={routeMapArsId ? simulation.routeServerOutbound?.[routeMapArsId] : undefined}
           inbound={routeMapArsId ? simulation.routeServerInbound?.[routeMapArsId] : undefined}
           onSave={(next) => commitTopology((draft) => Object.assign(draft, next))} onClose={() => { setRouteMapSiteId(undefined); setRouteMapArsId(undefined); setRouteMapHubId(undefined) }} /></Suspense>}
-        {activeTab && (selectedExists || activeTab === 'routes' && routeInspection || activeTab === 'diagnostics' || activeTab === 'tracer' || activeTab === 'azure') && <CanvasOverlay
+        {vnetConnectionId && <Suspense fallback={null}><VnetConnectionEditor key={vnetConnectionId}
+          topology={topology} vnetId={vnetConnectionId} commit={commitTopology} onClose={() => setVnetConnectionId(undefined)} /></Suspense>}
+        {activeTab && (selectedExists || activeTab === 'routes' && routeInspection || activeTab === 'diagnostics' || activeTab === 'tracer' || activeTab === 'azure') && <CanvasOverlay restoreFocus={activeTab === 'azure'}
           key={guidanceRevision}
           focusOnOpen={!guidanceNavigation}
           title={{
-            routes: 'Effective routes',
+            routes: t(inspectedControlRib && !inspectedControlRib.staticRouting ? 'BGP table' : 'Effective routes'),
             tracer: 'Path explorer',
             diagnostics: 'Topology analysis',
             editor: 'Configure selected object',
@@ -3327,7 +3065,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               data-testid="aznet-tab-routes"
               onClick={() => setActiveTab('routes')}
             >
-              Effective Routes
+              {t(inspectedControlRib && !inspectedControlRib.staticRouting ? 'BGP table' : 'Effective routes')}
             </button>
             <button
               type="button"
@@ -3554,9 +3292,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                         && routeSelection.vnetId === workspaceSession.learningState.observation.vnetId
                         && routeSelection.subnetId === workspaceSession.learningState.observation.subnetId
                         && inspectedSubnetTable.subnetId === workspaceSession.learningState.observation.subnetId
-                        && <LearningInspection observation={workspaceSession.learningState.observation}
+                        && <Suspense fallback={null}><LearningInspection observation={workspaceSession.learningState.observation}
                           prefixPresent={inspectedSubnetTable.routes.some((route) => route.prefix === workspaceSession.learningState!.observation!.prefix)}
-                          onObserve={workspaceSession.reportLearningObservation} />}
+                          onObserve={workspaceSession.reportLearningObservation} /></Suspense>}
 
                       {inspectedSubnetTable.suppressedBgpRoutes.length > 0 && (
                         <div
@@ -3618,7 +3356,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                   <div className="aznet-card" data-testid="aznet-control-rib-card"
                     data-learning-anchor={routeSelection.kind === 'vwan-hub' && !(hubTableInspection?.hubId === routeSelection.hubId && hubTableInspection.firewall)
                       ? guidanceAnchor('hub-effective-table', routeSelection.hubId, hubTableInspection?.hubId === routeSelection.hubId ? hubTableInspection.tableId : DEFAULT_HUB_TABLE)
-                      : routeSelection.kind === 'site' ? guidanceAnchor('site-effective-table', routeSelection.siteId) : undefined}>
+                      : routeSelection.kind === 'site' ? guidanceAnchor('site-effective-table', routeSelection.siteId)
+                      : routeSelection.kind === 'gateway' ? guidanceAnchor('gateway-effective-table', routeSelection.vnetId, routeSelection.gatewayId)
+                      : routeSelection.kind === 'er-location' ? guidanceAnchor('er-effective-table', routeSelection.locationId) : undefined}>
                     <h3>{inspectedControlRib.title}</h3>
                     {routeSelection.kind === 'vwan-hub' && (() => {
                       const hub = topology.vwanHubs.find((hub) => hub.id === routeSelection.hubId)
@@ -3634,6 +3374,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                     })()}
                     <Suspense fallback={null}><BgpRouteTable key={JSON.stringify([routeSelection, hubTableInspection, guidanceRevision])}
                       entries={inspectedControlRib.entries} available={inspectedControlRib.available}
+                      staticRouting={inspectedControlRib.staticRouting}
                       learningScope={routeSelection.kind === 'vwan-hub' && !hubTableInspection?.firewall ? {
                         hubId: routeSelection.hubId,
                         tableId: hubTableInspection?.hubId === routeSelection.hubId ? hubTableInspection.tableId : DEFAULT_HUB_TABLE,
@@ -3642,10 +3383,21 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                         siteId: routeSelection.siteId,
                         prefix: workspaceSession?.learningState?.observation?.siteId === routeSelection.siteId
                           ? workspaceSession.learningState.observation.prefix : undefined,
+                      } : routeSelection.kind === 'gateway' ? {
+                        vnetId: routeSelection.vnetId, gatewayId: routeSelection.gatewayId,
+                        prefix: workspaceSession?.learningState?.observation?.gatewayId === routeSelection.gatewayId
+                          ? workspaceSession.learningState.observation.prefix : undefined,
+                      } : routeSelection.kind === 'er-location' ? {
+                        locationId: routeSelection.locationId,
+                        prefix: workspaceSession?.learningState?.observation?.locationId === routeSelection.locationId
+                          ? workspaceSession.learningState.observation.prefix : undefined,
                       } : undefined} />
                     {workspaceSession?.learningView?.open && workspaceSession.learningState?.automatic && !workspaceSession.learningState.reviewId
                       && workspaceSession.learningState?.observation && inspectedControlRib.available
                       && ((routeSelection.kind === 'site' && routeSelection.siteId === workspaceSession.learningState.observation.siteId)
+                        || (routeSelection.kind === 'gateway' && routeSelection.vnetId === workspaceSession.learningState.observation.vnetId
+                          && routeSelection.gatewayId === workspaceSession.learningState.observation.gatewayId)
+                        || (routeSelection.kind === 'er-location' && routeSelection.locationId === workspaceSession.learningState.observation.locationId)
                         || (routeSelection.kind === 'vwan-hub' && routeSelection.hubId === workspaceSession.learningState.observation.hubId
                           && !(hubTableInspection?.hubId === routeSelection.hubId && hubTableInspection.firewall)
                           && (hubTableInspection?.hubId === routeSelection.hubId ? hubTableInspection.tableId : DEFAULT_HUB_TABLE)
@@ -3759,10 +3511,10 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 {(!resolvedSourceOpt || !resolvedDestOpt) && <p>Choose existing source and destination endpoints. A previously selected endpoint may have been removed.</p>}
                 {singleFlowForCustomIp && <p>Custom IP is outside the selected destination prefix. Only the forward route is known; select the owning endpoint to analyze the return path.</p>}
                 {pairAnalysis && !singleFlowForCustomIp && resolvedSourceOpt && resolvedDestOpt
-                  && ['subnet', 'site'].includes(resolvedSourceOpt.ref.kind) && ['subnet', 'site'].includes(resolvedDestOpt.ref.kind) && <FlowExportControls
+                  && ['subnet', 'site'].includes(resolvedSourceOpt.ref.kind) && ['subnet', 'site'].includes(resolvedDestOpt.ref.kind) && <Suspense fallback={null}><FlowExportControls
                   document={{ mode: simulatorMode === 'hub-spoke' ? 'hub-spoke' : 'full', topology: azDisplayResult(activeTopology, displayNames) }}
                   flow={{ id: 'selected-flow', kind: 'flow', source: resolvedSourceOpt.ref, target: resolvedDestOpt.ref,
-                    sourceAddress: resolvedSourceOpt.defaultIp, destinationAddress: customDestIp.trim() || resolvedDestOpt.defaultIp, expectation: 'allow' }} />}
+                    sourceAddress: resolvedSourceOpt.defaultIp, destinationAddress: customDestIp.trim() || resolvedDestOpt.defaultIp, expectation: 'allow' }} /></Suspense>}
 
                 {pairAnalysis && resolvedSourceOpt && (
                   <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -3952,6 +3704,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                     ))}
                   </div>
                 )}
+                <p data-testid="warning-attention-count" role="status">{t('{0} findings need attention · {1} acknowledged · {2} total', actionableCount, diagnostics.filter(isAcknowledged).length, diagnostics.length)}</p>
+                <p className="muted">{t('Acknowledgement is saved with this design. It does not fix a warning or change routing checks; changed evidence needs attention again.')}</p>
+                {!!topology.warningAcknowledgements?.length && <button className="aznet-btn" onClick={() => commitTopology((draft) => { delete draft.warningAcknowledgements })}>{t('Restore all warning attention')}</button>}
                 {visibleDiagnostics.length === 0 ? (
                   <div
                     style={{
@@ -3970,10 +3725,12 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {visibleDiagnostics.map((finding) => (
+                    {visibleDiagnostics.map((finding, index) => (
+                      <div key={finding.id}>
+                      {isAcknowledged(finding) && (index === 0 || !isAcknowledged(visibleDiagnostics[index - 1])) && <h3 className="warning-acknowledged-heading">{t('Acknowledged warnings')}</h3>}
                       <div
-                        key={finding.id}
-                        className="aznet-card"
+                        className={`aznet-card${isAcknowledged(finding) ? ' acknowledged-warning' : ''}`}
+                        data-finding-id={finding.id}
                         data-testid={`aznet-finding-${finding.category}`}
                         style={{ background: 'var(--surface)' }}
                       >
@@ -3998,7 +3755,10 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                 🔍 Trace Flow
                               </button>
                             )}
+                            {finding.severity !== 'info' && finding.category === 'gateway-coexistence' &&
+                              <Suspense fallback={null}><GatewayCoexistenceAutoFix topology={topology} finding={finding} commit={commitTopology} /></Suspense>}
                             {finding.severity !== 'info' &&
+                              finding.category !== 'gateway-coexistence' &&
                               finding.category !== 'connectivity-failure' &&
                               finding.category !== 'private-endpoint-udr-bypass' &&
                               finding.category !== 'peering-non-transitive-next-hop' &&
@@ -4015,6 +3775,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                           </div>
                         </div>
                         <h4 style={{ margin: '8px 0 4px 0', fontSize: 13 }}>{finding.title}</h4>
+                        {canAcknowledgeWarning(finding) && <Suspense fallback={null}><WarningAcknowledgement disabled={!warningTriage} acknowledged={isAcknowledged(finding)} onChange={(acknowledged) => acknowledgeWarning(finding, acknowledged)} /></Suspense>}
                         <p data-testid="aznet-root-impact">
                           {(() => {
                             const impact = azFindingImpact([finding], endpointOptions)
@@ -4024,25 +3785,14 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                         <p style={{ margin: '0 0 6px 0', fontSize: 11.5, color: 'var(--text)' }}>
                           {finding.summary}
                         </p>
-                        <Explain concept="coverage" evidence={[finding.summary]} />
-                        <div
-                          style={{
-                            fontSize: 11.5,
-                            color: 'var(--info)',
-                            background: 'var(--surface-muted)',
-                            padding: '6px 8px',
-                            borderRadius: 5,
-                          }}
-                        >
-                          <strong>Remediation:</strong> {finding.remediation}
-                        </div>
-                        {finding.occurrences?.some((entry) => entry.sampleFlow) && <details data-testid="aznet-affected-flows">
-                          <summary>Affected flows and directional evidence</summary>
-                          {azFindingFlows([finding]).map((entry) => <div key={entry.id}>
-                            <p>{entry.sampleFlow!.sourceIp} ↔ {entry.sampleFlow!.destinationIp}: {entry.summary}</p>
-                            <button type="button" className="aznet-btn" onClick={() => traceFinding(entry)}>Trace affected flow</button>
-                          </div>)}
-                        </details>}
+                        <Suspense fallback={null}><Explain concept="coverage" evidence={[finding.summary]} /></Suspense>
+                        <Suspense fallback={<p role="status">{t('Loading...')}</p>}>
+                          <FindingEvidence finding={finding} onTrace={traceFinding} onConfigure={(vnetId, subnetId) => {
+                            if (!setSelected({ kind: 'subnet', vnetId, subnetId })) return
+                            setActiveTab('editor')
+                          }} />
+                        </Suspense>
+                      </div>
                       </div>
                     ))}
                   </div>
@@ -4078,21 +3828,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                         (p) => p.vnetAId === selectedVnetId || p.vnetBId === selectedVnetId,
                       )
                     : topology.vnetPeerings
-              const filteredUdrTables =
-                selected.kind === 'subnet'
-                  ? topology.udrTables.filter((rt) => {
-                      const vnet = topology.vnets.find((v) => v.id === selected.vnetId)
-                      const snet = vnet?.subnets.find((s) => s.id === selected.subnetId)
-                      return snet?.routeTableId === rt.id
-                    })
-                  : selectedVnetId
-                    ? topology.udrTables.filter((rt) => {
-                        const vnet = topology.vnets.find((v) => v.id === selectedVnetId)
-                        return vnet?.subnets.some((s) => s.routeTableId === rt.id) ?? false
-                      })
-                    : topology.udrTables
 
-              return (
+              const context = (
               <>
                 <div
                   className="aznet-card"
@@ -4146,6 +3883,10 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                       `On-Premises Site ${topology.sites.find((s) => s.id === selected.siteId)?.name ?? selected.siteId}`}
                     {selected.kind === 'vwan-hub' &&
                       `Virtual WAN Hub ${topology.vwanHubs.find((h) => h.id === selected.hubId)?.name ?? selected.hubId}`}
+                    {selected.kind === 'er-link' &&
+                      `ExpressRoute connection ${topology.erLinks.find(link => link.id === selected.linkId)?.name ?? selected.linkId}`}
+                    {selected.kind === 'vpn-connection' &&
+                      `VPN/SD-WAN connection ${topology.vpnConnections.find(connection => connection.id === selected.connectionId)?.name ?? selected.connectionId}`}
                   </div>
                   <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                     Click any node or connection on the diagram to configure it
@@ -4153,21 +3894,30 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 </div>
 
                 <Suspense fallback={null}>
-                {selected.kind === 'gateway' && <VpnNatGatewayEditor key={selected.gatewayId} topology={topology} targetKind="vnet-gateway" targetId={selected.gatewayId} commit={commitTopology} />}
-                {selected.kind === 'vwan-hub' && <VpnNatGatewayEditor key={selected.hubId} topology={topology} targetKind="vwan-hub" targetId={selected.hubId} commit={commitTopology} />}
-                {selected.kind === 'vpn-connection' && <HybridConnectionEditor key={selected.connectionId} topology={topology} connectionId={selected.connectionId} commit={commitTopology} />}
+                {selected.kind === 'gateway' && <VpnNatGatewayEditor key={selected.gatewayId} topology={topology} targetKind="vnet-gateway" targetId={selected.gatewayId} commit={commitTopology} showGatewaySettings={false} />}
+                {selected.kind === 'vpn-connection' && <HybridConnectionEditor key={selected.connectionId} topology={topology} simulation={simulation} connectionId={selected.connectionId} commit={commitTopology} />}
                 {selected.kind === 'er-link' && <HybridConnectionEditor key={selected.linkId} topology={topology} connectionId={selected.linkId} commit={commitTopology} />}
                 {selected.kind === 'appliance' && <HybridNvaEditor key={selected.applianceId} topology={topology} applianceId={selected.applianceId} commit={commitTopology} />}
+                {nvaCreationVnetId && selectedVnetId === nvaCreationVnetId && <NvaCreationEditor key={nvaCreationVnetId}
+                  topology={topology} vnetId={nvaCreationVnetId} commit={commitTopology}
+                  onCancel={() => setNvaCreationVnetId(undefined)} onSaved={(applianceId) => {
+                    const entity = { kind: 'appliance' as const, vnetId: nvaCreationVnetId, applianceId }
+                    selectCreatedEntity(entity)
+                    setNvaCreationVnetId(undefined)
+                  }} />}
                 {vnraCreationVnetId && selectedVnetId === vnraCreationVnetId && <ManagedVnraEditor key={`create-${vnraCreationVnetId}`}
                   topology={topology} vnetId={vnraCreationVnetId} commit={commitTopology}
                   onCancel={() => setVnraCreationVnetId(undefined)} onSaved={(applianceId) => {
-                    setSelected({ kind: 'appliance', vnetId: vnraCreationVnetId, applianceId })
+                    const entity = { kind: 'appliance' as const, vnetId: vnraCreationVnetId, applianceId }
+                    selectCreatedEntity(entity)
                     setVnraCreationVnetId(undefined)
                   }} />}
                 </Suspense>
-
-                {/* VNet Peerings & Connections Editor (#38, #42, #47, #48) */}
-                {showPeeringEditor && (
+              </>
+              )
+              const peeringEditor = showPeeringEditor && (
+                <InspectorSection key={guidanceNavigation && selected.kind === 'peering' ? `peerings-${guidanceRevision}` : 'peerings'} title={t('VNet peerings')}
+                  summary={t('{0} peerings', filteredPeerings.length)} initialOpen={guidanceNavigation && selected.kind === 'peering'}>
                 <div className="aznet-card" data-testid="aznet-peering-editor">
                   <div
                     style={{
@@ -4179,7 +3929,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                       marginBottom: 8,
                     }}
                   >
-                    <h3 style={{ margin: 0 }}>VNet Peerings & Hybrid Connections</h3>
+                    <h3 hidden={workspaceSession?.presentationPreview} style={{ margin: 0 }}>VNet Peerings & Hybrid Connections</h3>
                     {topology.vnets.length >= 2 && (
                       <button
                         type="button"
@@ -4366,6 +4116,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                           <div
                             key={activePeering.id}
                             data-testid={`aznet-peering-card-${activePeering.id}`}
+                            data-learning-anchor={guidanceAnchor('peering-editor', activePeering.id)}
                             style={{
                               padding: 10,
                               background: 'var(--surface)',
@@ -4450,15 +4201,15 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                     </>
                   )}
                 </div>
-                )}
-
-                {/* VNets & VNet Elements Editor (#39, #42, #46, #47, #48, #49) */}
-                {showVnetEditor && (
+                </InspectorSection>
+              )
+              const vnetEditor = showVnetEditor && (
+                <InspectorSection key={`vnet-${selectedVnetId}`} title={t('VNet configuration')}
+                  summary={filteredVnets.map(vnet => `${vnet.name} · ${vnet.prefixes.join(', ')}`).join('; ')}
+                  initialOpen={guidanceNavigation && selected.kind === 'vnet' || selected.kind === 'gateway' || selected.kind === 'route-server'}>
                 <div className="aznet-card" data-testid="aznet-vnet-elements-editor">
-                  <h3>{workspaceSession?.presentationPreview ? t('VNet configuration') : 'VNets & VNet Elements (Region, Gateways, ARS, Firewall/NVA, Subnets)'}</h3>
+                  <h3 hidden={workspaceSession?.presentationPreview}>VNets & VNet Elements (Region, Gateways, ARS, Firewall/NVA, Subnets)</h3>
                   {filteredVnets.map((vnet) => {
-                    const hasErGw = vnet.gateways.some((g) => g.kind === 'ExpressRoute')
-                    const hasVpnGw = vnet.gateways.some((g) => g.kind === 'Vpn')
                     const usesRemoteGw = vnetUsesRemoteGateways(vnet.id)
                     return (
                       <div
@@ -4473,768 +4224,45 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                           border: '1px solid var(--border)',
                         }}
                       >
-                        <div
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            flexWrap: 'wrap',
-                            gap: 8,
-                            marginBottom: 8,
-                          }}
-                        >
-                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                            <label className="presentation-vnet-field"><span hidden={!workspaceSession?.presentationPreview}>{t('VNet name')}</span>
-                            <input
-                              type="text"
-                              className="aznet-input"
-                              value={vnet.name}
-                              aria-label={t('VNet name {0}', vnet.name)}
-                              onChange={(e) => {
-                                const val = e.target.value
-                                commitTopology((draft) => {
-                                  const v = draft.vnets.find((x) => x.id === vnet.id)
-                                  if (v) v.name = val
-                                })
-                              }}
-                              style={{ fontWeight: 700, width: 145 }}
-                            />
-                            </label>
-                            <label className="presentation-vnet-field"><span hidden={!workspaceSession?.presentationPreview}>{t('VNet region')}</span>
-                            <input
-                              type="text"
-                              className="aznet-input"
-                              list={`aznet-region-datalist-${vnet.id}`}
-                              data-testid={`aznet-vnet-region-${vnet.id}`}
-                              aria-label={t('VNet region {0}', vnet.name)}
-                              title="Azure Region / Location (e.g. westeurope, eastus)"
-                              value={vnet.region}
-                              onChange={(e) => {
-                                const val = e.target.value
-                                commitTopology((draft) => {
-                                  const v = draft.vnets.find((x) => x.id === vnet.id)
-                                  if (v) {
-                                    if (v.region !== val && v.bgpCommunities?.regionalCommunity) {
-                                      if (v.bgpCommunities.virtualNetworkCommunity) v.bgpCommunities = { virtualNetworkCommunity: v.bgpCommunities.virtualNetworkCommunity }
-                                      else delete v.bgpCommunities
-                                    }
-                                    v.region = val
-                                  }
-                                })
-                              }}
-                              style={{ width: 130, fontSize: 11.5 }}
-                            />
-                            </label>
-                            <datalist id={`aznet-region-datalist-${vnet.id}`}>
-                              {ALL_KNOWN_AZURE_REGIONS.map((reg) => (
-                                <option key={reg} value={reg} />
-                              ))}
-                            </datalist>
-                            <label className="presentation-vnet-field"><span hidden={!workspaceSession?.presentationPreview}>{t('Address spaces')}</span>
-                            <PrefixInput
-                              key={topology.inventory ? vnet.prefixes.join(', ') : undefined}
-                              type="text"
-                              className="aznet-input"
-                              value={vnet.prefixes.join(', ')}
-                              deferred={topology.inventory !== undefined}
-                              title="VNet CIDR prefixes (comma-separated)"
-                              onCommit={(raw) => {
-                                commitTopology((draft) => {
-                                  const v = draft.vnets.find((x) => x.id === vnet.id)
-                                  if (v) {
-                                    const parsed = raw
-                                      .split(',')
-                                      .map((p) => p.trim())
-                                      .filter(Boolean)
-                                    if (parsed.length > 0) v.prefixes = parsed
-                                  }
-                                })
-                              }}
-                              style={{ width: 130, fontSize: 11.5 }}
-                            />
-                            </label>
-                            <VnetCommunityEditor
-                              key={vnet.id}
-                              value={vnet.bgpCommunities}
-                              onChange={(value) => commitTopology((draft) => {
-                                const target = draft.vnets.find((entry) => entry.id === vnet.id)
-                                if (target) {
-                                  if (value) target.bgpCommunities = value
-                                  else delete target.bgpCommunities
-                                }
-                              })} />
-                            <label className="presentation-vnet-field"><span hidden={!workspaceSession?.presentationPreview}>{t('Canvas layout role')}</span>
-                            <select
-                              className="aznet-select"
-                              value={vnet.role}
-                              title="Simulator topology role (controls canvas column layout & default gateway transit heuristics)"
-                              onChange={(e) => {
-                                const role = e.target.value as 'hub' | 'spoke'
-                                commitTopology((draft) => {
-                                  const v = draft.vnets.find((x) => x.id === vnet.id)
-                                  if (v) v.role = role
-                                })
-                              }}
-                            >
-                              <option value="hub">Hub Layout Role</option>
-                              <option value="spoke">Spoke Layout Role</option>
-                            </select>
-                            </label>
-                          </div>
-                          <button
-                            type="button"
-                            className="aznet-btn"
-                            data-testid={`aznet-delete-vnet-${vnet.id}`}
-                            style={{
-                              padding: '2px 8px',
-                              fontSize: 11,
-                              color: 'var(--error)',
-                              borderColor: 'var(--border)',
+                        <Suspense fallback={null}>
+                          <VnetRoutingSettings topology={topology} vnet={vnet} preview={workspaceSession?.presentationPreview}
+                            usesRemoteGateways={usesRemoteGw} onTopologyChange={commitTopology}
+                            onDeleteVnet={() => deleteVnetById(vnet.id)}
+                            onAddGateway={(kind) => addGatewayToVnet(vnet.id, kind)}
+                            onRemoveGateway={(id) => removeGatewayFromVnet(vnet.id, id)}
+                            onAddRouteServer={() => addRouteServerToVnet(vnet.id)}
+                            onRemoveRouteServer={() => removeRouteServerFromVnet(vnet.id)}
+                            onAddFirewall={() => addFirewallToVnet(vnet.id)}
+                            onAddNva={() => openNvaCreation(vnet.id)}
+                            onAddVnra={() => openVnraCreation(vnet.id)}
+                            onConfigureVnra={(id) => {
+                              setSelected({ kind: 'appliance', vnetId: vnet.id, applianceId: id })
+                              setActiveTab('editor')
                             }}
-                            onClick={() => deleteVnetById(vnet.id)}
-                          >
-                            Delete VNet
-                          </button>
-                        </div>
-
-                        <InspectorSection title={t('Gateway route advertisements')}
-                          summary={vnet.summarizedGatewayPrefixes?.length ? t('{0} configured prefixes', vnet.summarizedGatewayPrefixes.length) : t('Automatic advertisements')}
-                          initialOpen={!!vnet.summarizedGatewayPrefixes?.length}>
-                        <label style={{ display: 'grid', gap: 4, marginBottom: 8, fontSize: 11.5 }}>
-                          Advertised gateway prefixes (IPv4, comma-separated)
-                          <input
-                            key={`${vnet.id}:${vnet.summarizedGatewayPrefixes?.join(',') ?? ''}`}
-                            type="text"
-                            className="aznet-input"
-                            aria-label={`Advertised gateway prefixes ${vnet.name}`}
-                            aria-describedby={`aznet-gateway-prefix-help-${vnet.id}`}
-                            defaultValue={vnet.summarizedGatewayPrefixes?.join(', ') ?? ''}
-                            placeholder="Default: advertise individual hub and eligible spoke address spaces"
-                            onBlur={(e) => {
-                              const value = e.target.value
-                              if (value === (vnet.summarizedGatewayPrefixes ?? []).join(', ')) return
-                              commitTopology((draft) => {
-                                const target = draft.vnets.find((v) => v.id === vnet.id)
-                                if (target) target.summarizedGatewayPrefixes = value.split(',').map((prefix) => prefix.trim()).filter(Boolean)
-                              })
-                            }}
-                            onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
-                          />
-                          <span id={`aznet-gateway-prefix-help-${vnet.id}`} className="aznet-muted">
-                            Read only by this VNet's ER/VPN gateway when GatewaySubnet exists; stored beforehand, ignored by a remote hub.
-                            Include this gateway VNet's address spaces (recommended). Covered hub/spoke spaces are summarized; uncovered spaces remain advertised.
-                            Independent of local address spaces; no overlapping entries or IPv6. No Route Server required.
-                          </span>
-                        </label>
-                        </InspectorSection>
-                        <p className="aznet-muted" style={{ fontSize: 11.5 }}>{t('Advertisements do not create forwarding routes.')}</p>
-                        {validateAdvertisedGatewayPrefixes(vnet.summarizedGatewayPrefixes).map((error) => (
-                          <strong role="alert" key={error}>VNet "{vnet.name}" {error}</strong>
-                        ))}
-
-                        {usesRemoteGw && (
-                          <div
-                            data-testid={`aznet-vnet-remote-gw-notice-${vnet.id}`}
-                            style={{
-                              marginBottom: 8,
-                              padding: '5px 8px',
-                              background: 'var(--surface-muted)',
-                              border: '1px solid var(--warning)',
-                              borderRadius: 6,
-                              fontSize: 11,
-                              color: 'var(--warning)',
-                            }}
-                          >
-                            ⚠️ This VNet has <strong>Use Remote Gateways</strong> enabled on a peering. Local VNet Gateways and Route Server cannot be deployed unless <code>useRemoteGateways</code> is disabled first.
-                          </div>
-                        )}
-
-                        {/* Quick Add/Remove VNet Elements (#39, #48) */}
-                        <InspectorSection title={t('Add or remove routing devices')}
-                          summary={t('Gateways: {0}; appliances: {1}; Route Server: {2}', vnet.gateways.length, vnet.appliances.length, vnet.routeServer ? 1 : 0)}
-                          initialOpen={!!(vnet.gateways.length || vnet.appliances.length || vnet.routeServer)}>
-                        <div
-                          style={{
-                            display: 'flex',
-                            gap: 6,
-                            flexWrap: 'wrap',
-                            marginBottom: 8,
-                            padding: '6px 8px',
-                            background: 'var(--surface)',
-                            borderRadius: 6,
-                            border: '1px solid var(--border)',
-                          }}
-                        >
-                          <button
-                            type="button"
-                            className="aznet-btn"
-                            data-testid={`aznet-add-fw-${vnet.id}`}
-                            style={{ fontSize: 11, padding: '3px 8px' }}
-                            onClick={() => addFirewallToVnet(vnet.id)}
-                          >
-                            + Firewall / NVA
-                          </button>
-                          <button type="button" className="aznet-btn" onClick={() => openVnraCreation(vnet.id)}>
-                            {t('Add Managed VNRA')}
-                          </button>
-                          {!hasErGw ? (
-                            <button
-                              type="button"
-                              className="aznet-btn"
-                              data-testid={`aznet-add-ergw-${vnet.id}`}
-                              disabled={usesRemoteGw}
-                              title={
-                                usesRemoteGw
-                                  ? 'Cannot add ER Gateway while Use Remote Gateways is enabled on a peering'
-                                  : 'Add ExpressRoute Gateway'
-                              }
-                              style={{
-                                fontSize: 11,
-                                padding: '3px 8px',
-                                opacity: usesRemoteGw ? 0.5 : 1,
-                              }}
-                              onClick={() => addGatewayToVnet(vnet.id, 'ExpressRoute')}
-                            >
-                              + ER Gateway
-                            </button>
-                          ) : (
-                            vnet.gateways
-                              .filter((g) => g.kind === 'ExpressRoute')
-                              .map((gw) => (
-                                <button
-                                  key={gw.id}
-                                  type="button"
-                                  className="aznet-btn"
-                                  data-testid={`aznet-remove-gw-${gw.id}`}
-                                  style={{
-                                    fontSize: 11,
-                                    padding: '3px 8px',
-                                    color: 'var(--error)',
-                                    borderColor: 'var(--border)',
-                                  }}
-                                  onClick={() => removeGatewayFromVnet(vnet.id, gw.id)}
-                                >
-                                  ✕ ER GW ({gw.name})
-                                </button>
-                              ))
-                          )}
-                          {!hasVpnGw ? (
-                            <button
-                              type="button"
-                              className="aznet-btn"
-                              data-testid={`aznet-add-vpngw-${vnet.id}`}
-                              disabled={usesRemoteGw}
-                              title={
-                                usesRemoteGw
-                                  ? 'Cannot add VPN Gateway while Use Remote Gateways is enabled on a peering'
-                                  : 'Add VPN Gateway'
-                              }
-                              style={{
-                                fontSize: 11,
-                                padding: '3px 8px',
-                                opacity: usesRemoteGw ? 0.5 : 1,
-                              }}
-                              onClick={() => addGatewayToVnet(vnet.id, 'Vpn')}
-                            >
-                              + VPN Gateway
-                            </button>
-                          ) : (
-                            vnet.gateways
-                              .filter((g) => g.kind === 'Vpn')
-                              .map((gw) => (
-                                <button
-                                  key={gw.id}
-                                  type="button"
-                                  className="aznet-btn"
-                                  data-testid={`aznet-remove-gw-${gw.id}`}
-                                  style={{
-                                    fontSize: 11,
-                                    padding: '3px 8px',
-                                    color: 'var(--error)',
-                                    borderColor: 'var(--border)',
-                                  }}
-                                  onClick={() => removeGatewayFromVnet(vnet.id, gw.id)}
-                                >
-                                  ✕ VPN GW ({gw.name})
-                                </button>
-                              ))
-                          )}
-                          {!vnet.routeServer ? (
-                            <button
-                              type="button"
-                              className="aznet-btn"
-                              data-testid={`aznet-add-ars-${vnet.id}`}
-                              disabled={usesRemoteGw}
-                              title={
-                                usesRemoteGw
-                                  ? 'Cannot add Route Server while Use Remote Gateways is enabled on a peering'
-                                  : 'Add Azure Route Server'
-                              }
-                              style={{
-                                fontSize: 11,
-                                padding: '3px 8px',
-                                opacity: usesRemoteGw ? 0.5 : 1,
-                              }}
-                              onClick={() => addRouteServerToVnet(vnet.id)}
-                            >
-                              + Route Server (ARS)
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="aznet-btn"
-                              data-testid={`aznet-remove-ars-${vnet.id}`}
-                              style={{
-                                fontSize: 11,
-                                padding: '3px 8px',
-                                color: 'var(--error)',
-                                borderColor: 'var(--border)',
-                              }}
-                              onClick={() => removeRouteServerFromVnet(vnet.id)}
-                            >
-                              ✕ Remove ARS ({vnet.routeServer.name})
-                            </button>
-                          )}
-                        </div>
-
-                        </InspectorSection>
-                        {vnet.gateways.filter((gateway) => gateway.kind === 'Vpn').map((gateway) =>
-                          <Suspense key={gateway.id} fallback={null}>
-                            <VpnGatewaySettings gateway={gateway}
-                              routeExchange={!!(gateway.enabled && vnet.routeServer?.enabled && vnet.routeServer.branchToBranchTraffic)}
-                              onMode={(mode) => commitTopology((draft) => {
-                                const target = draft.vnets.find((candidate) => candidate.id === vnet.id)?.gateways.find((candidate) => candidate.id === gateway.id)
-                                if (target) {
-                                  if (mode === undefined) delete target.activeActive
-                                  else target.activeActive = mode
-                                }
-                              })} />
-                          </Suspense>)}
-
-                        {/* ARS settings if present */}
-                        {vnet.routeServer && (
-                          <div style={{ marginTop: 6, marginBottom: 6 }} className="aznet-field-grid">
-                            <label className="aznet-checkbox-row">
-                              <input
-                                type="checkbox"
-                                checked={vnet.routeServer.branchToBranchTraffic}
-                                onChange={(e) => {
-                                  const checked = e.target.checked
-                                  commitTopology((draft) => {
-                                    const targetV = draft.vnets.find((v) => v.id === vnet.id)
-                                    if (targetV?.routeServer) {
-                                      targetV.routeServer.branchToBranchTraffic = checked
-                                    }
-                                  })
-                                }}
-                              />
-                              <span>ARS Branch-to-Branch (ER/VPN ↔ NVA)</span>
-                            </label>
-                            <label className="aznet-field">
-                              <span>ARS Hub Routing Preference</span>
-                              <select
-                                className="aznet-select"
-                                value={vnet.routeServer.hubRoutingPreference}
-                                onChange={(e) => {
-                                  const pref = e.target.value as AzArsPreference
-                                  commitTopology((draft) => {
-                                    const targetV = draft.vnets.find((v) => v.id === vnet.id)
-                                    if (targetV?.routeServer) {
-                                      targetV.routeServer.hubRoutingPreference = pref
-                                    }
-                                  })
-                                }}
-                              >
-                                <option value="ExpressRoute">ExpressRoute (Default)</option>
-                                <option value="VpnGateway">VpnGateway</option>
-                                <option value="ASPath">ASPath</option>
-                              </select>
-                            </label>
-                          </div>
-                        )}
-
-                        {/* Appliances list */}
-                        {vnet.appliances.map((app) => (
-                          <div
-                            key={app.id}
-                            style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                              flexWrap: 'wrap',
-                              gap: 8,
-                              marginTop: 6,
-                              fontSize: 12,
-                            }}
-                          >
-                            <span>
-                              {app.kind === 'vnra' ? t('Managed VNRA') : '🔥'} {app.name} (<code>{app.privateIp}</code>)
-                            </span>
-                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                              {app.kind === 'vnra' ? <button type="button" className="aznet-btn" onClick={() => {
-                                setSelected({ kind: 'appliance', vnetId: vnet.id, applianceId: app.id })
-                                setActiveTab('editor')
-                              }}>{t('Configure Managed VNRA')}</button> : <label className="aznet-checkbox-row">
-                                <input
-                                  type="checkbox"
-                                  checked={app.enableIpForwarding}
-                                  onChange={(e) => {
-                                    const checked = e.target.checked
-                                    commitTopology((draft) => {
-                                      const targetV = draft.vnets.find((v) => v.id === vnet.id)
-                                      const targetA = targetV?.appliances.find(
-                                        (a) => a.id === app.id,
-                                      )
-                                      if (targetA) targetA.enableIpForwarding = checked
-                                    })
-                                  }}
-                                />
-                                <span>NIC IP Forwarding</span>
-                              </label>}
-                              <button
-                                type="button"
-                                className="aznet-btn"
-                                data-testid={`aznet-remove-app-${app.id}`}
-                                style={{
-                                  fontSize: 11,
-                                  padding: '2px 6px',
-                                  color: 'var(--error)',
-                                  borderColor: 'var(--border)',
-                                }}
-                                onClick={() => removeApplianceFromVnet(vnet.id, app.id)}
-                              >
-                                ✕ Remove
-                              </button>
-                            </div>
-                          </div>
-                        ))}
+                            onRemoveAppliance={(id) => removeApplianceFromVnet(vnet.id, id)} />
+                        </Suspense>
                       </div>
                     )
                   })}
                 </div>
-                )}
-
-                {/* Independent Route Tables Editor (#40, #41, #47) */}
-                {showVnetEditor && (
-                <div className="aznet-card" data-testid="aznet-udr-editor">
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      gap: 8,
-                      flexWrap: 'wrap',
-                      marginBottom: 8,
-                    }}
-                  >
-                    <h3 style={{ margin: 0 }}>Independent Route Tables (UDRs)</h3>
-                    <button
-                      type="button"
-                      className="aznet-btn aznet-btn-primary"
-                      data-testid="aznet-create-rt-btn"
-                      onClick={() =>
-                        selected.kind === 'subnet'
-                          ? createAndAssociateRouteTable(selected.vnetId, selected.subnetId)
-                          : createAndAssociateRouteTable()
-                      }
-                    >
-                      + Create Route Table
-                    </button>
-                  </div>
-                  <p style={{ margin: '0 0 8px 0', fontSize: 11.5, color: 'var(--text)' }}>
-                    Route tables are independent objects that can be associated with any subnet via
-                    the subnet&apos;s right-click menu, hover badge, or the subnet association
-                    selector below.
-                  </p>
-                  {(filteredUdrTables.length > 0 ? filteredUdrTables : topology.udrTables).map((rt) => {
-                    const associatedSubnets = topology.vnets.flatMap((v) =>
-                      v.subnets
-                        .filter((s) => s.routeTableId === rt.id)
-                        .map((s) => `${v.name}/${s.name}`),
-                    )
-                    return (
-                      <div
-                        key={rt.id}
-                        data-testid={`aznet-rt-card-${rt.id}`}
-                        data-learning-anchor={selected.kind === 'subnet' ? guidanceAnchor('udr-table', selected.vnetId, selected.subnetId, rt.id) : undefined}
-                        style={{
-                          marginBottom: 10,
-                          padding: 10,
-                          background: 'var(--surface)',
-                          borderRadius: 6,
-                          border: '1px solid var(--border)',
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            flexWrap: 'wrap',
-                            gap: 8,
-                            marginBottom: 6,
-                          }}
-                        >
-                          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                            <input
-                              type="text"
-                              className="aznet-input"
-                              value={rt.name}
-                              aria-label={`Route Table name ${rt.name}`}
-                              onChange={(e) => {
-                                const val = e.target.value
-                                commitTopology((draft) => {
-                                  const target = draft.udrTables.find((t) => t.id === rt.id)
-                                  if (target) target.name = val
-                                })
-                              }}
-                              style={{ fontWeight: 700, width: 175 }}
-                            />
-                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                              {associatedSubnets.length > 0
-                                ? `Associated: ${associatedSubnets.join(', ')}`
-                                : 'Unassociated'}
-                            </span>
-                          </div>
-                          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                            <label className="aznet-checkbox-row">
-                              <input
-                                type="checkbox"
-                                data-testid={`aznet-rt-disable-bgp-${rt.id}`}
-                                checked={rt.disableBgpRoutePropagation}
-                                onChange={(e) => {
-                                  const checked = e.target.checked
-                                  commitTopology((draft) => {
-                                    const target = draft.udrTables.find((t) => t.id === rt.id)
-                                    if (target) target.disableBgpRoutePropagation = checked
-                                  })
-                                }}
-                              />
-                              <span>Disable Gateway routes (GWroutes:OFF)</span>
-                            </label>
-                            <label className="aznet-checkbox-row">
-                              <input
-                                type="checkbox"
-                                data-testid={`aznet-rt-disable-peering-${rt.id}`}
-                                checked={Boolean(rt.disablePeeringRoutePropagation)}
-                                onChange={(e) => {
-                                  const checked = e.target.checked
-                                  commitTopology((draft) => {
-                                    const target = draft.udrTables.find((t) => t.id === rt.id)
-                                    if (target) target.disablePeeringRoutePropagation = checked
-                                  })
-                                }}
-                              />
-                              <span>Disable Peering route propagation (Preview; requires an active covering UDR)</span>
-                            </label>
-                            <button
-                              type="button"
-                              className="aznet-btn"
-                              data-testid={`aznet-delete-rt-${rt.id}`}
-                              style={{
-                                padding: '2px 8px',
-                                fontSize: 11,
-                                color: 'var(--error)',
-                                borderColor: 'var(--border)',
-                              }}
-                              onClick={() => {
-                                commitTopology((draft) => {
-                                  draft.udrTables = draft.udrTables.filter((t) => t.id !== rt.id)
-                                  for (const v of draft.vnets) {
-                                    for (const s of v.subnets) {
-                                      if (s.routeTableId === rt.id) {
-                                        s.routeTableId = undefined
-                                      }
-                                    }
-                                  }
-                                })
-                              }}
-                            >
-                              Delete RT
-                            </button>
-                          </div>
-                        </div>
-
-                        <table className="aznet-route-table">
-                          <thead>
-                            <tr>
-                              <th>On</th>
-                              <th>Name</th>
-                              <th>Prefix</th>
-                              <th>Next Hop Type</th>
-                              <th>Next Hop IP</th>
-                              <th></th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {rt.routes.map((r) => (
-                              <tr key={r.id} data-learning-anchor={selected.kind === 'subnet' ? guidanceAnchor('udr-route', selected.vnetId, selected.subnetId, rt.id, r.id) : undefined}>
-                                <td>
-                                  <input
-                                    type="checkbox"
-                                    checked={r.enabled}
-                                    onChange={(e) => {
-                                      const checked = e.target.checked
-                                      commitTopology((draft) => {
-                                        const targetRt = draft.udrTables.find(
-                                          (t) => t.id === rt.id,
-                                        )
-                                        const targetR = targetRt?.routes.find(
-                                          (x) => x.id === r.id,
-                                        )
-                                        if (targetR) targetR.enabled = checked
-                                      })
-                                    }}
-                                  />
-                                </td>
-                                <td>
-                                  <input
-                                    type="text"
-                                    className="aznet-input"
-                                    style={{ width: 110 }}
-                                    value={r.name}
-                                    onChange={(e) => {
-                                      const val = e.target.value
-                                      commitTopology((draft) => {
-                                        const targetRt = draft.udrTables.find(
-                                          (t) => t.id === rt.id,
-                                        )
-                                        const targetR = targetRt?.routes.find(
-                                          (x) => x.id === r.id,
-                                        )
-                                        if (targetR) targetR.name = val
-                                      })
-                                    }}
-                                  />
-                                </td>
-                                <td>
-                                  <input
-                                    type="text"
-                                    className="aznet-input"
-                                    style={{ width: 105, fontFamily: 'monospace' }}
-                                    value={r.prefix}
-                                    onChange={(e) => {
-                                      const val = e.target.value
-                                      commitTopology((draft) => {
-                                        const targetRt = draft.udrTables.find(
-                                          (t) => t.id === rt.id,
-                                        )
-                                        const targetR = targetRt?.routes.find(
-                                          (x) => x.id === r.id,
-                                        )
-                                        if (targetR) targetR.prefix = val
-                                      })
-                                    }}
-                                  />
-                                </td>
-                                <td>
-                                  <select
-                                    className="aznet-select"
-                                    value={r.nextHopType}
-                                    onChange={(e) => {
-                                      const val = e.target.value as AzUdrNextHopType
-                                      commitTopology((draft) => {
-                                        const targetRt = draft.udrTables.find(
-                                          (t) => t.id === rt.id,
-                                        )
-                                        const targetR = targetRt?.routes.find(
-                                          (x) => x.id === r.id,
-                                        )
-                                        if (targetR) targetR.nextHopType = val
-                                      })
-                                    }}
-                                  >
-                                    <option value="VirtualAppliance">VirtualAppliance</option>
-                                    <option value="VirtualNetworkGateway">
-                                      VirtualNetworkGateway
-                                    </option>
-                                    <option value="VnetLocal">VnetLocal</option>
-                                    <option value="Internet">Internet</option>
-                                    <option value="None">None (Blackhole)</option>
-                                  </select>
-                                </td>
-                                <td>
-                                  {r.nextHopType === 'VirtualAppliance' ? (
-                                    <input
-                                      type="text"
-                                      className="aznet-input"
-                                      style={{ width: 105 }}
-                                      value={r.nextHopIp ?? ''}
-                                      onChange={(e) => {
-                                        const val = e.target.value
-                                        commitTopology((draft) => {
-                                          const targetRt = draft.udrTables.find(
-                                            (t) => t.id === rt.id,
-                                          )
-                                          const targetR = targetRt?.routes.find(
-                                            (x) => x.id === r.id,
-                                          )
-                                          if (targetR) targetR.nextHopIp = val
-                                        })
-                                      }}
-                                    />
-                                  ) : (
-                                    '—'
-                                  )}
-                                </td>
-                                <td>
-                                  <button
-                                    type="button"
-                                    className="aznet-btn"
-                                    style={{ padding: '1px 6px', fontSize: 10.5, color: 'var(--error)' }}
-                                    onClick={() => {
-                                      commitTopology((draft) => {
-                                        const targetRt = draft.udrTables.find(
-                                          (t) => t.id === rt.id,
-                                        )
-                                        if (targetRt) {
-                                          targetRt.routes = targetRt.routes.filter(
-                                            (x) => x.id !== r.id,
-                                          )
-                                        }
-                                      })
-                                    }}
-                                  >
-                                    ✕
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-
-                        <button
-                          type="button"
-                          className="aznet-btn"
-                          style={{ marginTop: 6 }}
-                          onClick={() => {
-                            commitTopology((draft) => {
-                              const targetRt = draft.udrTables.find((t) => t.id === rt.id)
-                              if (!targetRt) return
-                              const firstApp = draft.vnets.flatMap((v) => v.appliances)[0]
-                              targetRt.routes.push({
-                                id: `udr-custom-${Date.now()}`,
-                                name: `custom-route-${targetRt.routes.length + 1}`,
-                                prefix: '10.2.0.0/16',
-                                nextHopType: firstApp ? 'VirtualAppliance' : 'Internet',
-                                nextHopIp: firstApp?.privateIp,
-                                enabled: true,
-                              })
-                            })
-                          }}
-                        >
-                          + Add UDR Row
-                        </button>
-                      </div>
-                    )
-                  })}
-                </div>
-                )}
-
-                {/* Subnet CRUD, Route Table Associations & Policies (#41, #49) */}
-                {showVnetEditor && (
+                </InspectorSection>
+              )
+              const routeTableEditor = showVnetEditor && (
+                <Suspense key={`routes-${selectedVnetId}`} fallback={null}><UdrTablesEditor topology={topology}
+                  selected={selected} selectedVnetId={selectedVnetId} initialOpen={guidanceNavigation && selected.kind === 'subnet'}
+                  commit={commitTopology} onClone={(cloneId) => setUdrManager({ cloneId })}
+                  onLibrary={(tableId) => setUdrManager(tableId ? { tableId } : {})}
+                  onCreate={() => selected.kind === 'subnet'
+                    ? createAndAssociateRouteTable(selected.vnetId, selected.subnetId)
+                    : createAndAssociateRouteTable()}
+                  anchor={selected.kind === 'subnet' ? { vnetId: selected.vnetId, subnetId: selected.subnetId } : undefined} /></Suspense>
+              )
+              const subnetEditor = showVnetEditor && (
+                <InspectorSection key={`subnets-${selectedVnetId}`} title={t('Subnet configuration')}
+                  summary={t('{0} subnets', selected.kind === 'subnet' ? 1 : filteredVnets.reduce((count, vnet) => count + vnet.subnets.length, 0))}
+                  initialOpen={!guidanceNavigation && selected.kind === 'subnet'}>
                 <div className="aznet-card" data-testid="aznet-subnet-security-editor">
-                  <h3>{workspaceSession?.presentationPreview ? t('Subnet configuration') : 'Subnets: Create, Rename, Route Table, Private Endpoint & Outbound Policies'}</h3>
+                  <h3 hidden={workspaceSession?.presentationPreview}>Subnets: Create, Rename, Route Table, Private Endpoint & Outbound Policies</h3>
                   <p className="aznet-muted" style={{ fontSize: 11.5 }}>{t('These settings do not prove Internet or private-service reachability.')}</p>
                   {filteredVnets.map((vnet) => {
                     const subnetsToShow =
@@ -5325,25 +4353,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                 style={{ fontWeight: 700, width: 145 }}
                               />
                               </label>
-                              <label className="presentation-vnet-field"><span hidden={!workspaceSession?.presentationPreview}>{t('Subnet prefix')}</span>
-                              <PrefixInput
-                                key={topology.inventory ? subnet.prefix : undefined}
-                                type="text"
-                                className="aznet-input"
-                                data-testid={`aznet-subnet-prefix-${subnet.id}`}
-                                aria-label={t('Subnet prefix {0}', subnet.name)}
-                                value={subnet.prefix}
-                                deferred={topology.inventory !== undefined}
-                                onCommit={(val) => {
-                                  commitTopology((draft) => {
-                                    const targetV = draft.vnets.find((v) => v.id === vnet.id)
-                                    const targetS = targetV?.subnets.find((s) => s.id === subnet.id)
-                                    if (targetS) targetS.prefix = val
-                                  })
-                                }}
-                                style={{ width: 120, fontFamily: 'monospace', fontSize: 11.5 }}
-                              />
-                              </label>
+                              <Suspense fallback={null}><SubnetPrefixEditor topology={topology} vnet={vnet} subnet={subnet}
+                                preview={workspaceSession?.presentationPreview} onChange={commitTopology} /></Suspense>
                               <label
                                 style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5 }}
                               >
@@ -5371,7 +4382,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                 >
                                   <option value="">None (No Route Table)</option>
                                   {topology.udrTables.map((rt) => (
-                                    <option key={rt.id} value={rt.id}>
+                                    <option key={rt.id} value={rt.id} disabled={!!udrAssociationError(topology, vnet, rt)}>
                                       {rt.name}
                                     </option>
                                   ))}
@@ -5552,10 +4563,20 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                     </div>
                   )})}
                 </div>
-                )}
-
-                {/* On-Premises Sites & ExpressRoute MSEE Locations Editor (#37, #42, #43, #44, #45, #47) */}
+                </InspectorSection>
+              )
+              return (
+              <div key={workspaceIdentityKey(azWorkspaceIdentity(selected))} data-configuration-scope>
+                <Suspense fallback={null}><ConfigurationEditStatus /></Suspense>
+                {context}
+                {vnetEditor}
+                {subnetEditor}
+                {peeringEditor}
+                {routeTableEditor}
                 {(showSiteEditor || showErEditor) && (
+                <InspectorSection key={selected.kind} title={t(showSiteEditor ? 'On-premises site configuration' : 'ExpressRoute location configuration')}
+                  summary={selected.kind === 'site' ? topology.sites.find(site => site.id === selected.siteId)?.name ?? ''
+                    : selected.kind === 'er-location' ? topology.erLocations.find(location => location.id === selected.locationId)?.name ?? '' : ''} initialOpen={false}>
                 <div className="aznet-card" data-testid="aznet-sites-er-editor">
                   <div
                     style={{
@@ -5567,7 +4588,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                       marginBottom: 8,
                     }}
                   >
-                    <h3 style={{ margin: 0 }}>
+                    <h3 hidden={workspaceSession?.presentationPreview} style={{ margin: 0 }}>
                       {showSiteEditor
                         ? 'On-Premises Site Configuration'
                         : 'ExpressRoute Peering Location Configuration'}
@@ -5877,97 +4898,24 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                         </div>
                       ))}
                 </div>
+                </InspectorSection>
                 )}
 
                 {showVwanHubEditor &&
                   topology.vwanHubs
                     .filter((h) => selected.kind !== 'vwan-hub' || h.id === selected.hubId)
                     .map((hub) => (
-                      <div key={hub.id} className="aznet-card" data-testid={`aznet-vwanhub-config-${hub.id}`} data-learning-anchor={guidanceAnchor('hub-editor', hub.id)}>
-                        <h3>Virtual WAN Hub: {hub.name}</h3>
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                          <input
-                            type="text"
-                            className="aznet-input"
-                            value={hub.name}
-                            onChange={(e) => {
-                              const val = e.target.value
-                              commitTopology((draft) => {
-                                const target = draft.vwanHubs.find((x) => x.id === hub.id)
-                                if (target) target.name = val
-                              })
-                            }}
-                            style={{ fontWeight: 700, width: 155 }}
-                          />
-                          <input
-                            type="text"
-                            className="aznet-input"
-                            value={hub.region}
-                            title="Azure Region"
-                            onChange={(e) => {
-                              const val = e.target.value
-                              commitTopology((draft) => {
-                                const target = draft.vwanHubs.find((x) => x.id === hub.id)
-                                if (target) target.region = val
-                              })
-                            }}
-                            style={{ width: 130, fontSize: 11.5 }}
-                          />
-                          <input
-                            type="text"
-                            className="aznet-input"
-                            value={hub.prefix}
-                            title="Hub address prefix"
-                            onChange={(e) => {
-                              const val = e.target.value
-                              commitTopology((draft) => {
-                                const target = draft.vwanHubs.find((x) => x.id === hub.id)
-                                if (target) target.prefix = val
-                              })
-                            }}
-                            style={{ width: 130, fontSize: 11.5 }}
-                          />
-                          <select
-                            className="aznet-select"
-                            value={hub.preference}
-                            onChange={(e) => {
-                              const pref = e.target.value as 'ExpressRoute' | 'VPN' | 'ASPath'
-                              commitTopology((draft) => {
-                                const target = draft.vwanHubs.find((x) => x.id === hub.id)
-                                if (target) target.preference = pref
-                              })
-                            }}
-                          >
-                            <option value="ExpressRoute">ExpressRoute Preference</option>
-                            <option value="VPN">VPN Preference</option>
-                            <option value="ASPath">ASPath Preference</option>
-                          </select>
-                        </div>
-                        <Suspense fallback={null}><HubTablesEditor hub={hub} topology={topology} commit={commitTopology} onAttach={(vnetId) => attachVnetToHub(vnetId, hub.id)} focusFirewall={firewallEditorHubId === hub.id} /></Suspense>
-                        <button type="button" onClick={() => setSnatHubId(hub.id)}>{t('Firewall SNAT')}</button>
-                        <form onSubmit={(event) => {
-                          event.preventDefault()
-                          const prefixes = String(new FormData(event.currentTarget).get('prefixes') ?? '').split(/[,\s]+/).filter(Boolean)
-                          if (prefixes.some((prefix) => !cidr(prefix))) { setWorkspaceNotice(t('Enter valid IPv4 CIDR prefixes.')); return }
-                          commitTopology((draft) => { draft.vwanHubs.find((target) => target.id === hub.id)!.routingIntent.privatePrefixes = prefixes })
-                        }}>
-                          <label className="field"><span>{t('Private routing intent prefixes')}</span><input name="prefixes" defaultValue={hub.routingIntent.privatePrefixes?.join(', ') ?? ''} /></label>
-                          <button type="submit">{t('Save private routing prefixes')}</button>
-                        </form>
-                        <label className="aznet-hover-toggle"><input type="checkbox" checked={topology.allowBranchToBranchTraffic !== false} onChange={(event) => {
-                          const enabled = event.target.checked
-                          commitTopology((draft) => { draft.allowBranchToBranchTraffic = enabled })
-                        }} />{t('WAN branch-to-branch route propagation')}</label>
-                        <p className="muted">{t('Disabling branch propagation does not disable hub learning, VNet connectivity, site links or ExpressRoute Global Reach. This is not a packet-filtering guarantee.')}</p>
-                        <button type="button" className="aznet-btn" onClick={() => {
-                          setRouteMapSiteId(undefined); setRouteMapArsId(undefined); setRouteMapHubId(hub.id)
-                        }}>{t('Edit Hub Route Maps')}</button>
-                      </div>
+                      <Suspense key={hub.id} fallback={null}><HubConfiguration hub={hub} topology={topology}
+                        commit={commitTopology} onAttach={(vnetId) => attachVnetToHub(vnetId, hub.id)}
+                        focusFirewall={firewallEditorHubId === hub.id} initialOpen={guidanceNavigation}
+                        learningAnchor={guidanceAnchor('hub-editor', hub.id)} onFirewallSnat={() => setSnatHubId(hub.id)}
+                        onError={setWorkspaceNotice} onClose={() => setActiveTab(null)} /></Suspense>
                     ))}
 
                 {/* Node Labels & Annotations (scoped to selected node #47) */}
+                <InspectorSection title={t('Node labels and annotations')} summary={t('Optional diagram labels')} initialOpen={false}>
                 <div className="aznet-card" data-testid="aznet-node-labels-editor">
-                  <h3>Node Label & Annotation</h3>
+                  <h3 hidden={workspaceSession?.presentationPreview}>Node Label & Annotation</h3>
                   <p style={{ margin: '0 0 8px 0', fontSize: 12, color: 'var(--text)' }}>
                     Optional text label displayed as an annotation badge below the selected node.
                   </p>
@@ -6023,183 +4971,37 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                     </div>
                   ))}
                 </div>
-              </>
+                </InspectorSection>
+              </div>
               )
             })()}
 
             {/* TAB 5: AZURE CAPTURE IMPORT, EFFECTIVE-ROUTE COMPARISON & BICEP EXPORT */}
             {activeTab === 'azure' && (
-              <>
-                {captureObservations?.vngBgpPeerStatus && <Suspense fallback={null}>
-                  <GatewayBgpNeighborsPanel observations={captureObservations} />
-                </Suspense>}
-                {(captureObservations?.arsLearnedRoutes || captureObservations?.arsAdvertisedRoutes) && <Suspense fallback={null}>
-                  <CapturedArsRoutesPanel observations={captureObservations!} />
-                </Suspense>}
-                <div className="aznet-card" data-testid="aznet-azure-capture-card">
-                  <h3>1. Azure Live Capture & Effective-Route Comparison</h3>
-                  <p style={{ margin: '0 0 8px 0', fontSize: 12, color: 'var(--text)' }}>
-                    Capture a live Azure resource group (VNets, Subnets, Peerings, UDRs, Route
-                    Server, Gateways, and NIC Effective Routes — including a proxy subnet sharing{' '}
-                    <code>GatewaySubnet</code>&apos;s route table) using the read-only PowerShell
-                    collector:
-                  </p>
-                  <pre
-                    style={{
-                      margin: '0 0 8px 0',
-                      padding: 8,
-                      background: 'var(--surface-muted)',
-                      color: 'var(--text-muted)',
-                      borderRadius: 6,
-                      fontSize: 11,
-                      overflowX: 'auto',
-                    }}
-                  >
-                    {`pwsh ./scripts/collect-azure-network.ps1 -ResourceGroupName <rg> -IncludeEffectiveRoutes -OutputFile azure-network-capture.json`}
-                  </pre>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <a
-                      className="aznet-btn"
-                      href="/scripts/collect-azure-network.ps1"
-                      download="collect-azure-network.ps1"
-                      style={{ textDecoration: 'none' }}
-                    >
-                      ⬇ Download Collector Script (.ps1)
-                    </a>
-                    <button
-                      type="button"
-                      className="aznet-btn aznet-btn-primary"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      ⬆ Import Capture as Topology + Compare
-                    </button>
-                    <button
-                      type="button"
-                      className="aznet-btn"
-                      onClick={() => compareFileInputRef.current?.click()}
-                    >
-                      🔍 Compare Capture Against Current Topology
-                    </button>
-                  </div>
-
-                  {captureNotices.length > 0 && (
-                    <div
-                      style={{
-                        marginTop: 8,
-                        padding: 8,
-                        background: 'var(--surface)',
-                        borderRadius: 6,
-                        border: '1px solid var(--border)',
-                        fontSize: 11.5,
-                      }}
-                    >
-                      <strong>Import Notices:</strong>
-                      <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
-                        {captureNotices.map((n, idx) => (
-                          <li key={idx}>{n}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {captureComparison && (
-                    <div style={{ marginTop: 10 }} data-testid="aznet-comparison-report">
-                      <div
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          marginBottom: 6,
-                        }}
-                      >
-                        <strong>
-                          NIC Effective Route Comparison ({captureComparison.totalMatchedRoutes}{' '}
-                          matched, {captureComparison.totalMismatchedRoutes} mismatched
-                          {captureComparison.totalUnknownRoutes > 0 && `, ${captureComparison.totalUnknownRoutes} unassessed`})
-                        </strong>
-                      </div>
-                      {captureComparison.subnetComparisons.map((nic) => (
-                        <div
-                          key={nic.nicName}
-                          style={{
-                            marginBottom: 8,
-                            padding: 8,
-                            background: 'var(--surface)',
-                            borderRadius: 6,
-                            border: `1px solid ${nic.coverage === 'complete' && nic.mismatchCount === 0 ? 'var(--success)' : 'var(--border)'}`,
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                              marginBottom: 4,
-                              fontSize: 12,
-                            }}
-                          >
-                            <span>
-                              <strong>{nic.nicName}</strong> · {nic.vnetName}/{nic.subnetName}{' '}
-                              {nic.proxyForGatewaySubnet && (
-                                <span className="aznet-badge info">GatewaySubnet Proxy</span>
-                              )}
-                            </span>
-                            <span
-                              className={`aznet-badge ${nic.coverage !== 'complete' ? 'info' : nic.mismatchCount === 0 ? 'ok' : 'error'}`}
-                            >
-                              {nic.coverage !== 'complete'
-                                ? `COVERAGE ${nic.coverage.toUpperCase()} (${nic.matchedCount} matched)`
-                                : nic.mismatchCount === 0
-                                ? `MATCHED (${nic.matchedCount})`
-                                : `${nic.mismatchCount} DIFF`}
-                            </span>
-                          </div>
-                          <table className="aznet-route-table">
-                            <thead>
-                              <tr>
-                                <th>Status</th>
-                                <th>Prefix</th>
-                                <th>Azure Observed</th>
-                                <th>Simulator Predicted</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {nic.rows.map((d, idx) => (
-                                <tr key={idx}>
-                                  <td>
-                                    <span className={`aznet-badge ${d.assessment === 'unknown' ? 'info' : d.matched ? 'ok' : 'error'}`}>
-                                      {d.assessment === 'unknown' ? 'unassessed' : d.matched ? 'match' : 'diff'}
-                                    </span>
-                                  </td>
-                                  <td>
-                                    <code>{d.prefix}</code>
-                                  </td>
-                                  <td>
-                                    {`${d.azureSource} → ${d.azureNextHopType}${
-                                      d.azureNextHopIp ? ` (${d.azureNextHopIp})` : ''
-                                    } [${d.azureState}]`}
-                                  </td>
-                                  <td>
-                                    {`${d.simSource} → ${d.simNextHopType}${
-                                      d.simNextHopIp ? ` (${d.simNextHopIp})` : ''
-                                    } [${d.simState}]`}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <Suspense fallback={<p role="status">{t('Loading workspace…')}</p>}><AzBicepExport topology={topology} /></Suspense>
-              </>
+              <Suspense fallback={<p role="status">{t('Loading workspace…')}</p>}><AzurePanel
+                topology={topology} simulation={simulation} observations={captureObservations} comparison={captureComparison}
+                notices={captureNotices} stale={captureRevision !== baselineRevision}
+                onCaptured={(observations, comparison, warnings) => {
+                  setCaptureObservations(observations); setCaptureComparison(comparison); setCaptureNotices(warnings); setCaptureRevision(baselineRevision)
+                }} onComparison={(report) => { setCaptureComparison(report); setCaptureRevision(baselineRevision) }}
+                onImportFile={() => fileInputRef.current?.click()} onCompareFile={() => compareFileInputRef.current?.click()} /></Suspense>
             )}
           </div>
         </CanvasOverlay>}
+        </WorkspaceTabPanel>
       </div>
+
+      {udrManager && <Suspense fallback={null}><UdrTableManager topology={topology} request={udrManager} commit={commitTopology}
+        onClose={() => setUdrManager(undefined)} /></Suspense>}
+      {cloneVnetId && <Suspense fallback={null}><CloneVnetDialog key={cloneVnetId} topology={topology} sourceId={cloneVnetId}
+        onClose={() => setCloneVnetId(undefined)} onClone={copy => {
+          if (!('gateways' in copy)) return false
+          const errors = validateAzNetTopology({ ...topology, vnets: [...topology.vnets, copy] })
+          if (errors.length) throw new Error(errors.join(' '))
+          const committed = commitTopology(draft => { draft.vnets.push(copy) })
+          if (committed) setSelected({ kind: 'vnet', vnetId: copy.id })
+          return committed
+        }} /></Suspense>}
 
       {sampleGalleryOpen && <Suspense fallback={null}><SampleGallery entries={visibleCatalogEntries} currentId={sampleId} testIdPrefix="aznet"
         hasWorkspace={topology.name !== 'Empty Topology' || !!(topology.vnets.length || topology.vwanHubs.length || topology.sites.length || topology.erLocations.length || topology.udrTables.length || topology.routeMaps?.length || topology.vnetPeerings.length || topology.erLinks.length || topology.vpnConnections.length || topology.siteLinks.length)}

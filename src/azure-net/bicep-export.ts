@@ -6,6 +6,8 @@ import { natGatewayForSubnet, validateInventory } from '../inventory'
 import { generateConnectivityBicep } from '../connectivity-bicep'
 import { validateSubnetPeeringScopes } from './subnet-peering'
 import { parseVnetBgpCommunities, vnetCommunityHelp } from '../vnet-communities'
+import { coexistenceFindings } from './coexistence'
+import { resolveUdrRegion, udrAssociationFindings, udrRegionKey } from './udr-regions'
 
 export interface AzNetBicepOptions {
   defaultLocation?: string
@@ -28,7 +30,7 @@ function escapeBicepString(value: string): string {
 }
 
 function resolveVnetLocation(vnet: AzVNet, fallback: string): string {
-  return canonicalLocation(vnet.region) || fallback || 'swedencentral'
+  return udrRegionKey(vnet.region) || fallback || 'swedencentral'
 }
 
 export function generateAzNetBicep(
@@ -38,15 +40,33 @@ export function generateAzNetBicep(
   validateInventory(topology)
   const peeringErrors = validateSubnetPeeringScopes(topology)
   if (peeringErrors.length) throw new Error(peeringErrors.join(' '))
+  const regionErrors = udrAssociationFindings(topology).map((finding) => finding.summary)
+  for (const table of topology.udrTables) {
+    if (!resolveUdrRegion(topology, table)) regionErrors.push(`Route table "${table.name}" requires an explicit region before Bicep export.`)
+  }
+  if (regionErrors.length) throw new Error(regionErrors.join(' '))
   const defaultLoc =
     canonicalLocation(options.defaultLocation ?? '') ||
-    canonicalLocation(topology.vnets[0]?.region ?? '') ||
+    udrRegionKey(topology.vnets[0]?.region) ||
     'swedencentral'
   const includeGateways = options.includeGateways ?? true
   const includeRouteServers = options.includeRouteServers ?? true
 
   const warnings: string[] = []
-  for (const vnet of topology.vnets) parseVnetBgpCommunities(vnet.bgpCommunities)
+  if (topology.vpnConnections.some((connection) => connection.underlay || connection.useLocalAzureIpAddress)) {
+    throw new Error('VPN over ER private endpoints and underlay dependencies are not deployed by this Bicep starter. Preserve native JSON; exporting an ordinary public VPN would not be equivalent.')
+  }
+  if (topology.erLinks.some((link) => link.advertisedPrefixes !== undefined)
+    || topology.vpnConnections.some((connection) => connection.advertisedPrefixes !== undefined)) {
+    warnings.push('Transport-specific site advertised-prefix selections require on-premises router configuration; this Bicep starter does not deploy those policies.')
+  }
+  warnings.push(...coexistenceFindings(topology).map((finding) => `${finding.summary} ${finding.remediation}`))
+  for (const vnet of topology.vnets) {
+    parseVnetBgpCommunities(vnet.bgpCommunities)
+    if (vnet.appliances.filter((app) => app.kind === 'azure-firewall').length > 1) {
+      throw new Error(`VNet "${vnet.name}" supports only one Azure Firewall.`)
+    }
+  }
   if (topology.vnets.some((vnet) => vnet.bgpCommunities)) warnings.push(vnetCommunityHelp)
   if (topology.vnets.some((vnet) => vnet.vwanHubAttachment?.staticRoutes?.length)) {
     warnings.push('Virtual WAN VNet-connection static routes and their propagation are not deployed by this Bicep starter. Preserve native JSON; this is not an equivalent indirect-spoke deployment.')
@@ -128,7 +148,7 @@ export function generateAzNetBicep(
 
     lines.push(`resource ${sym} 'Microsoft.Network/routeTables@2024-05-01' = {`)
     lines.push(`  name: '${escapeBicepString(rt.name)}'`)
-    lines.push(`  location: location`)
+    lines.push(`  location: '${escapeBicepString(resolveUdrRegion(topology, rt)!)}'`)
     lines.push(`  properties: {`)
     lines.push(`    disableBgpRoutePropagation: ${rt.disableBgpRoutePropagation ? 'true' : 'false'}`)
     if (enabledRoutes.length === 0) {
@@ -331,8 +351,9 @@ export function generateAzNetBicep(
         list.push(gwSym)
         gatewaySymbolsByVnet.set(vnet.id, list)
 
-        const skuName = gw.kind === 'ExpressRoute' ? 'ErGw1AZ' : 'VpnGw1AZ'
-        const skuTier = gw.kind === 'ExpressRoute' ? 'ErGw1AZ' : 'VpnGw1AZ'
+        const skuName = gw.sku?.trim() || (gw.kind === 'ExpressRoute' ? 'ErGw1AZ' : 'VpnGw1AZ')
+        const skuTier = skuName
+        if (!gw.sku?.trim()) warnings.push(`Gateway '${gw.name}' has unspecified SKU; this starter defaults to ${skuName}, not an observed Azure SKU.`)
 
         lines.push(`resource ${gwSym} 'Microsoft.Network/virtualNetworkGateways@2024-05-01' = {`)
         lines.push(`  name: '${escapeBicepString(gw.name)}'`)
@@ -340,7 +361,11 @@ export function generateAzNetBicep(
         lines.push(`  properties: {`)
         lines.push(`    gatewayType: '${gw.kind}'`)
         if (gw.kind === 'Vpn') {
-          lines.push(`    vpnType: 'RouteBased'`)
+          lines.push(`    vpnType: '${gw.vpnType ?? 'RouteBased'}'`)
+          if (!gw.vpnType) warnings.push(`VPN gateway '${gw.name}' has unspecified routing type; this starter defaults to RouteBased, not an observed Azure configuration.`)
+          const generation = gw.vpnGatewayGeneration ?? (/^VpnGw[45](AZ)?$/.test(skuName) ? 'Generation2' : 'Generation1')
+          lines.push(`    vpnGatewayGeneration: '${generation}'`)
+          if (!gw.vpnGatewayGeneration) warnings.push(`VPN gateway '${gw.name}' has unspecified generation; this starter defaults to ${generation}, not an observed generation.`)
           lines.push(`    activeActive: ${activeActive ? 'true' : 'false'}`)
           lines.push(`    enableBgp: ${gw.bgpEnabled ? 'true' : 'false'}`)
           if (gw.bgpEnabled) {
@@ -350,8 +375,8 @@ export function generateAzNetBicep(
           }
         }
         lines.push(`    sku: {`)
-        lines.push(`      name: '${skuName}'`)
-        lines.push(`      tier: '${skuTier}'`)
+        lines.push(`      name: '${escapeBicepString(skuName)}'`)
+        lines.push(`      tier: '${escapeBicepString(skuTier)}'`)
         lines.push(`    }`)
         lines.push(`    ipConfigurations: [`)
         lines.push(`      {`)

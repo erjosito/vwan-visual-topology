@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { openLearning } from './learning-helpers'
 import AxeBuilder from '@axe-core/playwright'
 import { example } from '../src/model'
 
@@ -64,19 +65,22 @@ for (const language of ['en', 'ja']) {
     test(`${language} ${width}px: loaded practice VNets and subnets are independent accessible controls`, async ({ page }) => {
       await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 })
       await page.goto('/?mode=full')
-      await page.getByTestId('learning-open').click()
+      await openLearning(page)
       const sidebar = page.getByTestId('learning-sidebar')
       await sidebar.getByRole('button', { name: 'Load practice network', exact: true }).click()
       await sidebar.getByRole('button', { name: 'Open protected practice workspace', exact: true }).click()
-      await expect(sidebar.locator('[data-task-id="private-link.load"]')).toHaveCount(0)
+      await sidebar.getByRole('button', { name: 'Show me where', exact: true }).click()
+      await expect(sidebar.getByTestId('learning-debrief')).toBeVisible()
       await page.locator('header [data-language-selector]').selectOption(language)
       await page.getByLabel('Theme', { exact: true }).selectOption(width === 390 ? 'dark' : 'light')
-      const card = page.getByTestId('aznet-vnet-a')
-      const header = page.getByTestId('aznet-select-vnet-a')
-      const subnet = page.getByTestId('aznet-subnet-a-work')
+      const card = page.getByTestId('aznet-vnet-app')
+      const header = page.getByTestId('aznet-select-vnet-app')
+      const subnet = page.getByTestId('aznet-subnet-app-work')
       await expect(card).toHaveAttribute('role', 'group')
       await expect(card.locator('[role="button"] [role="button"]')).toHaveCount(0)
       expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])
+      await sidebar.getByRole('button', { name: language === 'ja' ? '次へ' : 'Next', exact: true }).click()
+      await expect(sidebar.locator('[data-task-id="v2-peering.inspect-local"]')).toHaveCount(0)
       await header.focus()
       await page.keyboard.press('Tab')
       await expect(subnet).toBeFocused()

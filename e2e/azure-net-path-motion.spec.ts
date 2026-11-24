@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { createEmptyAzNetTopology } from '../src/azure-net/model'
+import { learningAnchor, loadLearningNetwork, openLearning } from './learning-helpers'
 
 function topology(blockPeering = false) {
   const result = createEmptyAzNetTopology()
@@ -190,3 +191,56 @@ test('failed peering crossings never animate an untraversed link', async ({ page
     flows.flatMap((flow) => JSON.parse(flow.getAttribute('data-segments')!) as { id: string }[]))
   expect(segments.some((segment) => segment.id === 'peer')).toBe(false)
 })
+
+for (const preview of [false, true]) {
+  test(`${preview ? 'default' : 'legacy'} presentation preserves native path motion in protected practice`, async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 })
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
+    await page.addInitScript((value) => localStorage.setItem('aznet-ui-preview:v1', String(value)), preview)
+    await trace(page, 'full')
+    await expect(page.locator('.path-flow')).toHaveCount(2)
+    const normalSegments = await page.locator('.path-flow').evaluateAll(flows => flows.map(flow => flow.getAttribute('data-segments')))
+    const normal = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
+    await page.getByRole('button', { name: 'Close Path explorer', exact: true }).click()
+    await openLearning(page)
+    await loadLearningNetwork(page)
+    await expect(page.locator('.path-flow-circle')).toHaveCount(0)
+    await openMenu(page, 'aznet-select-vnet-app')
+    await learningAnchor(page, 'peer-menu', 'app').click()
+    await learningAnchor(page, 'peer-target', 'app', 'partner').click()
+    await openMenu(page, 'aznet-subnet-app-work')
+    await page.getByRole('menuitem', { name: 'Open path explorer', exact: true }).click()
+    await page.getByTestId('aznet-trace-dest-select').selectOption('subnet:partner:partner-work')
+    await page.getByTestId('aznet-run-trace-btn').click()
+    await expect(page.locator('.path-flow')).toHaveCount(2)
+    const forward = page.locator('.path-flow[data-direction="forward"]')
+    const reverse = page.locator('.path-flow[data-direction="return"]')
+    await expect(forward).toHaveAttribute('data-segments', /"from":"vnet:app","to":"vnet:partner"/)
+    await expect(reverse).toHaveAttribute('data-segments', /"from":"vnet:partner","to":"vnet:app"/)
+    const circle = forward.locator('circle').first()
+    const position = () => circle.evaluate((node) => {
+      const { e: x, f: y } = node.getScreenCTM()!
+      return { x, y }
+    })
+    const start = await position()
+    await expect.poll(async () => {
+      const current = await position()
+      return Math.hypot(current.x - start.x, current.y - start.y)
+    }).toBeGreaterThan(5)
+    const peering = page.locator('[data-testid^="aznet-peering-"]').locator('.aznet-edge-path')
+    await expect(peering).toHaveAttribute('stroke', 'var(--forward)')
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await expect(page.locator('.path-flow-circle')).toHaveCount(0)
+    await expect(peering).toHaveAttribute('stroke', 'var(--forward)')
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
+    await expect(page.locator('.path-flow')).toHaveCount(2)
+    await page.getByTestId('aznet-clear-highlights-btn').click()
+    await expect(page.locator('.path-flow')).toHaveCount(0)
+    await page.getByRole('button', { name: 'Close Path explorer', exact: true }).click()
+    await page.getByTestId('practice-workspace-bar').getByRole('button', { name: 'Return to my design', exact: true }).click()
+    await expect(page.getByTestId('aznet-subnet-workload')).toBeVisible()
+    await expect(page.locator('.path-flow')).toHaveCount(2)
+    expect(await page.locator('.path-flow').evaluateAll(flows => flows.map(flow => flow.getAttribute('data-segments')))).toEqual(normalSegments)
+    expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(normal)
+  })
+}

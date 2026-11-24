@@ -1,20 +1,34 @@
 import { expect, test, type Page } from '@playwright/test'
 import { scenarioBundle } from '../src/learning/scenario-course'
 import { exampleCourse } from '../src/learning/course-examples'
+import { curriculumV2Bundle } from '../src/learning/curriculum-v2'
 import { orderedTasks } from '../src/learning/runner'
 import { guidedProgressKey } from '../src/learning/progress-ledger'
 import { practiceWorkspaceKey } from '../src/learning/practice-workspace'
 import { sidebarLabels } from '../src/learning/sidebar-content'
 import { runnerLabels } from '../src/learning/runner-content'
+import { statusLabels } from '../src/learning/status-content'
+import AxeBuilder from '@axe-core/playwright'
+import { createEmptyAzNetTopology } from '../src/azure-net/model'
 import { loadLanguage, translate } from '../src/messages'
 import '../src/packet-messages-ja'
 import '../src/network-detail-messages-ja'
-import { completeLearningTasks, createLessonPeering, learningAnchor, learningOptions, learningSidebar, loadLearningNetwork } from './learning-helpers'
+import { archivedScenarioStorageState, openLearning, learningAdvancedOptions, advanceLearningTask, completeLearningTasks, createLessonPeering, learningAnchor, learningOptions, learningSidebar, loadLearningNetwork } from './learning-helpers'
+import { openWorkspaceActions } from './document-action-helpers'
+
+test.use({ storageState: archivedScenarioStorageState() })
 
 async function show(page: Page, taskId: string, guidanceId: string, language: 'en' | 'ja') {
   const task = scenarioBundle.lessons.flatMap((lesson) => lesson.tasks).find((task) => task.id === taskId)!
-  await learningSidebar(page).getByRole('button', { name: sidebarLabels.show[language], exact: true })
-    .nth(task.guidanceIds.indexOf(guidanceId)).click()
+  expect(task.guidanceIds).toContain(guidanceId)
+  const panel = learningSidebar(page)
+  const button = panel.getByTestId(`learning-guide-${guidanceId}`)
+  if (!await button.isVisible()) {
+    await learningOptions(page, language)
+    const navigation = panel.getByText(sidebarLabels.navigationHelp[language], { exact: true })
+    if (!await navigation.evaluate((element) => (element.parentElement as HTMLDetailsElement).open)) await navigation.click()
+  }
+  await button.click()
 }
 async function openTable(page: Page, taskId: string, tableId: string, language: 'en' | 'ja') {
   const cue = scenarioBundle.guidance.find((entry) => entry.id.startsWith(taskId.split('.')[0])
@@ -55,10 +69,11 @@ async function repair(page: Page, id: string, language: 'en' | 'ja') {
   }
   if (id === 'private-link') await createLessonPeering(page, language)
   if (id === 'inspection-bypass') {
-    for (const [tableId, prefix] of [['application-policy', '10.22.0.0/16'], ['partner-policy', '10.21.0.0/16']]) {
+    for (const [tableId, prefix] of [['partner-policy', '10.21.0.0/16']]) {
       const card = await openTable(page, taskId, tableId, language)
       await card.getByRole('button', { name: '+ Add UDR Row', exact: true }).click()
       await card.locator('tbody tr').last().locator('input[type="text"]').nth(1).fill(prefix)
+      await card.locator('tbody tr').last().locator('input[type="text"]').nth(2).fill('10.20.1.4')
     }
   }
   if (id === 'colocated-chain') {
@@ -84,9 +99,7 @@ async function repair(page: Page, id: string, language: 'en' | 'ja') {
     await group.getByRole('checkbox', { name: 'Default', exact: true }).check()
   }
   if (id === 'tiered-incident') {
-    await openTable(page, taskId, 'indirect-egress', language)
-    await learningAnchor(page, 'udr-route', 'leaf', 'leaf-work', 'indirect-egress', 'partner-service').getByRole('checkbox').check()
-    await expect(learningSidebar(page).getByTestId('learning-feedback')).toContainText(runnerLabels.requirements[language])
+    await expect(learningSidebar(page).getByTestId('learning-debrief')).toHaveCount(0)
     await openTable(page, taskId, 'inspection-onward', language)
     await learningAnchor(page, 'udr-route', 'hub', 'hub-work', 'inspection-onward', 'indirect-return')
       .locator('input[type="text"]').nth(2).fill('10.21.3.4')
@@ -94,6 +107,25 @@ async function repair(page: Page, id: string, language: 'en' | 'ja') {
   if (id === 'ha-return-path') {
     const card = await openTable(page, taskId, 'remote-steering', language)
     await card.locator('tbody tr').first().locator('input[type="text"]').nth(2).fill('10.80.3.10')
+  }
+  if (id === 'routing-handover') {
+    await openTable(page, taskId, 'service-policy', language)
+    await learningAnchor(page, 'udr-route', 'supplier', 'supplier-api', 'service-policy', 'change-window').getByRole('checkbox').uncheck()
+  }
+}
+
+async function configureStage(page: Page, taskId: string, language: 'en' | 'ja') {
+  if (taskId === 'inspection-bypass.forward') {
+    const card = await openTable(page, taskId, 'application-policy', language)
+    await card.getByRole('button', { name: '+ Add UDR Row', exact: true }).click()
+    const inputs = card.locator('tbody tr').last().locator('input[type="text"]')
+    await inputs.nth(1).fill('10.22.0.0/16')
+    await inputs.nth(2).fill('10.20.1.4')
+    await inputs.nth(2).press('Tab')
+  }
+  if (taskId === 'tiered-incident.entry') {
+    await openTable(page, taskId, 'indirect-egress', language)
+    await learningAnchor(page, 'udr-route', 'leaf', 'leaf-work', 'indirect-egress', 'partner-service').getByRole('checkbox').check()
   }
 }
 
@@ -110,17 +142,265 @@ async function configureHybrid(page: Page, taskId: string, language: 'en' | 'ja'
 }
 
 for (const language of ['en', 'ja'] as const) {
+  test(`${language}: contextual first exercise awards automatically but keeps teaching and documentation until Next`, async ({ page }) => {
+    test.setTimeout(90_000)
+    await page.goto('/?mode=full')
+    await expect(page.getByTestId('aznet-diagram-svg')).toBeVisible()
+    await page.locator('header [data-language-selector]').selectOption(language)
+    await openLearning(page)
+    const panel = learningSidebar(page)
+    await expect(panel.getByTestId('learning-scenario-context')).toHaveText(scenarioBundle.lessons[0].context![language])
+    await loadLearningNetwork(page, language)
+    await page.waitForTimeout(2200)
+    await expect(panel.getByTestId('learning-debrief')).toHaveCount(0)
+    await expect(page.getByTestId('learning-status')).toContainText(language === 'en' ? '0 points' : '0 ポイント')
+    await expect(panel.getByTestId('learning-scenario-progress')).toContainText(`0 / ${scenarioBundle.lessons[0].taskOrder.length}`)
+    await show(page, 'private-link.load', 'private-link.local-guide', language)
+    await expect(panel.getByTestId('learning-debrief')).toBeVisible()
+    await expect(panel.getByTestId('learning-debrief')).toContainText('VnetLocal')
+    await expect(panel.getByTestId('learning-task-instruction')).toHaveText(scenarioBundle.lessons[0].tasks[0].instruction[language])
+    await expect(panel.getByTestId('learning-scenario-progress')).toContainText(`1 / ${scenarioBundle.lessons[0].taskOrder.length}`)
+    await page.waitForTimeout(2200)
+    await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'private-link.load')
+    await advanceLearningTask(page, language)
+    await expect(panel.getByTestId('learning-scenario-context')).not.toBeVisible()
+    await panel.getByText(runnerLabels.scenarioBackground[language], { exact: true }).click()
+    await expect(panel.getByTestId('learning-scenario-context')).toBeVisible()
+    await panel.getByText(runnerLabels.scenarioBackground[language], { exact: true }).click()
+    await expect(panel.getByTestId('learning-task')).toContainText(language === 'en' ? 'Effective routes' : '有効なルート')
+    await expect(panel.getByTestId('learning-task')).toContainText('10.22.0.0/16')
+    await expect(panel.getByTestId('learning-task')).not.toContainText('Record the inspection')
+    await show(page, 'private-link.inspect', 'private-link.before-guide', language)
+    const debrief = panel.getByTestId('learning-debrief')
+    await expect(debrief).toContainText('System')
+    await expect(debrief).toContainText('VNetPeering')
+    await expect(debrief).toContainText('10.22.1.4')
+    await expect(debrief).not.toContainText('BGP')
+    await expect(panel.getByTestId('learning-celebration')).toContainText('+5')
+    const awards = await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)
+    expect(JSON.parse(awards!).completions).toHaveLength(2)
+    await page.context().route('https://learn.microsoft.com/**', (route) => route.fulfill({ contentType: 'text/html', body: '<title>Microsoft Learn reference fixture</title>' }))
+    const reference = debrief.getByRole('link').first()
+    await expect(reference).toHaveAttribute('target', '_blank')
+    await expect(reference).toHaveAttribute('rel', 'noopener noreferrer')
+    const [documentation] = await Promise.all([page.waitForEvent('popup'), reference.click()])
+    await expect(documentation).toHaveURL(scenarioBundle.lessons[0].tasks[1].debrief!.references[0].url)
+    expect(await documentation.evaluate(() => window.opener)).toBeNull()
+    await documentation.close()
+    await page.bringToFront()
+    await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'private-link.inspect')
+    await expect(debrief).toBeVisible()
+    await panel.getByRole('button', { name: sidebarLabels.pause[language], exact: true }).click()
+    await openLearning(page)
+    await expect(debrief).toBeVisible()
+    expect(await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)).toBe(awards)
+    await panel.getByRole('button', { name: runnerLabels.next[language], exact: true }).focus()
+    await page.keyboard.press('Enter')
+    await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'private-link.address-range')
+    await expect(panel.locator('#learning-task')).toBeFocused()
+    expect(await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)).toBe(awards)
+    const practice = await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)
+    await panel.getByRole('button', { name: runnerLabels.back[language], exact: true }).click()
+    await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'private-link.inspect')
+    await expect(debrief).toContainText('VNetPeering')
+    await expect(panel.locator('#learning-debrief-title')).toBeFocused()
+    await panel.getByRole('button', { name: runnerLabels.next[language], exact: true }).click()
+    await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'private-link.address-range')
+    expect(await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)).toBe(practice)
+    const membership = scenarioBundle.checks.find((entry) => entry.id === 'private-link.address-check')!
+    if (membership.kind !== 'quiz.answered') throw new Error('Membership quiz required')
+    const wrong = membership.params.choices.find((choice) => choice.id !== membership.params.correctChoiceId)!
+    await panel.getByRole('radio', { name: wrong.text[language], exact: true }).focus()
+    await page.keyboard.press('Space')
+    await panel.getByRole('button', { name: runnerLabels.submit[language], exact: true }).focus()
+    await page.keyboard.press('Enter')
+    await expect(panel.getByTestId('learning-feedback')).toContainText(wrong.feedback[language])
+    expect(await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)).toBe(awards)
+    await completeLearningTasks(page, scenarioBundle.lessons[0].tasks.length - 3, language)
+    const connected = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!).document.topology.vnetPeerings, practiceWorkspaceKey)
+    await completeLearningTasks(page, 1, language)
+    await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'inspection-bypass.load')
+    await expect(panel.getByTestId('learning-task')).toContainText(language === 'en' ? 'hub VNet' : 'ハブ VNet')
+    await expect(debrief.getByRole('heading', { name: runnerLabels.preparation[language], exact: true })).toBeVisible()
+    await expect(debrief.getByRole('heading', { name: runnerLabels.learned[language], exact: true })).toHaveCount(0)
+    await expect(panel.getByTestId('learning-scenario-progress')).toContainText(`1 / ${scenarioBundle.lessons[1].taskOrder.length}`)
+    await page.waitForTimeout(2200)
+    await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'inspection-bypass.load')
+    const extended = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!).document.topology, practiceWorkspaceKey)
+    expect(extended.vnetPeerings).toEqual(connected)
+    expect(extended.vnets.map((vnet: { id: string }) => vnet.id)).toEqual(['a', 'b', 'c', 'hub'])
+    expect(extended.udrTables.map((table: { routes: unknown[] }) => table.routes)).toEqual([[], []])
+    await panel.getByRole('button', { name: runnerLabels.back[language], exact: true }).click()
+    await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'private-link.explain')
+    await expect(panel.getByTestId('learning-scenario-progress')).toContainText(`${scenarioBundle.lessons[0].taskOrder.length} / ${scenarioBundle.lessons[0].taskOrder.length}`)
+    await panel.getByRole('button', { name: runnerLabels.next[language], exact: true }).click()
+    await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'inspection-bypass.load')
+    expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!).document.topology, practiceWorkspaceKey)).toEqual(extended)
+    await advanceLearningTask(page, language)
+    await expect(panel.getByTestId('learning-task-instruction')).toContainText(language === 'en' ? 'You do not need to resolve those yet' : '今はそれらを解消する必要はありません')
+    for (const vnetId of ['a', 'b']) {
+      await expect(panel.getByTestId(`learning-guide-inspection-bypass.peer-${vnetId}`)).toBeVisible()
+      await expect(panel.getByRole('button', { name: sidebarLabels.show[language], exact: true })).toHaveCount(1)
+      await show(page, 'inspection-bypass.connect', `inspection-bypass.peer-${vnetId}`, language)
+      await learningAnchor(page, 'peer-menu', vnetId).click()
+      await learningAnchor(page, 'peer-target', vnetId, 'hub').click()
+    }
+    await expect(debrief).toContainText(language === 'en' ? 'this intermediate network is not ready to deploy' : 'この中間構成はデプロイの準備ができた状態ではなく')
+    await advanceLearningTask(page, language)
+    const applicationPolicy = await openTable(page, 'inspection-bypass.summary', 'application-policy', language)
+    await applicationPolicy.getByRole('button', { name: '+ Add UDR Row', exact: true }).click()
+    const inputs = applicationPolicy.locator('tbody tr').last().locator('input[type="text"]')
+    await inputs.nth(1).fill('10.0.0.0/8')
+    await inputs.nth(2).fill('10.20.1.4')
+    await inputs.nth(2).press('Tab')
+    await expect(panel.getByTestId('learning-guide-inspection-bypass.table-b-work')).toBeVisible()
+    await expect(panel.getByTestId('learning-guide-inspection-bypass.table-a-work')).toBeHidden()
+    await expect(panel.getByTestId('learning-debrief')).toHaveCount(0)
+  })
+
+  test(`${language}: repair has one primary guide, progressive hints and named secondary help without changing the network`, async ({ page }) => {
+    test.setTimeout(60_000)
+    const tasks = orderedTasks(scenarioBundle)
+    const completions = tasks.slice(0, tasks.findIndex(({ task }) => task.id === 'tiered-incident.load'))
+      .map(({ lesson, task }, revision) => ({
+        courseId: scenarioBundle.course.id, contentVersion: scenarioBundle.course.contentVersion, lessonId: lesson.id, taskId: task.id,
+        assessmentVersion: task.assessmentVersion, checkId: task.checkId, awardId: task.awardId, points: task.points,
+        title: task.title, sessionId: 'earlier-missions', revision, scope: 1, engineVersion: 'earlier',
+        completedAt: '2026-11-19T10:00:00.000Z',
+      }))
+    await page.addInitScript(({ key, completions }) => {
+      if (!JSON.parse(localStorage.getItem(key) ?? '{"completions":[]}').completions.length) {
+        localStorage.setItem(key, JSON.stringify({ version: 1, policyVersion: 1, completions }))
+      }
+    }, { key: guidedProgressKey, completions })
+    await page.goto('/?mode=full')
+    await page.locator('header [data-language-selector]').selectOption(language)
+    await openLearning(page)
+    await completeLearningTasks(page, 2, language)
+    const panel = learningSidebar(page)
+    await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'tiered-incident.entry')
+    await configureStage(page, 'tiered-incident.entry', language)
+    await expect(panel.getByTestId('learning-debrief')).toContainText(language === 'en' ? 'does not yet certify' : 'まだ認定していません')
+    await advanceLearningTask(page, language)
+    await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'tiered-incident.repair')
+    await expect(panel.getByRole('button', { name: sidebarLabels.show[language], exact: true })).toHaveCount(1)
+    const secondary = panel.getByTestId('learning-guide-tiered-incident.table-leaf-work')
+    await expect(secondary).toBeHidden()
+    const awards = await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)
+    const practice = await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)
+    const first = panel.getByTestId('learning-hint-1'), second = panel.getByTestId('learning-hint-2')
+    await expect(first.locator('p').first()).toBeHidden()
+    await expect(second.locator('summary')).toBeHidden()
+    await first.locator('summary').first().focus()
+    await page.keyboard.press('Enter')
+    await expect(first.locator('p').first()).toBeVisible()
+    await second.locator('summary').focus()
+    await page.keyboard.press('Enter')
+    await expect(second.locator('p')).toBeVisible()
+    await show(page, 'tiered-incident.repair', 'tiered-incident.table-hub-work', language)
+    await expect(learningAnchor(page, 'udr-route', 'hub', 'hub-work', 'inspection-onward', 'indirect-return')).toBeVisible()
+    await learningOptions(page, language)
+    await panel.getByText(sidebarLabels.navigationHelp[language], { exact: true }).click()
+    await expect(secondary).toHaveText(language === 'en'
+      ? 'Open Indirect workload / Workload routing policy.' : 'Indirect workload / Workload のルーティング ポリシーを開く。')
+    await secondary.focus()
+    await page.keyboard.press('Enter')
+    await expect(learningAnchor(page, 'udr-route', 'leaf', 'leaf-work', 'indirect-egress', 'partner-service')).toBeVisible()
+    await expect(panel.getByText(sidebarLabels.options[language], { exact: true }).locator('..')).not.toHaveAttribute('open', '')
+    expect(await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)).toBe(practice)
+    expect(await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)).toBe(awards)
+    await repair(page, 'tiered-incident', language)
+    await expect(panel.getByTestId('learning-debrief')).toBeVisible()
+    const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), guidedProgressKey)
+    expect(saved.completions).toHaveLength(JSON.parse(awards!).completions.length + 1)
+  })
+
+  test(`${language}: narrow quiz keeps radios beside readable answers and separates scenario progress`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 360, height: 740 })
+    await page.addInitScript(() => localStorage.setItem('aznet-theme', 'dark'))
+    await page.goto('/?mode=full')
+    await expect(page.getByTestId('aznet-diagram-svg')).toBeVisible()
+    await page.locator('header [data-language-selector]').selectOption(language)
+    await openLearning(page)
+    await completeLearningTasks(page, 2, language)
+    const panel = learningSidebar(page)
+    await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'private-link.address-range')
+    await expect(panel.getByTestId('learning-scenario-context')).not.toBeVisible()
+    await expect(panel.getByTestId('learning-scenario-progress')).toContainText(`2 / ${scenarioBundle.lessons[0].taskOrder.length}`)
+    await expect(panel.getByTestId('learning-scenario-progress')).toContainText(`${runnerLabels.remaining[language]}: ${scenarioBundle.lessons[0].taskOrder.length - 2}`)
+    const labels = panel.locator('.learning-choice')
+    await labels.first().scrollIntoViewIfNeeded()
+    expect(await panel.locator('fieldset').evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+    for (const label of await labels.all()) {
+      const radio = (await label.locator('input').boundingBox())!
+      const answer = (await label.locator('span').boundingBox())!
+      expect(radio.width).toBeLessThan(24)
+      expect(answer.x - radio.x - radio.width).toBeLessThan(12)
+      expect(answer.width).toBeGreaterThan(160)
+      expect(answer.height).toBeLessThan(28)
+    }
+    await panel.locator('fieldset').screenshot({ path: testInfo.outputPath('quiz-dark-narrow.png') })
+    const answer = panel.getByRole('radio', { name: '10.22.1.4', exact: true })
+    await answer.locator('..').click()
+    await expect(answer).toBeChecked()
+    const submit = panel.getByRole('button', { name: runnerLabels.submit[language], exact: true })
+    await expect(submit).toBeEnabled()
+    await answer.focus()
+    await page.keyboard.press('Tab')
+    await expect(submit).toBeFocused()
+    await page.keyboard.press('Enter')
+    await expect(panel.getByTestId('learning-debrief')).toBeVisible()
+    await expect(panel.getByTestId('learning-celebration')).toContainText('+10')
+    await expect(panel.getByTestId('learning-scenario-progress')).toContainText(`3 / ${scenarioBundle.lessons[0].taskOrder.length}`)
+    const completedAnswer = panel.getByTestId('learning-completed-answer')
+    await expect(completedAnswer).toContainText('10.22.1.4')
+    await expect(completedAnswer).toContainText(runnerLabels.completedAnswer[language])
+    expect(await completedAnswer.evaluate((element) =>
+      !!(element.compareDocumentPosition(element.parentElement!.querySelector('[data-testid="learning-debrief"]')!) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true)
+    await expect(panel.getByRole('radio')).toHaveCount(0)
+    await expect(panel.getByRole('button', { name: runnerLabels.submit[language], exact: true })).toHaveCount(0)
+    await advanceLearningTask(page, language)
+    await panel.getByRole('button', { name: runnerLabels.back[language], exact: true }).click()
+    await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'private-link.address-range')
+    await expect(completedAnswer).toContainText('10.22.1.4')
+    await expect(panel.getByRole('radio')).toHaveCount(0)
+    await expect(panel.getByTestId('learning-task-instruction')).toHaveText(
+      scenarioBundle.lessons[0].tasks.find((task) => task.id === 'private-link.address-range')!.instruction[language])
+  })
+
   test(`${language}: complete the scenario edition through real native controls and preserve the design`, async ({ page }) => {
-    test.setTimeout(360_000)
+    test.setTimeout(420_000)
     await page.goto('/?mode=full')
     await page.locator('header [data-language-selector]').selectOption(language)
     const original = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
-    await page.getByTestId('learning-open').click()
+    await openLearning(page)
     const panel = learningSidebar(page)
     for (const { lesson, task } of orderedTasks(scenarioBundle)) {
       await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', task.id)
       const check = scenarioBundle.checks.find((entry) => entry.id === task.checkId)!
-      if (check.kind === 'scenario.loaded') await loadLearningNetwork(page, language)
+      if (check.kind === 'scenario.loaded') {
+        if (lesson.id === scenarioBundle.course.lessonOrder[0]) await loadLearningNetwork(page, language)
+        else await expect.poll(() => page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? 'null')?.scenarioId, practiceWorkspaceKey)).toBe(lesson.scenarioId)
+        if (check.params.inspection) await panel.getByRole('button', { name: sidebarLabels.show[language], exact: true }).click()
+      }
+      if (task.id === 'inspection-bypass.connect') {
+        for (const vnetId of ['a', 'b']) {
+          await show(page, task.id, `inspection-bypass.peer-${vnetId}`, language)
+          await learningAnchor(page, 'peer-menu', vnetId).click()
+          await learningAnchor(page, 'peer-target', vnetId, 'hub').click()
+        }
+      }
+      if (task.id === 'inspection-bypass.summary') {
+        for (const tableId of ['application-policy', 'partner-policy']) {
+          const card = await openTable(page, task.id, tableId, language)
+          await card.getByRole('button', { name: '+ Add UDR Row', exact: true }).click()
+          const inputs = card.locator('tbody tr').last().locator('input[type="text"]')
+          await inputs.nth(1).fill('10.0.0.0/8')
+          await inputs.nth(2).fill('10.20.1.4')
+          await inputs.nth(2).press('Tab')
+        }
+      }
+      if (check.kind === 'udrs.configured' && task.id !== 'inspection-bypass.summary') await configureStage(page, task.id, language)
       if (check.kind === 'routes.inspected' || check.kind === 'control-routes.inspected') {
         if (task.id === 'ha-return-path.verify') await probeHa(page, task.id, language, 'symmetric')
         await panel.getByRole('button', { name: sidebarLabels.show[language], exact: true }).click()
@@ -128,7 +408,7 @@ for (const language of ['en', 'ja'] as const) {
       if (check.kind === 'connections.configured') {
         await configureHybrid(page, task.id, language)
       }
-      if (check.kind === 'requirements.satisfied' || check.kind === 'hub-associations.configured') {
+      if ((check.kind === 'requirements.satisfied' || check.kind === 'hub-associations.configured') && !task.id.endsWith('.connect')) {
         await repair(page, lesson.id, language)
       }
       if (check.kind === 'quiz.answered') {
@@ -137,6 +417,10 @@ for (const language of ['en', 'ja'] as const) {
         await panel.getByRole('radio', { name: answer.text[language], exact: true }).check()
         await panel.getByRole('button', { name: runnerLabels.submit[language], exact: true }).click()
       }
+      await expect(panel.getByTestId('learning-debrief')).toBeVisible({ timeout: 15_000 })
+      await expect(panel.getByTestId(task.debrief!.paragraphs[0][language] === task.instruction[language]
+        ? 'learning-task-instruction' : 'learning-debrief')).toContainText(task.debrief!.paragraphs[0][language])
+      await advanceLearningTask(page, language)
       await expect(panel.locator(`[data-task-id="${task.id}"]`)).toHaveCount(0)
     }
     await expect(panel.getByRole('heading', { name: runnerLabels.done[language], exact: true })).toBeVisible()
@@ -164,11 +448,13 @@ test('default mobile workspace reveals the scoped HA packet form without changin
     }))
   await page.addInitScript(({ key, completions }) => {
     localStorage.setItem('aznet-ui-preview:v1', 'true')
-    if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ version: 1, policyVersion: 1, completions }))
+    if (!JSON.parse(localStorage.getItem(key) ?? '{"completions":[]}').completions.length) {
+      localStorage.setItem(key, JSON.stringify({ version: 1, policyVersion: 1, completions }))
+    }
   }, { key: guidedProgressKey, completions })
   await page.setViewportSize({ width: 390, height: 1000 })
   await page.goto('/?mode=full')
-  await page.getByTestId('learning-open').click()
+  await openLearning(page)
   await expect(learningSidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', 'ha-return-path.load')
   await completeLearningTasks(page, 2)
   const awards = await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)
@@ -188,12 +474,14 @@ test('default mobile table guidance preserves practice and requires each exact m
     }))
   await page.addInitScript(({ key, completions }) => {
     localStorage.setItem('aznet-ui-preview:v1', 'true')
-    if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ version: 1, policyVersion: 1, completions }))
+    if (!JSON.parse(localStorage.getItem(key) ?? '{"completions":[]}').completions.length) {
+      localStorage.setItem(key, JSON.stringify({ version: 1, policyVersion: 1, completions }))
+    }
   }, { key: guidedProgressKey, completions })
   await page.setViewportSize({ width: 390, height: 1000 })
   await page.goto('/?mode=full')
-  await expect(page.getByTestId('learning-status')).toHaveAttribute('title', /Scenario edition · Black belt · 1825$/)
-  await page.getByTestId('learning-open').click()
+  await expect(page.getByTestId('learning-status')).toHaveAttribute('title', new RegExp(`Scenario edition · Black belt · ${completions.reduce((sum, task) => sum + task.points, 0)} points · Core belts completed$`))
+  await openLearning(page)
   await completeLearningTasks(page, 1)
   const before = await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)
   const awards = await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)
@@ -224,11 +512,12 @@ test('default mobile table guidance preserves practice and requires each exact m
   await expect(learningSidebar(page).getByTestId('learning-feedback')).toHaveCount(0)
   await routes.evaluate((element) => { element.scrollLeft = 0 })
   await expect(prefix).toBeInViewport()
+  await advanceLearningTask(page)
   await expect(learningSidebar(page).locator('[data-task-id="multihub-labels.compare"]')).toHaveCount(0)
   expect(await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)).toBe(before)
 })
 
-test('default mobile connection guidance never configures the assessed hybrid backup', async ({ page }) => {
+test('default mobile connection guidance never configures the assessed hybrid backup before explicit save', async ({ page }) => {
   const completions = orderedTasks(scenarioBundle).filter(({ lesson }) =>
     scenarioBundle.course.lessonOrder.indexOf(lesson.id) < scenarioBundle.course.lessonOrder.indexOf('hybrid-preference'))
     .map(({ lesson, task }, revision) => ({
@@ -239,12 +528,14 @@ test('default mobile connection guidance never configures the assessed hybrid ba
     }))
   await page.addInitScript(({ key, completions }) => {
     localStorage.setItem('aznet-ui-preview:v1', 'true')
-    if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ version: 1, policyVersion: 1, completions }))
+    if (!JSON.parse(localStorage.getItem(key) ?? '{"completions":[]}').completions.length) {
+      localStorage.setItem(key, JSON.stringify({ version: 1, policyVersion: 1, completions }))
+    }
   }, { key: guidedProgressKey, completions })
   await page.setViewportSize({ width: 390, height: 1000 })
   await page.goto('/?mode=full')
-  await expect(page.getByTestId('learning-status')).toHaveAttribute('title', /Scenario edition · Black belt · 1575$/)
-  await page.getByTestId('learning-open').click()
+  await expect(page.getByTestId('learning-status')).toHaveAttribute('title', new RegExp(`Scenario edition · Black belt · ${completions.reduce((sum, task) => sum + task.points, 0)} points · Core belts completed$`))
+  await openLearning(page)
   await completeLearningTasks(page, 2)
   const before = await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)
   const awards = await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)
@@ -253,6 +544,10 @@ test('default mobile connection guidance never configures the assessed hybrid ba
   await expect(page.getByTestId('aznet-hybrid-connection-editor').locator('input[name="enabled"]')).not.toBeChecked()
   expect(await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)).toBe(before)
   expect(await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)).toBe(awards)
+  const editor = page.getByTestId('aznet-hybrid-connection-editor')
+  await editor.locator('input[name="enabled"]').check()
+  await editor.getByRole('button', { name: 'Save connection routing', exact: true }).click()
+  await expect(learningSidebar(page).getByTestId('learning-debrief')).toBeVisible()
 })
 
 test('historical black belt stays intact across explicit edition opt-in, reload and return', async ({ page }) => {
@@ -263,13 +558,16 @@ test('historical black belt stays intact across explicit edition opt-in, reload 
     completedAt: '2026-11-16T12:00:00.000Z',
   }))
   await page.addInitScript(({ key, completions }) => {
-    if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ version: 1, policyVersion: 1, completions }))
+    if (!JSON.parse(localStorage.getItem(key) ?? '{"completions":[]}').completions.length) {
+      localStorage.setItem(key, JSON.stringify({ version: 1, policyVersion: 1, completions }))
+    }
   }, { key: guidedProgressKey, completions })
   await page.goto('/?mode=full')
   await expect(page.getByTestId('learning-status')).toContainText('Original edition - Black belt · 1325 points')
   const raw = await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)
   await page.getByTestId('learning-status').click()
   const details = page.getByTestId('learning-status-details')
+  await learningAdvancedOptions(page)
   await details.getByRole('button', { name: 'Switch to Scenario edition', exact: true }).click()
   await details.getByRole('button', { name: 'Cancel', exact: true }).click()
   expect(await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)).toBe(raw)
@@ -280,6 +578,7 @@ test('historical black belt stays intact across explicit edition opt-in, reload 
   await page.reload()
   await expect(page.getByTestId('learning-status')).toContainText('Scenario edition - White belt')
   await page.getByTestId('learning-status').click()
+  await learningAdvancedOptions(page)
   await details.getByRole('button', { name: 'Switch to Original edition', exact: true }).click()
   await details.getByRole('button', { name: 'Confirm edition switch', exact: true }).click()
   await expect(page.getByTestId('learning-status')).toContainText('Original edition - Black belt · 1325 points')
@@ -287,14 +586,61 @@ test('historical black belt stays intact across explicit edition opt-in, reload 
   expect(saved.completions).toEqual(completions)
 })
 
+test('revised curriculum opt-in preserves historical awards and practice until starter confirmation', async ({ page }) => {
+  test.setTimeout(90_000)
+  const completions = orderedTasks(exampleCourse).map(({ lesson, task }, revision) => ({
+    courseId: exampleCourse.course.id, contentVersion: 4, lessonId: lesson.id, taskId: task.id,
+    assessmentVersion: task.assessmentVersion, checkId: task.checkId, awardId: task.awardId, points: task.points,
+    title: task.title, sessionId: 'historical-session', revision, scope: 1, engineVersion: 'historical',
+    completedAt: '2026-11-16T12:00:00.000Z',
+  }))
+  await page.addInitScript(({ key, completions, enrollment }) => {
+    if (!JSON.parse(localStorage.getItem(key) ?? '{"completions":[]}').completions.length) {
+      localStorage.setItem(key, JSON.stringify({ version: 1, policyVersion: 1, enrollment, completions }))
+    }
+  }, { key: guidedProgressKey, completions, enrollment: scenarioBundle.course.id })
+  await page.goto('/?mode=full')
+  await expect(page.getByTestId('aznet-diagram-svg')).toBeVisible()
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBeTruthy()
+  const normal = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
+  await openLearning(page)
+  await completeLearningTasks(page, 2)
+  const practice = await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)
+  const previous = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), guidedProgressKey)
+  await page.getByTestId('learning-status').click()
+  await page.getByTestId('learning-curriculum-update').getByRole('button', { name: 'Start the revised curriculum', exact: true }).click()
+  const sidebar = learningSidebar(page)
+  await expect(sidebar.getByTestId('learning-task')).toHaveAttribute('data-task-id', curriculumV2Bundle.lessons[0].tasks[0].id)
+  await expect(page.getByTestId('learning-status')).toContainText('White belt · 0 points')
+  expect(await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)).toBe(practice)
+  await sidebar.getByRole('button', { name: sidebarLabels.load.en, exact: true }).click()
+  await sidebar.getByRole('button', { name: sidebarLabels.cancel.en, exact: true }).click()
+  expect(await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)).toBe(practice)
+  await loadLearningNetwork(page)
+  await expect(sidebar.getByTestId('learning-debrief')).toHaveCount(0)
+  await expect(page.getByTestId('learning-status')).toContainText('White belt · 0 points')
+  const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), guidedProgressKey)
+  expect(saved.enrollment).toBe(curriculumV2Bundle.course.id)
+  expect(saved.completions).toEqual(previous.completions)
+  expect(saved.completions.filter((entry: { courseId: string }) => entry.courseId === exampleCourse.course.id)).toEqual(completions)
+  expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(normal)
+  await page.getByTestId('learning-status').click()
+  await learningAdvancedOptions(page)
+  await expect(page.getByTestId('learning-status-details')).toContainText('Original edition: 1325 points · Black belt')
+  await page.reload()
+  await expect(page.getByTestId('learning-status')).toContainText('White belt · 0 points')
+  expect((await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), guidedProgressKey)).completions).toEqual(previous.completions)
+})
+
 test('sidebar edition switching preserves an active practice canvas and separate progress', async ({ page }) => {
   await page.goto('/?mode=full')
-  await page.getByTestId('learning-open').click()
+  await openLearning(page)
   await completeLearningTasks(page, 2)
   const current = await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)
   await learningOptions(page)
   await learningSidebar(page).getByRole('button', { name: 'Curriculum editions & learning data', exact: true }).click()
   let details = page.getByTestId('learning-status-details')
+  await learningAdvancedOptions(page)
   await details.getByRole('button', { name: 'Switch to Original edition', exact: true }).click()
   await details.getByRole('button', { name: 'Confirm edition switch', exact: true }).click()
   await expect(page.getByTestId('learning-status')).toContainText('Original edition - White belt · 0 points')
@@ -304,16 +650,17 @@ test('sidebar edition switching preserves an active practice canvas and separate
   await learningOptions(page)
   await learningSidebar(page).getByRole('button', { name: 'Curriculum editions & learning data', exact: true }).click()
   details = page.getByTestId('learning-status-details')
+  await learningAdvancedOptions(page)
   await details.getByRole('button', { name: 'Switch to Scenario edition', exact: true }).click()
   await details.getByRole('button', { name: 'Confirm edition switch', exact: true }).click()
   await expect(page.getByTestId('learning-status')).toContainText('Scenario edition - White belt · 10 points')
-  await expect(learningSidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', 'private-link.repair')
+  await expect(learningSidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', 'private-link.address-range')
   expect(await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)).toBe(current)
 })
 
 test('header and sidebar share a single accessible learning-status panel', async ({ page }) => {
   await page.goto('/?mode=full')
-  await page.getByTestId('learning-open').click()
+  await openLearning(page)
   await learningOptions(page)
   await page.getByTestId('learning-status').click()
   await expect(page.getByTestId('learning-status-details')).toHaveCount(1)
@@ -325,3 +672,94 @@ test('header and sidebar share a single accessible learning-status panel', async
   await expect(page.getByTestId('learning-status-details')).toHaveCount(0)
   await expect(page.getByTestId('learning-status')).toHaveAttribute('aria-expanded', 'false')
 })
+
+for (const mode of ['vwan', 'hub-spoke', 'full']) {
+  for (const [preview, language] of [[true, 'en'], [false, 'en'], [true, 'ja']] as const) {
+    test(`${mode} ${preview ? 'new' : 'legacy'} ${language}: belt and learning menu share a direct start/continue entry`, async ({ page }) => {
+      await page.addInitScript(({ preview, language, topology }) => {
+        localStorage.setItem('aznet-ui-preview:v1', String(preview))
+        localStorage.setItem('vwan-visual-topology:language:v1', language)
+        if (!localStorage.getItem('aznet-visual-topology:v1')) {
+          localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))
+        }
+      }, { preview, language, topology: createEmptyAzNetTopology() })
+      if (language === 'ja') {
+        await page.setViewportSize({ width: 390, height: 844 })
+        await page.emulateMedia({ colorScheme: 'dark' })
+      }
+      const learningRequests: string[] = []
+      page.on('request', (request) => {
+        if (/LearningDialog|learning-session|practice-session/.test(request.url())) learningRequests.push(request.url())
+      })
+      await page.goto(`/?mode=${mode}`)
+      await expect(page.getByTestId(mode === 'vwan' ? 'vwan-app' : 'aznet-app')).toBeVisible()
+      const before = await page.evaluate(() => [localStorage.getItem('vwan-visual-topology:v1'),
+        localStorage.getItem('aznet-visual-topology:v1'), localStorage.getItem('network-simulator:practice-workspace:v1')])
+      const details = page.getByTestId('learning-status-details')
+      const primary = page.getByTestId('learning-start')
+      for (const entry of ['learning-status', 'learning-open']) {
+        await openWorkspaceActions(page)
+        const trigger = page.getByTestId(entry)
+        await trigger.focus()
+        await expect(trigger).toBeFocused()
+        await page.keyboard.press('Enter')
+        await expect(details).toHaveCount(1)
+        await expect(details).toHaveAttribute('role', 'dialog')
+        await expect(primary).toHaveText(statusLabels.startLearning[language])
+        await expect(primary).toBeFocused()
+        for (const id of ['learning-status', 'learning-open']) await expect(page.getByTestId(id)).toHaveAttribute('aria-expanded', 'true')
+        await expect(details.getByRole('button', { name: statusLabels.backup[language], exact: true })).toBeHidden()
+        await learningAdvancedOptions(page)
+        await expect(details.getByRole('button', { name: statusLabels.backup[language], exact: true })).toBeVisible()
+        await expect(details.getByRole('button', { name: statusLabels.reset[language], exact: true })).toBeVisible()
+        const button = await primary.boundingBox(), options = await page.getByTestId('learning-advanced').boundingBox()
+        expect(button!.y + button!.height).toBeLessThanOrEqual(options!.y)
+        expect((await new AxeBuilder({ page }).include('.learning-status-panel').analyze()).violations).toEqual([])
+        expect(await details.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+        await primary.focus()
+        await page.keyboard.press('Escape')
+        await expect(details).toHaveCount(0)
+        await expect(trigger).toBeFocused()
+      }
+      expect(learningRequests).toEqual([])
+      await page.getByTestId('learning-status').click()
+      await primary.click()
+      await expect(details).toHaveCount(0)
+      const tasks = orderedTasks(scenarioBundle)
+      await expect(learningSidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', tasks[0].task.id)
+      await expect(page.locator('#learning-title')).toBeFocused()
+      expect(await page.evaluate(() => [localStorage.getItem('vwan-visual-topology:v1'),
+        localStorage.getItem('aznet-visual-topology:v1'), localStorage.getItem('network-simulator:practice-workspace:v1')])).toEqual(before)
+      await learningSidebar(page).getByRole('button', { name: sidebarLabels.pause[language], exact: true }).click()
+      const { lesson, task } = tasks[0]
+      await page.evaluate(({ key, completion }) => localStorage.setItem(key, JSON.stringify({
+        version: 1, policyVersion: 1, enrollment: 'azure-routing-scenarios', completions: [completion],
+      })), { key: guidedProgressKey, completion: {
+        courseId: scenarioBundle.course.id, contentVersion: scenarioBundle.course.contentVersion,
+        lessonId: lesson.id, taskId: task.id, assessmentVersion: task.assessmentVersion, checkId: task.checkId,
+        awardId: task.awardId, points: task.points, title: task.title, sessionId: 'returning-learner',
+        revision: 0, scope: 1, engineVersion: 'historical', completedAt: '2026-11-20T12:00:00.000Z',
+      } })
+      await page.reload()
+      await openWorkspaceActions(page)
+      await page.getByTestId('learning-open').click()
+      await expect(primary).toHaveText(statusLabels.continueLearning[language])
+      await primary.click()
+      await expect(learningSidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', tasks[1].task.id)
+      await expect(page.locator('#learning-title')).toBeFocused()
+      await learningSidebar(page).getByRole('button', { name: sidebarLabels.pause[language], exact: true }).click()
+      await page.getByTestId('learning-status').click()
+      await expect(primary).toHaveText(statusLabels.continueLearning[language])
+      await primary.click()
+      await expect(learningSidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', tasks[1].task.id)
+      for (const entry of ['learning-open', 'learning-status']) {
+        await openWorkspaceActions(page)
+        await page.getByTestId(entry).click()
+        await expect(primary).toHaveText(statusLabels.continueLearning[language])
+        await primary.click()
+        await expect(details).toHaveCount(0)
+        await expect(page.locator('#learning-title')).toBeFocused()
+      }
+    })
+  }
+}

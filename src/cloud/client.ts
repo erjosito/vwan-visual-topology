@@ -1,4 +1,4 @@
-import type { CloudEntry, CloudTopology, CloudValue, ProgressLedger } from './contracts'
+import type { CloudEntry, CloudMetadata, CloudShare, CloudTopology, CloudValue, ProgressLedger } from './contracts'
 
 export class CloudHttpError extends Error {
   status: number
@@ -25,7 +25,7 @@ export function createCloudClient(base: string, token: () => Promise<string>, si
     const raw = await response.text()
     if (raw.length > 4 * 1024 * 1024) throw new Error('Cloud response exceeds the supported size.')
     const version = response.headers.get('etag')
-    if (!version && path !== '/topologies') throw new Error('Cloud version is missing.')
+    if (!version && path !== '/topologies' && path !== '/shares') throw new Error('Cloud version is missing.')
     return { value: JSON.parse(raw) as T, etag: version ?? '' }
   }
   return {
@@ -35,7 +35,13 @@ export function createCloudClient(base: string, token: () => Promise<string>, si
     getTopology: (id: string) => request<CloudTopology>(`/topologies/${encodeURIComponent(id)}`),
     saveTopology: (id: string, value: CloudTopology, etag: string | null) =>
       request(`/topologies/${encodeURIComponent(id)}`, 'PUT', value, etag).then(result => result!.etag),
+    updateTopologyMetadata: (id: string, value: CloudMetadata, etag: string) =>
+      request(`/topologies/${encodeURIComponent(id)}`, 'PATCH', value, etag).then(result => result!.etag),
     deleteTopology: (id: string, etag: string) => request(`/topologies/${encodeURIComponent(id)}`, 'DELETE', undefined, etag),
+    listShares: () => request<{ entries: CloudShare[] }>('/shares').then(result => result?.value.entries ?? []),
+    createShare: (id: string, topologyId: string, sourceEtag: string) =>
+      request<CloudShare>(`/shares/${encodeURIComponent(id)}`, 'PUT', { topologyId, sourceEtag, consent: true }, null).then(result => result!.value),
+    revokeShare: (id: string, etag: string) => request(`/shares/${encodeURIComponent(id)}`, 'DELETE', undefined, etag),
   }
 }
 export type CloudClient = ReturnType<typeof createCloudClient>
