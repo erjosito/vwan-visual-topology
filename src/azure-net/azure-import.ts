@@ -447,6 +447,20 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
       kind,
       asn,
       bgpEnabled,
+      ...(kind === 'Vpn' && bgpSettings ? { capturedVpnConfiguration: { source: asString(gw.id), bgpSettings: structuredClone(bgpSettings) } } : {}),
+      ...(vngBgpEndpoints[name]?.length ? { vpnInstances: vngBgpEndpoints[name].map((endpoint) => {
+        const config = asArray(props.ipConfigurations).find((raw) => raw && typeof raw === 'object'
+          && asString((raw as Record<string, unknown>).id).toLowerCase() === endpoint.ipConfigurationId.toLowerCase()) as Record<string, unknown>
+        const configProps = config.properties && typeof config.properties === 'object' ? config.properties as Record<string, unknown> : config
+        const privateIp = asString(configProps.privateIPAddress ?? configProps.privateIpAddress)
+        return {
+          id: azureObjectId('vpn-instance', endpoint.ipConfigurationId), ipConfigurationId: endpoint.ipConfigurationId, enabled: true,
+          defaultBgpIpAddresses: [...endpoint.defaultBgpIpAddresses], customBgpIpAddresses: [...endpoint.customBgpIpAddresses],
+          ...(ipv4(privateIp) !== undefined ? { privateIpAddress: privateIp } : {}),
+          ...(endpoint.tunnelIpAddresses.length === 1 ? { publicIpAddress: endpoint.tunnelIpAddresses[0] } : {}),
+          provenance: { kind: 'capture' as const, source: `${endpoint.gatewayResourceId}/bgpSettings/bgpPeeringAddresses` },
+        }
+      }) } : {}),
       ...(activeActive !== undefined ? { activeActive } : {}),
       ...(typeof props.enablePrivateIpAddress === 'boolean' ? { enablePrivateIpAddress: props.enablePrivateIpAddress } : {}),
       ...(vpnType !== undefined ? { vpnType } : {}),
@@ -849,6 +863,7 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
   // Reconstruct on-premises sites & VPN connections from localNetworkGateways and vpnConnections
   const sites: AzNetTopology['sites'] = []
   const siteIdByArmId = new Map<string, string>()
+  const lngConfiguration = new Map<string, { bgp?: Record<string, unknown>; gatewayIpAddress?: string }>()
   for (const rawLgw of asArray(root.localNetworkGateways)) {
     const lgw = asObject(rawLgw, 'LocalNetworkGateway')
     const armId = asString(lgw.id)
@@ -884,6 +899,9 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
     if (!mergedPrefixes.length) unknown(armId, name, 'on-premises prefixes')
     const siteId = `site-${name.toLowerCase()}`
     if (armId) siteIdByArmId.set(armId.toLowerCase(), siteId)
+    if (armId) lngConfiguration.set(armId.toLowerCase(), {
+      ...(bgp ? { bgp: structuredClone(bgp) } : {}), ...(typeof props.gatewayIpAddress === 'string' ? { gatewayIpAddress: props.gatewayIpAddress } : {}),
+    })
     sites.push({
       id: siteId,
       name,
@@ -918,6 +936,20 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
     const vngId = vngIdByArmId.get(asString(vng1?.id).toLowerCase())
     const siteId = siteIdByArmId.get(asString(lgw2?.id).toLowerCase())
     if (!vngId || !siteId) continue
+    const lng = lngConfiguration.get(asString(lgw2?.id).toLowerCase())
+    const peerAddress = asString(lng?.bgp?.bgpPeeringAddress)
+    const peerAsn = lng?.bgp?.asn
+    const customAddresses = props.gatewayCustomBgpIpAddresses
+    const mappedCustom = asArray(customAddresses).flatMap((raw) => {
+      if (!raw || typeof raw !== 'object') return []
+      const entry = raw as Record<string, unknown>
+      return typeof entry.ipConfigurationId === 'string' && typeof entry.customBgpIpAddress === 'string'
+        && ipv4(entry.customBgpIpAddress) !== undefined
+        ? [{ ipConfigurationId: entry.ipConfigurationId, customBgpIpAddress: entry.customBgpIpAddress }] : []
+    })
+    const hasInstanceConfiguration = vnets.some((vnet) => vnet.gateways.some((gateway) => gateway.id === vngId && gateway.vpnInstances !== undefined))
+    const needsExplicitMembership = (props.useLocalAzureIpAddress === true && hasInstanceConfiguration) || asArray(customAddresses).length > 0
+      || (ipv4(peerAddress) !== undefined && contains('169.254.0.0/16', ipv4(peerAddress)!))
     vpnConnections.push({
       id: `vpn-${name.toLowerCase()}`,
       name,
@@ -925,7 +957,21 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
       targetKind: 'vnet-gateway',
       targetId: vngId,
       bgpEnabled: Boolean(props.enableBgp ?? conn.enableBgp ?? true),
-      ...(props.useLocalAzureIpAddress === true ? { useLocalAzureIpAddress: true } : {}),
+      ...(ipv4(peerAddress) !== undefined && typeof peerAsn === 'number' ? {
+        bgpPeer: { address: peerAddress, asn: peerAsn, provenance: { kind: 'capture' as const, source: asString(lgw2?.id) } },
+      } : {}),
+      ...(mappedCustom.length ? { gatewayCustomBgpIpAddresses: mappedCustom } : {}),
+      ...(needsExplicitMembership ? { tunnels: [] } : {}),
+      capturedConfiguration: {
+        source: asString(conn.id),
+        localNetworkGateway: { ...(lng?.bgp ? { bgpSettings: lng.bgp } : {}), ...(lng?.gatewayIpAddress ? { gatewayIpAddress: lng.gatewayIpAddress } : {}) },
+        connection: {
+          ...(customAddresses !== undefined ? { gatewayCustomBgpIpAddresses: structuredClone(customAddresses) } : {}),
+          ...(props.useLocalAzureIpAddress !== undefined ? { useLocalAzureIpAddress: props.useLocalAzureIpAddress } : {}),
+          ...(props.connectionMode !== undefined ? { connectionMode: props.connectionMode } : {}),
+        },
+      },
+      ...(typeof props.useLocalAzureIpAddress === 'boolean' ? { useLocalAzureIpAddress: props.useLocalAzureIpAddress } : {}),
       enabled: true,
     })
   }

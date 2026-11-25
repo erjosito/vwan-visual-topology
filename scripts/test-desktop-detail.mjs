@@ -15,6 +15,9 @@ const { graphicalDetailTopology } = createRequire(import.meta.url)(fixture)
 const bgpFixture = join(artifacts, 'bgp-neighbors.cjs')
 await build({ entryPoints: [resolve('tests', 'fixtures', 'bgp-neighbors.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: bgpFixture })
 const { bgpNeighborTopology, bgpNeighborVwanTopology } = createRequire(import.meta.url)(bgpFixture)
+const vpnFixture = join(artifacts, 'vpn-instance.cjs')
+await build({ entryPoints: [resolve('tests', 'fixtures', 'vpn-instance.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: vpnFixture })
+const { vpnInstanceTopology, vpnMigrationSnapshots } = createRequire(import.meta.url)(vpnFixture)
 const application = await electron.launch({
   ...(executablePath ? { executablePath } : {}),
   args: [...(executablePath ? [] : [resolve('platform-dist', 'electron', 'main.cjs')]), `--user-data-dir=${join(artifacts, 'profile')}`],
@@ -144,6 +147,42 @@ try {
     await page.keyboard.press('Escape')
     await expect(dialog).toHaveCount(0)
     results.push({ mode, simulatedBgpNeighbors: true, originalIdentity: true, readOnly: true, managedUnknowns: true })
+  }
+  for (const mode of ['hub-spoke', 'full']) {
+    const topology = vpnInstanceTopology()
+    await page.goto(`app://simulator/?mode=${mode}`)
+    await page.locator('input[data-desktop-import]').setInputFiles({
+      name: 'synthetic-vpn-instances.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
+    })
+    const cpe = page.getByTestId('aznet-site-cpe')
+    await cpe.focus()
+    await page.keyboard.press('Shift+F10')
+    await page.getByRole('menuitem', { name: 'BGP neighbors', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: 'BGP neighbors', exact: true })
+    await expect(dialog.getByTestId('bgp-neighbor-rows').locator('tbody tr')).toHaveCount(3)
+    await expect(dialog.getByTestId('bgp-neighbor-rows').locator('tbody tr').filter({ hasText: 'Modeled relationship available' })).toHaveCount(3)
+    await page.keyboard.press('Escape')
+    for (const failEr of [false, true]) {
+      topology.erLinks[0].enabled = !failEr
+      const contract = await page.evaluate((request) => window.desktopSimulator.simulate(request), {
+        contractVersion: 1, operation: 'evaluate', document: { mode, topology },
+        vpnTransition: { previousTopology: vpnMigrationSnapshots()[2].topology, event: { id: 'snapshot-change', description: 'Synthetic snapshot, not observed SA history' } },
+        requirements: [
+          ...['private-west', 'private-east'].map((tunnelId) => ({ id: tunnelId, kind: 'vpn-tunnel', connectionId: 'private', tunnelId,
+            expectation: failEr ? 'ineligible' : 'eligible', underlayState: failEr ? 'unavailable' : 'available' })),
+          { id: 'backup', kind: 'vpn-tunnel', connectionId: 'backup', tunnelId: 'internet-west', expectation: 'eligible',
+            binding: { azureAddress: '169.254.21.2', cpeAddress: '169.254.21.1', gatewayInstanceId: 'instance-west' } },
+        ],
+      })
+      expect(contract.ok).toBe(true)
+      expect(contract.value.assessments.map((assessment) => assessment.outcome)).toEqual(['satisfied', 'satisfied', 'satisfied'])
+      expect(contract.value.vpnTransition.inPlaceReproduction).toBe('not-assessed')
+      expect(Object.values(contract.value.simulation.vpnTunnels)).toHaveLength(3)
+    }
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')).topology)
+    expect(saved.vpnConnections[0].tunnels.map((tunnel) => tunnel.id)).toEqual(['private-west', 'private-east'])
+    expect(saved.vpnConnections[1].tunnels.map((tunnel) => tunnel.id)).toEqual(['internet-west'])
+    results.push({ mode, instanceBoundVpn: true, originalIdentity: true, erOnlyDependencyWithdrawal: true, snapshotHistoryNotAssessed: true })
   }
   expect(errors).toEqual([])
   await writeFile(join(artifacts, 'results.json'), `${JSON.stringify({ flavor, results, errors }, null, 2)}\n`)

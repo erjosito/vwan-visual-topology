@@ -3,7 +3,7 @@ import { CanvasOverlay } from './CanvasOverlay'
 import { CompactBgpTable } from './CompactBgpTable'
 import { t } from './i18n'
 import { inspectAzBgp, inspectVwanBgp, bgpResourceKey } from './bgp-neighbors'
-import type { BgpInstance, BgpManagedRelationship, BgpResourceRef, BgpRouteEvidence } from './bgp-neighbors'
+import type { BgpInstance, BgpManagedRelationship, BgpNeighbor, BgpResourceRef, BgpRouteEvidence } from './bgp-neighbors'
 import type { Topology } from './model'
 import type { AzNetTopology } from './azure-net/model'
 import type { AzSimulationResult } from './azure-net/engine'
@@ -44,12 +44,13 @@ export default function BgpNeighborsPanel({ topology, simulation, initialResourc
   const instance = instanceId ? resource?.instances.find((candidate) => candidate.id === instanceId) : resource?.instances[0]
   const neighbors = inspection.neighbors.filter((neighbor) => neighbor.localResourceKey === resourceKey && neighbor.localInstanceId === instance?.id)
   const resourceByKey = (key: string) => inspection.resources.find((candidate) => candidate.key === key)!
-  const remoteLabel = (key: string, remoteId: string) => {
+  const remoteLabel = (key: string, remoteId: string, tunnel?: BgpNeighbor['vpnTunnel']) => {
     const remote = resourceByKey(key)
     const endpoint = remote.instances.find((candidate) => candidate.id === remoteId)!
-    return `${remote.name} · ${t(roles[endpoint.role])} · ${endpoint.address ?? t('IP not modeled')}`
+    const address = tunnel ? remote.kind === 'gateway' ? tunnel.bgp.azureAddress : tunnel.bgp.cpeAddress : endpoint.address
+    return `${remote.name} · ${t(roles[endpoint.role])} · ${address ?? t('IP not modeled')}`
   }
-  const visible = neighbors.filter((neighbor) => `${remoteLabel(neighbor.remoteResourceKey, neighbor.remoteInstanceId)} ${neighbor.remoteResourceKey} ${resourceByKey(neighbor.remoteResourceKey).asn ?? ''} ${neighbor.connectionId}`.toLowerCase().includes(filter.toLowerCase().trim()))
+  const visible = neighbors.filter((neighbor) => `${remoteLabel(neighbor.remoteResourceKey, neighbor.remoteInstanceId, neighbor.vpnTunnel)} ${neighbor.remoteResourceKey} ${resourceByKey(neighbor.remoteResourceKey).asn ?? ''} ${neighbor.connectionId} ${neighbor.vpnTunnel?.tunnelId ?? ''}`.toLowerCase().includes(filter.toLowerCase().trim()))
   const selected = neighbors.find((neighbor) => neighbor.id === neighborId)
   const managed = inspection.managedRelationships.filter((relationship) => relationship.resourceKeys.includes(resourceKey))
   const visibleManaged = managed.filter((relationship) => {
@@ -72,7 +73,7 @@ export default function BgpNeighborsPanel({ topology, simulation, initialResourc
         rows={value.routes.filter((route) => route.prefix.includes(prefix.trim())).map((route) => ({
           id: route.id, prefix: route.prefix, asPath: route.asPath, status: '?' as const,
           statusLabel: t('Selection not assessed'), nextHop: route.nextHop ?? t('IP not modeled'),
-          neighbor: selected ? remoteLabel(selected.remoteResourceKey, selected.remoteInstanceId) : '',
+          neighbor: selected ? remoteLabel(selected.remoteResourceKey, selected.remoteInstanceId, selected.vpnTunnel) : '',
           textEvidence: JSON.stringify(route.evidence),
           details: <pre>{JSON.stringify(route.evidence, null, 2)}</pre>,
         }))} />
@@ -109,7 +110,7 @@ export default function BgpNeighborsPanel({ topology, simulation, initialResourc
               const text = [
                 `${resource.name} (${resource.id}) · ${t(roles[instance.role])} · ${instance.address ?? t('IP not modeled')} · ASN ${resource.asn ?? t('Not assessed')} · ${t('Simulated relationships')}`,
                 [t('Neighbor'), t('Remote ASN'), t('Availability'), t('Received (logical)'), t('Advertised (logical)')].join('\t'),
-                ...visible.map((neighbor) => [remoteLabel(neighbor.remoteResourceKey, neighbor.remoteInstanceId),
+                ...visible.map((neighbor) => [remoteLabel(neighbor.remoteResourceKey, neighbor.remoteInstanceId, neighbor.vpnTunnel),
                   resourceByKey(neighbor.remoteResourceKey).asn ?? t('Not assessed'), availability(neighbor.availability),
                   count(neighbor.received), count(neighbor.advertised)].join('\t')),
               ].join('\n')
@@ -122,7 +123,7 @@ export default function BgpNeighborsPanel({ topology, simulation, initialResourc
               <thead><tr><th>{t('Neighbor')}</th><th>{t('Remote ASN')}</th><th>{t('Availability')}</th><th>{t('Received (logical)')}</th><th>{t('Advertised (logical)')}</th></tr></thead>
               <tbody>{visible.map((neighbor) => <tr key={neighbor.id} data-neighbor-id={neighbor.id} data-local-instance-id={neighbor.localInstanceId}>
                 <td><button type="button" aria-pressed={neighbor.id === neighborId} onClick={() => { setNeighborId(neighbor.id); setPrefix('') }}>
-                  {remoteLabel(neighbor.remoteResourceKey, neighbor.remoteInstanceId)}</button><br /><small>{neighbor.connectionId}</small></td>
+                  {remoteLabel(neighbor.remoteResourceKey, neighbor.remoteInstanceId, neighbor.vpnTunnel)}</button><br /><small>{neighbor.connectionId}{neighbor.vpnTunnel && ` / ${neighbor.vpnTunnel.tunnelId}`}</small></td>
                 <td>{resourceByKey(neighbor.remoteResourceKey).asn ?? t('Not assessed')}</td><td>{availability(neighbor.availability)}</td>
                 <td>{count(neighbor.received)}</td><td>{count(neighbor.advertised)}</td>
               </tr>)}</tbody>
@@ -130,13 +131,14 @@ export default function BgpNeighborsPanel({ topology, simulation, initialResourc
             {!visible.length && !managed.length && <p role="status">{t('No qualified neighbors in this exact instance/filter scope. Missing rows do not prove that no BGP session exists.')}</p>}
             {neighborId && !selected && <p role="status">{t('The selected neighbor is no longer in this instance scope. No other neighbor is substituted.')}</p>}
             {selected && <section data-testid="bgp-neighbor-details">
-              <h3>{remoteLabel(selected.remoteResourceKey, selected.remoteInstanceId)}</h3>
+              <h3>{remoteLabel(selected.remoteResourceKey, selected.remoteInstanceId, selected.vpnTunnel)}</h3>
               <p>{availability(selected.availability)} · {t(selected.reason)}</p>
               {selected.limitations.map((limitation) => <p key={limitation} role="note">{t(limitation)}</p>)}
               <details><summary>{t('Session identity and provenance')}</summary><pre>{JSON.stringify({
                 provenance: inspection.provenance, sessionId: selected.id, relationshipId: selected.relationshipId,
                 connectionId: selected.connectionId, localResource: resourceKey, localInstance: selected.localInstanceId,
                 remoteResource: selected.remoteResourceKey, remoteInstance: selected.remoteInstanceId,
+                ...(selected.vpnTunnel ? { vpnTunnel: selected.vpnTunnel } : {}),
               }, null, 2)}</pre></details>
               <button type="button" onClick={() => {
                 changeResource(selected.remoteResourceKey); setInstanceId(selected.remoteInstanceId)

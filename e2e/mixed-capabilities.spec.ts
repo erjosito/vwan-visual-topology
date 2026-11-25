@@ -3,6 +3,56 @@ import { createEmptyAzNetTopology } from '../src/azure-net/model'
 import { executePlatform } from '../src/platform/service'
 import type { PlatformRequest } from '../src/platform/contract'
 import { vpnErTopology } from '../tests/fixtures/vpn-er'
+import { vpnInstanceTopology } from '../tests/fixtures/vpn-instance'
+
+for (const mode of ['hub-spoke', 'full'] as const) {
+  test(`${mode}: instance-bound VPN import, safe connection edits and browser evidence retain exactly three configured tunnels`, async ({ page }) => {
+    const topology = vpnInstanceTopology()
+    await page.goto(`/?mode=${mode}`)
+    await page.locator('input[data-desktop-import]').setInputFiles({
+      name: 'synthetic-vpn-instances.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
+    })
+    const cpe = page.getByTestId('aznet-site-cpe')
+    await cpe.focus()
+    await page.keyboard.press('Shift+F10')
+    await page.getByRole('menuitem', { name: 'BGP neighbors', exact: true }).click()
+    const neighbors = page.getByRole('dialog', { name: 'BGP neighbors', exact: true })
+    const rows = neighbors.getByTestId('bgp-neighbor-rows').locator('tbody tr')
+    await expect(rows).toHaveCount(3)
+    await expect(rows.filter({ hasText: 'Modeled relationship available' })).toHaveCount(3)
+    await rows.filter({ hasText: '10.244.255.30' }).getByRole('button').click()
+    await neighbors.getByText('Session identity and provenance', { exact: true }).click()
+    await expect(neighbors.getByTestId('bgp-neighbor-details')).toContainText('private-west')
+    await expect(neighbors.getByTestId('bgp-neighbor-details')).toContainText('10.245.254.6')
+    await page.keyboard.press('Escape')
+    const edge = page.getByTestId('aznet-vpnconn-private')
+    await edge.focus()
+    await page.keyboard.press('Shift+F10')
+    await page.getByRole('menuitem', { name: 'Configure VPN Connection', exact: true }).click()
+    const editor = page.getByTestId('aznet-hybrid-connection-editor')
+    await expect(editor.getByTestId('vpn-instance-tunnels').locator('details')).toHaveCount(2)
+    await expect(editor.getByLabel('VPN over ER private peering', { exact: true })).toBeDisabled()
+    await editor.getByLabel('Connection name', { exact: true }).fill('Renamed private connection')
+    await editor.getByRole('button', { name: 'Save connection routing', exact: true }).click()
+    await expect(editor.getByRole('alert')).toHaveCount(0)
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
+    expect(saved.vpnConnections[0].tunnels).toEqual(topology.vpnConnections[0].tunnels)
+    expect(saved.vpnConnections[0].underlay).toBeUndefined()
+    expect(saved.vpnConnections[0].useLocalAzureIpAddress).toBe(true)
+    const request: PlatformRequest = { contractVersion: 1, operation: 'evaluate', document: { mode, topology: saved },
+      requirements: [{ id: 'private-binding', kind: 'vpn-tunnel', connectionId: 'private', tunnelId: 'private-west',
+        expectation: 'eligible', binding: { azureAddress: '10.244.255.30', cpeAddress: '10.245.254.6', gatewayInstanceId: 'instance-west' }, underlayState: 'available' }] }
+    const browser = await page.evaluate(async (request) => {
+      const { runBrowserSimulation } = await import('/src/platform/browser.ts')
+      return await runBrowserSimulation(request)
+    }, request)
+    expect(browser).toEqual(executePlatform(request))
+    expect(browser.assessments[0].outcome).toBe('satisfied')
+    await page.reload()
+    const restored = await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
+    expect(restored).toEqual(saved)
+  })
+}
 
 function design() {
   const topology = createEmptyAzNetTopology()

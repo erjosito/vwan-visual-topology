@@ -1,7 +1,8 @@
 import { cidr, contains, ipv4 } from '../validation'
 import { usableSubnetAddress } from './addressing'
+import { lookupCpeRoutes } from './cpe-routing'
 import type { AzBgpRibEntry, AzSimulationResult } from './engine'
-import type { AzNetTopology, AzVpnConnection } from './model'
+import type { AzNetTopology, AzVpnConnection, AzVpnInstance } from './model'
 
 export interface VpnErAssessment {
   state: 'available' | 'unavailable' | 'not-assessed'
@@ -25,7 +26,7 @@ function longest(routes: AzBgpRibEntry[], address: string): AzBgpRibEntry[] {
   return matching.filter((route) => cidr(route.prefix)?.length === length)
 }
 
-export function assessVpnEr(topology: AzNetTopology, connection: AzVpnConnection, underlay: AzSimulationResult): VpnErAssessment {
+export function assessVpnEr(topology: AzNetTopology, connection: AzVpnConnection, underlay: AzSimulationResult, instance?: AzVpnInstance): VpnErAssessment {
   const path = connection.underlay ?? { kind: 'express-route', azureLinkId: '', siteLinkId: '', azureEndpoint: '', onPremEndpoint: '' }
   const result = (state: VpnErAssessment['state'], reason: string, routes = {}): VpnErAssessment => ({
     ...path, state, reason, ...routes,
@@ -38,10 +39,10 @@ export function assessVpnEr(topology: AzNetTopology, connection: AzVpnConnection
     return result('not-assessed', 'VPN over ER supports classic VPN gateways only, not Virtual WAN, SD-WAN or NVA endpoints.')
   }
   if (!gateway.enabled) return result('unavailable', 'VPN gateway is disabled.')
-  if (gateway.activeActive !== false || gateway.vpnType !== 'RouteBased' || gateway.publicIpSku !== 'Standard') {
+  if ((!instance && gateway.activeActive !== false) || gateway.vpnType !== 'RouteBased' || gateway.publicIpSku !== 'Standard') {
     return result('not-assessed', 'Declare active/standby, RouteBased and Standard public-IP capability explicitly. Active/active endpoint ownership is not assessed.')
   }
-  if (!connection.bgpEnabled || !gateway.bgpEnabled || connection.nat) {
+  if ((!instance && (!connection.bgpEnabled || !gateway.bgpEnabled)) || connection.nat) {
     return result('not-assessed', 'Static routing and VPN NAT combined with this private-peering overlay are not assessed; BGP is not an Azure prerequisite.')
   }
   const subnet = owner!.subnets.find((subnet) => subnet.name.toLowerCase() === 'gatewaysubnet')
@@ -49,8 +50,9 @@ export function assessVpnEr(topology: AzNetTopology, connection: AzVpnConnection
     const ip = ipv4(address)
     return ip !== undefined && ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'].some((prefix) => contains(prefix, ip))
   }
+  if (instance && !instance.privateIpAddress) return result('not-assessed', 'The mapped instance has no explicit private outer address; ownership is unknown.')
   if (!gateway.enablePrivateIpAddress || !connection.useLocalAzureIpAddress
-    || !gateway.privateIpAddresses?.includes(path.azureEndpoint) || !subnet
+    || !(instance ? instance.privateIpAddress === path.azureEndpoint : gateway.privateIpAddresses?.includes(path.azureEndpoint)) || !subnet
     || !usableSubnetAddress(subnet.prefix, path.azureEndpoint)
     || !privateAddress(path.azureEndpoint) || !privateAddress(path.onPremEndpoint)) {
     return result('unavailable', 'Enable private gateway IPs and Use Azure Private IP Address; declare RFC1918 endpoints with the Azure endpoint owned by GatewaySubnet.')
@@ -64,19 +66,23 @@ export function assessVpnEr(topology: AzNetTopology, connection: AzVpnConnection
   }
   if (underlay.controlPlaneComplete === false) return result('not-assessed', 'The independent ER underlay control plane is incomplete.')
   const outward = longest(underlay.siteRibs[connection.siteId] ?? [], path.azureEndpoint)
+  const site = topology.sites.find((site) => site.id === connection.siteId)
+  const cpeLookup = site?.vpnRouting ? lookupCpeRoutes(site, underlay, path.azureEndpoint, path.onPremEndpoint) : undefined
+  const cpeRoutes = cpeLookup?.routes
   const inward = longest(underlay.gatewayRibs[erGateway.id] ?? [], path.onPremEndpoint)
   const table = underlay.subnetTables[subnet.id]
   const ip = ipv4(path.onPremEndpoint)!
   const matches = table?.routes.filter((route) => route.active && contains(route.prefix, ip)) ?? []
   const max = Math.max(...matches.map((route) => cidr(route.prefix)?.length ?? -1))
   const candidates = matches.filter((route) => cidr(route.prefix)?.length === max)
-  if (outward.length !== 1 || outward[0].connectionId !== siteLink.id
-    || outward[0].originProtocol !== 'ExpressRoute'
+  if ((cpeRoutes ? cpeRoutes.length !== 1 || cpeRoutes[0].erLinkId !== siteLink.id
+      || !['ExpressRoute', 'er-link'].includes(cpeRoutes[0].kind)
+    : outward.length !== 1 || outward[0].connectionId !== siteLink.id || outward[0].originProtocol !== 'ExpressRoute')
     || inward.length !== 1 || inward[0].connectionId !== azureLink.id || inward[0].nextHopId !== connection.siteId
     || candidates.length !== 1 || candidates[0].nextHopResourceId !== erGateway.id || candidates[0].source === 'User') {
     return result('unavailable', 'Both outer endpoints require unique routes over the selected ER path, independent of all private VPN overlays; missing, recursive or overridden routes disable this tunnel.')
   }
   return result('available', 'Outer endpoints resolve in both directions over the selected ER circuit without private VPN overlay routes. Intended IPsec path only; IKE/SAs and delivery are not verified.', {
-    outwardRoute: outward[0].prefix, returnRoute: inward[0].prefix,
+    outwardRoute: cpeRoutes?.[0].prefix ?? outward[0].prefix, returnRoute: inward[0].prefix,
   })
 }

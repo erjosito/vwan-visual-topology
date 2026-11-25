@@ -1,6 +1,6 @@
 import type { PlatformRequest } from './contract'
 
-const optionalFields = ['engineVersion', 'locale', 'requirements', 'budget', 'packet', 'vpnPacket', 'application']
+const optionalFields = ['engineVersion', 'locale', 'requirements', 'budget', 'packet', 'vpnPacket', 'vpnTransition', 'application']
 
 function omitUnsetOptions(input: object, optional: readonly string[]): Record<string, unknown> {
   if (!input || Object.getPrototypeOf(input) !== Object.prototype) throw new Error('Plain request options required.')

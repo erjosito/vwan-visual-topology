@@ -53,6 +53,11 @@ export function generateAzNetBicep(
   const includeRouteServers = options.includeRouteServers ?? true
 
   const warnings: string[] = []
+  if (topology.vpnConnections.some((connection) => connection.tunnels !== undefined || connection.bgpPeer || connection.gatewayCustomBgpIpAddresses)
+    || topology.sites.some((site) => site.vpnRouting !== undefined)
+    || topology.vnets.some((vnet) => vnet.gateways.some((gateway) => gateway.vpnInstances !== undefined))) {
+    throw new Error('Instance-bound VPN tunnels, BGP peer bindings and CPE routing contexts are not deployed by this Bicep starter. Preserve native JSON; dropping these fields would not be equivalent.')
+  }
   if (topology.vpnConnections.some((connection) => connection.underlay || connection.useLocalAzureIpAddress)) {
     throw new Error('VPN over ER private endpoints and underlay dependencies are not deployed by this Bicep starter. Preserve native JSON; exporting an ordinary public VPN would not be equivalent.')
   }

@@ -35,6 +35,21 @@ const object = (required: Record<string, Shape>, optional: Record<string, Shape>
 const named = { id, name: text }
 const positioned = { label: (v: unknown, p: string) => { text(v, p); if ((v as string).length > 120) fail(p, 'label exceeds 120 characters') }, x: number, y: number }
 const strings = array(text), asns = array(asn)
+const provenance = object({ kind: choice('authored', 'capture'), source: text })
+const ip: Shape = (v, p) => { if (typeof v !== 'string' || ipv4(v) === undefined) fail(p, 'expected IPv4 address') }
+const prefix: Shape = (v, p) => { if (typeof v !== 'string' || !cidr(v)) fail(p, 'expected IPv4 prefix') }
+const vpnUnderlay = object({ kind: choice('express-route'), azureLinkId: id, siteLinkId: id, azureEndpoint: ip, onPremEndpoint: ip })
+const vpnTunnel = object({
+  id, gatewayInstanceId: id, enabled: bool, ipsec: choice('available', 'unavailable', 'unknown'),
+  transport: (value, path) => {
+    object({ kind: choice('internet', 'express-route') })(value, path)
+    if ((value as { kind: string }).kind === 'express-route') vpnUnderlay(value, path)
+    else object({ kind: choice('internet'), azureEndpoint: ip, onPremEndpoint: ip, availability: choice('available', 'unavailable', 'unknown') })(value, path)
+  },
+}, {
+  bgp: object({ cpeLocalAddress: ip, cpePeerAddress: ip, cpeRemoteAsn: asn, cpeInitiates: bool, routingContextId: id }),
+  observations: array(object({ id, source: text, timestamp: text, azureAddress: ip, cpeAddress: ip, initiator: choice('azure', 'cpe') }, { state: text })),
+})
 const hubRouting = object({
   status: choice('configured', 'captured', 'unknown'),
   associatedTableId: (v, p) => { if (v !== null) id(v, p) },
@@ -68,6 +83,10 @@ const schema = object({
       activeActive: bool, vpnType: choice('RouteBased', 'PolicyBased'), sku: text,
       publicIpSku: choice('Basic', 'Standard'), enablePrivateIpAddress: bool, privateIpAddresses: strings,
       vpnGatewayGeneration: choice('Generation1', 'Generation2'),
+      vpnInstances: array(object({
+        id, ipConfigurationId: text, enabled: bool, defaultBgpIpAddresses: array(ip), customBgpIpAddresses: array(ip), provenance,
+      }, { privateIpAddress: ip, publicIpAddress: ip })),
+      capturedVpnConfiguration: object({ source: text, bgpSettings: object({}) }),
     })),
     appliances: array(object({
       ...named, kind: choice('azure-firewall', 'nva-vm', 'vnra'), subnetId: id, privateIp: text, enableIpForwarding: bool,
@@ -112,11 +131,24 @@ const schema = object({
   }, name: text }), routeTables: hubTables, routeTablesStatus: choice('captured', 'unknown'), routeMapAssignments: array(assignment) })),
   erLocations: array(object(named, { ...positioned, globalReachEnabled: bool, sku: choice('Local', 'Standard', 'Premium'), peeringLocation: text })),
   erLinks: array(object({ ...named, locationId: id, targetKind: choice('vnet-gateway', 'vwan-hub', 'site'), targetId: id, enabled: bool }, { advertisedPrefixes: strings, weight: number, prepend: asns, hubRouting, learnSiteRoutes: bool, propagateDefaultRoute: bool })),
-  sites: array(object({ ...named, asn, prefixes: strings }, { ...positioned, routeMapAssignments: array(assignment) })),
+  sites: array(object({ ...named, asn, prefixes: strings }, {
+    ...positioned, routeMapAssignments: array(assignment),
+    vpnRouting: object({ contextId: id, localAddresses: array(ip), peerRoutes: array(object({
+      id, prefix, enabled: bool, nextHop: (value, path) => {
+        object({ kind: choice('tunnel', 'er-link', 'drop') })(value, path)
+        const kind = (value as { kind: string }).kind
+        if (kind === 'tunnel') object({ connectionId: id, tunnelId: id })(value, path)
+        if (kind === 'er-link') object({ linkId: id })(value, path)
+      },
+    }, { sourceAddress: ip })) }),
+  })),
   vpnConnections: array(object({
     ...named, siteId: id, targetKind: choice('vnet-gateway', 'vwan-hub', 'appliance'), targetId: id, bgpEnabled: bool, enabled: bool,
   }, { advertisedPrefixes: strings, useLocalAzureIpAddress: bool,
-    underlay: object({ kind: choice('express-route'), azureLinkId: id, siteLinkId: id, azureEndpoint: text, onPremEndpoint: text }),
+    underlay: vpnUnderlay, tunnels: array(vpnTunnel), staticAzurePrefixes: array(prefix),
+    bgpPeer: object({ address: ip, asn, provenance }),
+    gatewayCustomBgpIpAddresses: array(object({ ipConfigurationId: text, customBgpIpAddress: ip })),
+    capturedConfiguration: object({ source: text, localNetworkGateway: object({}), connection: object({}) }),
     staticPrefixes: strings, inboundPrepend: asns, outboundPrepend: asns, hubRouting, transport: choice('VPN', 'SDWAN'), learnSiteRoutes: bool, propagateDefaultRoute: bool })),
   siteLinks: array(object({ ...named, siteAId: id, siteBId: id, enabled: bool })),
 }, {
@@ -242,6 +274,14 @@ export function parseAzNetTopology(input: unknown): AzNetTopology {
     }
   }
   for (const vnet of topology.vnets) {
+    for (const gateway of vnet.gateways) {
+      unique(gateway.vpnInstances ?? [], new Set())
+      const instances = gateway.vpnInstances ?? []
+      if (instances.length > 2 || new Set(instances.map((instance) => instance.ipConfigurationId.toLowerCase())).size !== instances.length) {
+        fail(gateway.id, 'VPN instances require at most two unique IP-configuration mappings')
+      }
+      if (instances.length && gateway.kind !== 'Vpn') fail(gateway.id, 'VPN instances require a VPN gateway')
+    }
     for (const app of vnet.appliances) {
       if (app.vwanBgpEnabled && (app.kind === 'azure-firewall' || !isVwanNvaAsn(app.asn ?? 65501))) {
         fail(app.id, 'Spoke NVA peering requires an NVA with a non-reserved public or private 2-byte ASN.')
@@ -289,6 +329,24 @@ export function parseAzNetTopology(input: unknown): AzNetTopology {
     if (l.targetKind === 'vwan-hub') routingRefs(l.targetId, l.hubRouting)
   }
   for (const l of topology.vpnConnections) {
+    if (l.staticAzurePrefixes !== undefined && l.tunnels === undefined) fail(l.id, 'CPE static Azure prefixes require explicit instance-bound tunnels')
+    if (l.tunnels !== undefined) {
+      if (l.targetKind !== 'vnet-gateway' || gateways.find((gateway) => gateway.id === l.targetId)?.kind !== 'Vpn' || l.transport === 'SDWAN' || l.nat) {
+        fail(l.id, 'Instance-bound tunnels require a classic VPN gateway without NAT or SDWAN')
+      }
+      if (l.underlay) fail(l.id, 'Declare per-tunnel transport, not a simultaneous connection-level underlay')
+      if (l.tunnels.length > 64) fail(l.id, 'At most 64 configured VPN tunnels per connection')
+      unique(l.tunnels, new Set())
+      for (const tunnel of l.tunnels) {
+        unique(tunnel.observations ?? [], new Set())
+        if (tunnel.transport.kind === 'express-route') {
+          ref(tunnel.transport.azureLinkId, topology.erLinks, 'VPN tunnel underlay Azure link')
+          ref(tunnel.transport.siteLinkId, topology.erLinks, 'VPN tunnel underlay site link')
+        }
+      }
+    }
+    const custom = l.gatewayCustomBgpIpAddresses ?? []
+    if (new Set(custom.map((entry) => entry.ipConfigurationId.toLowerCase())).size !== custom.length) fail(l.id, 'Duplicate connection custom BGP IP-configuration mapping')
     if (l.advertisedPrefixes?.some((prefix) => !cidr(prefix))) fail(l.id, 'Invalid advertised IPv4 prefix')
     if (l.underlay) {
       ref(l.underlay.azureLinkId, topology.erLinks, 'VPN underlay Azure link')
@@ -300,6 +358,19 @@ export function parseAzNetTopology(input: unknown): AzNetTopology {
     if (l.hubRouting && l.targetKind !== 'vwan-hub') fail(l.id, 'hub routing requires a virtual hub target')
     if (l.targetKind === 'vwan-hub') routingRefs(l.targetId, l.hubRouting)
     if (l.transport === 'SDWAN' && (l.targetKind !== 'vwan-hub' || !l.bgpEnabled)) fail(l.id, 'SDWAN requires a BGP-enabled virtual hub connection')
+  }
+  for (const site of topology.sites) {
+    unique(site.vpnRouting?.peerRoutes ?? [], new Set())
+    for (const route of site.vpnRouting?.peerRoutes ?? []) {
+      const hop = route.nextHop
+      if (hop.kind === 'tunnel') {
+        const connection = topology.vpnConnections.find((connection) => connection.id === hop.connectionId && connection.siteId === site.id)
+        if (!connection?.tunnels?.some((tunnel) => tunnel.id === hop.tunnelId)) fail(route.id, 'Peer route requires a configured tunnel on the same CPE')
+      }
+      if (hop.kind === 'er-link' && !topology.erLinks.some((link) => link.id === hop.linkId && link.targetKind === 'site' && link.targetId === site.id)) {
+        fail(route.id, 'Peer route requires an ER link on the same CPE')
+      }
+    }
   }
   for (const hub of topology.vwanHubs) {
     const branches = [...topology.erLinks, ...topology.vpnConnections].filter((link) =>

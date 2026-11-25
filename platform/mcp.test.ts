@@ -13,6 +13,7 @@ import { haBackend, haPacket, haPortsTopology } from '../tests/fixtures/ha-ports
 import { nvaBgpTopology } from '../tests/fixtures/nva-bgp'
 import { readFileSync } from 'node:fs'
 import { vpnErTopology } from '../tests/fixtures/vpn-er'
+import { vpnInstanceTopology, vpnMigrationSnapshots } from '../tests/fixtures/vpn-instance'
 
 const serverPath = resolve(process.env.MCP_PACKAGE_DIR ?? 'platform-dist', 'mcp.cjs')
 
@@ -57,6 +58,32 @@ it('exposes private VPN ER dependencies and directional protection through the a
     expect(assessments[0].outcome).toBe('satisfied')
     expect(assessments[0].evidence.forward.vpnProtection[0].protection).toBe('intended-ipsec')
     expect(assessments[0].evidence.reverse.vpnProtection[0].underlay.onPremEndpoint).toBe('172.16.0.4')
+    for (const failEr of [false, true]) {
+      const topology = vpnInstanceTopology()
+      topology.erLinks[0].enabled = !failEr
+      const bindingRequest = { contractVersion: 1, operation: 'evaluate', document: { mode: 'full', topology },
+        vpnTransition: { previousTopology: vpnMigrationSnapshots()[2].topology, event: { id: failEr ? 'fail-er' : 'enable-bgp', description: 'Synthetic authored snapshot change; no live SA event' } },
+        requirements: [
+          ...['private-west', 'private-east'].map((tunnelId) => ({ id: tunnelId, kind: 'vpn-tunnel', connectionId: 'private', tunnelId,
+            expectation: failEr ? 'ineligible' : 'eligible', underlayState: failEr ? 'unavailable' : 'available' })),
+          { id: 'public-backup', kind: 'vpn-tunnel', connectionId: 'backup', tunnelId: 'internet-west', expectation: 'eligible',
+            binding: { azureAddress: '169.254.21.2', cpeAddress: '169.254.21.1', gatewayInstanceId: 'instance-west' } },
+        ] }
+      const job = await call('start_simulation', { request: bindingRequest })
+      let state
+      for (let attempt = 0; attempt < 100; attempt++) {
+        state = await call('get_job', { handle: job.handle })
+        if (state.status === 'finished') break
+        await new Promise((resolve) => setTimeout(resolve, 50))
+      }
+      expect(state?.status).toBe('finished')
+      expect(state?.resultStatus).toBe('complete')
+      expect(state?.assessments.map((assessment: { outcome: string }) => assessment.outcome)).toEqual(['satisfied', 'satisfied', 'satisfied'])
+      const expected = executePlatform(bindingRequest)
+      expect(await read(job.handle, 'simulation')).toEqual(expected.simulation)
+      expect(await read(job.handle, 'bgpNeighbors')).toEqual(expected.bgpNeighbors)
+      expect(await read(job.handle, 'vpnTransition')).toEqual(expected.vpnTransition)
+    }
   } finally { await client.close() }
 }, 20000)
 
