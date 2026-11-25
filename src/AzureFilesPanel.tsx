@@ -11,6 +11,8 @@ import type { ObjectSelection } from './model'
 import { bicepDefaults, generateBicep, hubExportBlocker, spokeExportBlocker } from './bicep-export'
 import type { BicepExport, BicepSettings, SpokeAttachmentDeployment } from './bicep-export'
 import collectorUrl from './collect-azure-vwan.ps1?url'
+import { DiscrepancyTools } from './DiscrepancyTools'
+import type { DiscrepancyBundle } from './discrepancy-bundle'
 
 function download(text: string) {
   const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }))
@@ -19,12 +21,13 @@ function download(text: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-export function AzureFilesPanel({ topology, pendingImport, onImportFile, onCompare, onConfirmImport, onCancelImport, onClose, comparing, onFiles, session, onSession, onSelect, onCapture }: {
+export function AzureFilesPanel({ topology, pendingImport, onImportFile, onCompare, onConfirmImport, onCancelImport, onClose, comparing, onFiles, session, onSession, onSelect, onCapture, onBundleImport }: {
   topology: Topology; pendingImport?: Topology; onImportFile: () => void
   onCompare: () => void; onConfirmImport: () => void; onCancelImport: () => void; onClose: () => void
   comparing: boolean; onFiles: () => void; session?: ComparisonSession
   onSession: (session?: ComparisonSession) => void; onSelect: (selection?: ObjectSelection) => void
   onCapture: (session: ComparisonSession) => void
+  onBundleImport: (bundle: DiscrepancyBundle) => void
 }) {
   const [settings, setSettings] = useState(() => bicepDefaults(topology))
   const [acknowledged, setAcknowledged] = useState(false)
@@ -39,10 +42,11 @@ export function AzureFilesPanel({ topology, pendingImport, onImportFile, onCompa
       <button aria-pressed={comparing} onClick={onCompare}>{t('Compare with Azure capture')}</button>
     </nav>
     <p className="muted">{t('Offline files work on web and Windows. Local Azure reads require the Windows desktop app. No deployment or deletion is performed.')}</p>
+    <DiscrepancyTools source={{ mode: 'vwan', topology, session }} onImport={onBundleImport} />
     <AzureCaptureTools mode="vwan" onCapture={async (file, current) => {
       if (!current()) return
-      const observation = parseAzureObservation(JSON.parse(file.content))
-      onCapture({ observation, profile: defaultComparisonProfile(topology, observation) })
+      const capture: unknown = JSON.parse(file.content), observation = parseAzureObservation(capture)
+      onCapture({ observation, profile: defaultComparisonProfile(topology, observation), capture })
     }} />
     {comparing ? <AzureComparisonPanel embedded topology={topology} session={session} onSession={onSession} onSelect={onSelect} onClose={onClose} /> : <>
     {pendingImport ? <>

@@ -10,6 +10,7 @@ import { DesktopCloudBroker } from './cloud-broker'
 import { MsalDesktopCloudAuth, desktopCloudConfiguration } from './cloud-auth'
 import { EncryptedCloudCache } from './cloud-cache'
 import { CloudHttpError } from '../../src/cloud/client'
+import { discrepancyIssueUrl } from '../../src/discrepancy-issue'
 
 // Local assets need no proxy; avoid Chromium's automatic PAC/WPAD discovery.
 // The explicitly invoked Azure CLI keeps its independent enterprise proxy settings.
@@ -85,6 +86,10 @@ void app.whenReady().then(async () => {
     webPreferences: { preload: join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, spellcheck: false },
   })
   window.webContents.setWindowOpenHandler(({ url }) => {
+    if (url === discrepancyIssueUrl()) {
+      void shell.openExternal(url).catch(error => dialog.showErrorBox('Unable to open GitHub issue', error instanceof Error ? error.message : String(error)))
+      return { action: 'deny' }
+    }
     if (url.startsWith('app://simulator/docs/')) {
       const documentation = new BrowserWindow({ width: 1100, height: 900, icon: join(site, 'desktop-icon.png'), webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, spellcheck: false } })
       documentation.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))

@@ -194,6 +194,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const [captureRevision, setCaptureRevision] = useWorkspaceEditorState<string>('aznet.captureRevision')
   const [captureNotices, setCaptureNotices] = useWorkspaceEditorState<string[]>('aznet.captureNotices', [])
   const [captureObservations, setCaptureObservations] = useWorkspaceEditorState<AzCapturedObservations | null>('aznet.captureObservations', null)
+  const [originalCapture, setOriginalCapture] = useWorkspaceEditorState<unknown>('aznet.originalCapture')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const compareFileInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -343,6 +344,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const applyLoadedTopology = (id: string, nextTopology: AzNetTopology) => {
     nextTopology = replaceTopology(id, nextTopology)
     setCaptureObservations(null)
+    setOriginalCapture(undefined)
     sampleRequest.current++
     setTraceActive(false)
     setGroupTrace(null)
@@ -370,6 +372,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     setCaptureComparison(importedComparison)
     setCaptureRevision(azRoutingInput(imported.topology).revision)
     setCaptureObservations(imported.observations ?? null)
+    setOriginalCapture(raw)
     setWorkspaceNotice('')
     setActiveTab('azure')
   }
@@ -2810,6 +2813,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                   const imported = importAzNetCapture(raw)
                   setCaptureNotices(imported.warnings)
                   setCaptureObservations(imported.observations ?? null)
+                  setOriginalCapture(raw)
                   if (imported.observations) {
                     const report = compareAzNetWithObservations(
                       topology,
@@ -4982,10 +4986,19 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             {activeTab === 'azure' && (
               <Suspense fallback={<p role="status">{t('Loading workspace…')}</p>}><AzurePanel
                 topology={topology} simulation={simulation} observations={captureObservations} comparison={captureComparison}
-                notices={captureNotices} stale={captureRevision !== baselineRevision}
-                onCaptured={(observations, comparison, warnings) => {
+                notices={captureNotices} stale={captureRevision !== baselineRevision} capture={originalCapture}
+                onCaptured={(observations, comparison, warnings, capture) => {
                   setCaptureObservations(observations); setCaptureComparison(comparison); setCaptureNotices(warnings); setCaptureRevision(baselineRevision)
+                  setOriginalCapture(capture)
                 }} onComparison={(report) => { setCaptureComparison(report); setCaptureRevision(baselineRevision) }}
+                onBundleImport={({ source, manifest }) => {
+                  if (source.mode !== 'azure-network') throw new Error('Expected an Azure networking issue bundle.')
+                  applyLoadedTopology('', source.topology)
+                  setCaptureObservations(source.observations); setCaptureComparison(source.comparison)
+                  setOriginalCapture(source.capture)
+                  setCaptureNotices([...source.notices, t('Imported historical evidence from app {0}, revision {1}. Current-engine replay is not live Azure validation.', manifest.app.version, manifest.app.revision)])
+                  setCaptureRevision(azRoutingInput(source.topology).revision); setActiveTab('azure')
+                }}
                 onImportFile={() => fileInputRef.current?.click()} onCompareFile={() => compareFileInputRef.current?.click()} /></Suspense>
             )}
           </div>

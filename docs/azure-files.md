@@ -3,6 +3,62 @@
 These are application modeling bounds, not Azure quotas. No Azure resource or
 live tunnel is created by importing a file.
 
+## Reporting a simulator / Azure discrepancy
+
+On web or Windows, open **Azure files** (VWAN) or **Azure & Bicep**
+(Hub-and-Spoke / Full Hybrid), then expand **Report a discrepancy**.
+Load your Azure capture and compare it first when possible. Windows local reads
+and the downloadable PowerShell collectors supply the same evidence; no new
+Azure collection or credentials are required to create a bundle.
+
+Enter a summary and the expected and actual results. Review the content list
+and acknowledge the privacy notice, then choose **Download issue bundle**.
+The local `aznetsim-discrepancy.zip` contains:
+
+| File | Contents |
+| --- | --- |
+| `manifest.json` | Format version, workspace mode, description, export/comparison times, app version, source/engine revision, and web/Windows host |
+| `topology.json` | The current simulator design, including retained imported evidence |
+| `evidence.json` | Complete available normalized observations, VWAN comparison mappings/scope, or NIC/BGP observations and capture notices; original collector JSON when available |
+| `report.json` | The current comparison result, or `null` if absent or stale |
+| `issue.md` | Expected/actual behavior and offline reproduction instructions |
+
+No Azure credentials, browser logs or unrelated local files are collected.
+**Resource IDs, names, network addresses, notes and other topology content are
+not anonymized.** Inspect the ZIP before sharing; do not attach confidential
+information to a public issue. Original collector JSON can include additional
+resource metadata; review `evidence.json` as well as `topology.json`.
+Automatic anonymization is not implemented:
+inconsistent address or identity replacements can change routing behavior.
+Nothing is uploaded automatically. The GitHub link opens a generic issue form
+with manual attachment instructions; it contains no user description, topology,
+Azure evidence or local file paths. Attach the reviewed ZIP yourself.
+
+For offline investigation, open the matching workspace mode, expand the same
+reporting section, and choose **Load issue bundle**. Review the description,
+provenance and original report, save any current work, and explicitly confirm
+**Replace workspace and replay bundle**. Invalid or cancelled imports leave the
+workspace unchanged. Only the original stored (uncompressed) ZIP format exported
+by the app is accepted; imports have a **25 MB total limit**, fixed filenames,
+bounded JSON nesting and observation-work limits. Do not recompress the ZIP.
+The size bound stays within GitHub's
+[25 MB limit for non-media issue attachments](https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/attaching-files).
+
+The current engine recomputes findings from the recorded evidence rather than
+trusting serialized results. VWAN replay uses the original comparison timestamp,
+so replaying days later does not turn previously comparable rows into stale ones.
+**Compare captured fields** then runs a fresh assessment with today's staleness
+checks; it does not fetch new Azure data. Original results remain in
+`report.json` in the downloaded ZIP, allowing comparison across engine revisions.
+Imported comparison evidence remains separate from the saved topology; keep the
+ZIP for later replay.
+
+Bundles with no capture still include the design and explicitly contain no
+separate observation. Partial/denied/unsupported evidence stays visible and does
+not establish missing routes or network health. The bundle reproduces modeled
+calculations and recorded observations, not live convergence, transient Azure
+state or behavior absent from the capture.
+
 ## More than 500 VNets
 
 The collector and importer accept up to **1000 aggregate VNet references** across
