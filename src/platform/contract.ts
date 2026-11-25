@@ -13,13 +13,14 @@ import { applicationCapabilities } from '../application-inventory'
 import type { ApplicationRequest, ApplicationResult } from '../application'
 import type { BgpInspection } from '../bgp-neighbors'
 import type { RoutingEvidenceEnvelope, RoutingLimitation } from '../routing-evidence'
+import type { VpnTransitionComparison, VpnTransitionRequest } from '../azure-net/vpn-migration'
 
 export const contractVersion = 1 as const
 export const latestContractVersion = 2 as const
 export const supportedContractVersions = [contractVersion, latestContractVersion] as const
 export const platformModes = ['vwan', 'hub-spoke', 'full'] as const
 export const platformOperations = ['validate', 'simulate', 'evaluate', 'application'] as const
-export const engineVersion = '2026.11.24.1'
+export const engineVersion = '2026.11.25.1'
 export type PlatformMode = typeof platformModes[number]
 export type PlatformDocument =
   | { mode: 'vwan'; topology: Topology }
@@ -55,7 +56,16 @@ export type PacketRequirement = {
   expectation: 'configured' | 'blocked'
   requiredBackend?: WorkloadIpReference & { address: string }
 }
-export type Requirement = FlowRequirement | RouteRequirement | PacketRequirement
+export type VpnTunnelRequirement = {
+  id: string
+  kind: 'vpn-tunnel'
+  connectionId: string
+  tunnelId: string
+  expectation: 'eligible' | 'ineligible'
+  binding?: { azureAddress: string; cpeAddress: string; gatewayInstanceId: string }
+  underlayState?: 'available' | 'unavailable'
+}
+export type Requirement = FlowRequirement | RouteRequirement | PacketRequirement | VpnTunnelRequirement
 export type PlatformRequest = {
   contractVersion: typeof supportedContractVersions[number]
   engineVersion?: string
@@ -66,6 +76,7 @@ export type PlatformRequest = {
   budget?: { maxMillis?: number; maxOutputBytes?: number }
   packet?: PacketRequest
   vpnPacket?: VpnNatPacketRequest
+  vpnTransition?: VpnTransitionRequest
   application?: ApplicationRequest
 }
 export type Assessment = {
@@ -89,6 +100,7 @@ export type PlatformResult = {
   routingLimitations?: RoutingLimitation[]
   packet?: PacketResult
   vpnPacket?: VpnNatPacketResult
+  vpnTransition?: VpnTransitionComparison
   application?: ApplicationResult
 }
 
@@ -183,11 +195,21 @@ export const capabilities = {
   workspace: { capabilities: workspaceCapabilities, limitations: workspaceCapabilityLimits },
   vpnOverEr: {
     modes: ['hub-spoke', 'full'], topologyVersion: 2,
-    scope: 'Classic active/standby RouteBased VPN with explicit Standard public-IP capability, owned private endpoints and selected same-circuit ER links.',
-    routing: 'Declared independent outer ER routing context; all private overlays withdrawn for endpoint lookup. Inner workloads retain normal routing and site policies; direct ER fallback is not IPsec.',
-    evidence: 'simulation.vpnUnderlays[connectionId]; assessments[].evidence.forward/reverse.vpnProtection and named outer contexts in VPN trace hops.',
-    excluded: ['static VPN overlay', 'active/active endpoint ownership', 'VPN NAT composition', 'Virtual WAN/NVA/SD-WAN private overlay',
+    scope: 'Classic RouteBased VPN with explicit Standard public-IP capability, owned private endpoints and selected same-circuit ER links. Active/active requires explicit vpnInstances and configured connection.tunnels membership.',
+    routing: 'Independent outer ER dependency resolution with all private overlays withdrawn; explicit shared-CPE static policies still apply. Inner workloads retain normal routing and site policies; direct ER fallback is not IPsec.',
+    evidence: 'Legacy simulation.vpnUnderlays[connectionId]; explicit simulation.vpnTunnels[JSON.stringify([connectionId,tunnelId])] with per-session route provenance; directional flow vpnTunnelPaths.',
+    excluded: ['legacy static VPN overlay without instance bindings', 'VPN NAT composition', 'Virtual WAN/NVA/SD-WAN private overlay',
       'actual on-prem underlay context configuration', 'IKE/IPsec SAs, crypto correctness, packet delivery, MTU/MSS, throughput and convergence'],
+  },
+  vpnTunnels: {
+    modes: ['hub-spoke', 'full'], topologyVersion: 2,
+    configuration: 'gateway.vpnInstances: stable original IP-configuration mappings; connection.tunnels: only configured CPE membership. One site.vpnRouting context/FIB may own multiple tunnels and share a CPE BGP loopback.',
+    binding: 'Effective connection.bgpPeer (LNG) and gatewayCustomBgpIpAddresses select the instance default/custom BGP source. Explicit CPE listener/source/ASN, initiation and source-qualified peer routes determine declarative eligibility.',
+    requirements: 'kind=vpn-tunnel; exact connectionId/tunnelId; expectation=eligible|ineligible; optional exact binding {azureAddress,cpeAddress,gatewayInstanceId} and ER underlayState=available|unavailable.',
+    evidence: 'simulation.vpnTunnels and bgpNeighbors.neighbors[].vpnTunnel: transport, explicit SA assumption, expected pair, separate observations, shared-FIB forward/return peer lookups and per-session route provenance.',
+    unknown: ['BGP Established or observed TCP success from eligibility', 'unmapped capture tunnel membership', 'dynamic self/cross-overlay peer-route feedback',
+      'transition history and SA persistence (simulation.vpnTransitionAssessment)', 'live vendor/platform collateral failure', 'Internet transport without an explicit assumption'],
+    snapshots: 'Optional vpnTransition:{previousTopology,event:{id,description}} on simulate/evaluate. Returns preserved source snapshots, retained/added/removed tunnel identities and derived per-tunnel/CPE/gateway/subnet deltas, with inPlaceReproduction=not-assessed. Not an event replay or SA persistence model.',
   },
   vpnNat: { operation: 'simulate', requestField: 'vpnPacket', modes: ['hub-spoke', 'full'], providers: VPN_NAT_CAPABILITIES,
     endpoints: 'One original connectionId, ingress/egress initiation and explicit IPv4 TCP/UDP tuple. Replies are assessed only within that forward request.',

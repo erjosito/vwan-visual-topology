@@ -73,6 +73,8 @@ export interface AzUdrTable {
 }
 
 export interface AzVnetGateway {
+  vpnInstances?: AzVpnInstance[]
+  capturedVpnConfiguration?: { source: string; bgpSettings: Record<string, unknown> }
   vpnNat?: ClassicVpnNatGateway
   id: string
   name: string
@@ -87,6 +89,60 @@ export interface AzVnetGateway {
   vpnGatewayGeneration?: 'Generation1' | 'Generation2'
   sku?: string
   enabled: boolean
+}
+
+export interface AzVpnProvenance {
+  kind: 'authored' | 'capture'
+  source: string
+}
+
+export interface AzVpnInstance {
+  id: string
+  ipConfigurationId: string
+  enabled: boolean
+  privateIpAddress?: string
+  publicIpAddress?: string
+  defaultBgpIpAddresses: string[]
+  customBgpIpAddresses: string[]
+  provenance: AzVpnProvenance
+}
+
+export interface AzVpnErUnderlay {
+  kind: 'express-route'
+  azureLinkId: string
+  siteLinkId: string
+  azureEndpoint: string
+  onPremEndpoint: string
+}
+
+export interface AzVpnTunnel {
+  id: string
+  gatewayInstanceId: string
+  enabled: boolean
+  transport: AzVpnErUnderlay | {
+    kind: 'internet'
+    azureEndpoint: string
+    onPremEndpoint: string
+    availability: 'available' | 'unavailable' | 'unknown'
+  }
+  /** Explicit abstract SA assumption, never a derived or observed IKE session. */
+  ipsec: 'available' | 'unavailable' | 'unknown'
+  bgp?: {
+    cpeLocalAddress: string
+    cpePeerAddress: string
+    cpeRemoteAsn: number
+    cpeInitiates: boolean
+    routingContextId: string
+  }
+  observations?: {
+    id: string
+    source: string
+    timestamp: string
+    azureAddress: string
+    cpeAddress: string
+    initiator: 'azure' | 'cpe'
+    state?: string
+  }[]
 }
 
 export type AzArsPreference = 'ExpressRoute' | 'VpnGateway' | 'ASPath'
@@ -196,6 +252,18 @@ export interface AzVwanHub {
 }
 
 export interface AzSite {
+  vpnRouting?: {
+    contextId: string
+    localAddresses: string[]
+    /** Static routes share the peer/workload FIB; omitted source means all sources. */
+    peerRoutes: {
+      id: string
+      prefix: string
+      sourceAddress?: string
+      enabled: boolean
+      nextHop: { kind: 'tunnel'; connectionId: string; tunnelId: string } | { kind: 'er-link'; linkId: string } | { kind: 'drop' }
+    }[]
+  }
   id: string
   name: string
   label?: string
@@ -245,15 +313,18 @@ export interface AzErLink {
 }
 
 export interface AzVpnConnection {
+  staticAzurePrefixes?: string[]
+  tunnels?: AzVpnTunnel[]
+  bgpPeer?: { address: string; asn: number; provenance: AzVpnProvenance }
+  gatewayCustomBgpIpAddresses?: { ipConfigurationId: string; customBgpIpAddress: string }[]
+  capturedConfiguration?: {
+    source: string
+    localNetworkGateway: Record<string, unknown>
+    connection: Record<string, unknown>
+  }
   advertisedPrefixes?: string[]
   useLocalAzureIpAddress?: boolean
-  underlay?: {
-    kind: 'express-route'
-    azureLinkId: string
-    siteLinkId: string
-    azureEndpoint: string
-    onPremEndpoint: string
-  }
+  underlay?: AzVpnErUnderlay
   nat?: VpnNat
   id: string
   name: string

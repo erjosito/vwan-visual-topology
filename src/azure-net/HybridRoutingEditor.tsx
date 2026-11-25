@@ -8,6 +8,7 @@ import { saveManagedVnra, vnraSubnetName } from './vnra-authoring'
 import { guidanceAnchor } from '../learning/guidance'
 import { ApplianceAvailability } from './VnetRoutingSettings'
 import type { AzSimulationResult } from './engine'
+import { vpnTunnelKey } from './vpn-sessions'
 import './vpn-er-messages-ja'
 
 type Props = { topology: AzNetTopology; commit: (edit: (draft: AzNetTopology) => void) => boolean | void }
@@ -31,6 +32,7 @@ export function HybridConnectionEditor({ topology, connectionId, commit, simulat
   const owner = topology.vnets.find((vnet) => vnet.gateways.some((gateway) => gateway.id === vpn?.targetId))
   const gateway = owner?.gateways.find((gateway) => gateway.id === vpn?.targetId)
   const underlay = simulation?.vpnUnderlays?.[connectionId]
+  const instanceBound = vpn?.tunnels !== undefined
   return <><section className="aznet-card" data-testid="aznet-hybrid-connection-editor"
     data-learning-anchor={guidanceAnchor('connection-editor', vpn ? 'vpn-connection' : 'er-link', connectionId)}>
     <h3>{t('Hybrid connection routing')}</h3>
@@ -43,6 +45,7 @@ export function HybridConnectionEditor({ topology, connectionId, commit, simulat
         const inbound = parseAsPath(String(data.get('inbound') ?? ''))
         const outbound = parseAsPath(String(data.get('outbound') ?? ''))
         const staticPrefixes = prefixes(String(data.get('prefixes') ?? ''))
+        const staticAzurePrefixes = instanceBound ? prefixes(String(data.get('azurePrefixes') ?? '')) : undefined
         const advertised = restrict ? prefixes(String(data.get('advertised') ?? '')) : undefined
         commit((draft) => {
           const target = draft.vpnConnections.find((connection) => connection.id === connectionId)
@@ -52,10 +55,11 @@ export function HybridConnectionEditor({ topology, connectionId, commit, simulat
             target.inboundPrepend = inbound
             target.outboundPrepend = outbound
             target.staticPrefixes = staticPrefixes
+            if (staticAzurePrefixes !== undefined) target.staticAzurePrefixes = staticAzurePrefixes
             target.bgpEnabled = data.has('bgp')
             if (advertised === undefined) delete target.advertisedPrefixes
             else target.advertisedPrefixes = advertised
-            if (privateEr) {
+            if (target.tunnels === undefined && privateEr) {
               target.useLocalAzureIpAddress = true
               target.underlay = {
                 kind: 'express-route', azureLinkId: String(data.get('azureLink')),
@@ -70,7 +74,7 @@ export function HybridConnectionEditor({ topology, connectionId, commit, simulat
                 else delete gateway.publicIpSku
                 gateway.privateIpAddresses = String(data.get('privateEndpoints') ?? '').split(/[,\s]+/).filter(Boolean)
               }
-            } else {
+            } else if (target.tunnels === undefined) {
               delete target.useLocalAzureIpAddress
               delete target.underlay
             }
@@ -101,8 +105,15 @@ export function HybridConnectionEditor({ topology, connectionId, commit, simulat
       <label className="field"><span>{t('Connection name')}</span><input name="name" required maxLength={120} defaultValue={connection.name} /></label>
       <label><input type="checkbox" name="enabled" defaultChecked={connection.enabled} />{t('Enabled')}</label>
       {vpn && <>
-        <label><input type="checkbox" checked={privateEr} onChange={(event) => setPrivateEr(event.target.checked)} />{t('VPN over ER private peering')}</label>
-        {privateEr && <fieldset><legend>{t('ER underlay and private tunnel endpoints')}</legend>
+        <label><input type="checkbox" checked={privateEr} disabled={instanceBound} onChange={(event) => setPrivateEr(event.target.checked)} />{t('VPN over ER private peering')}</label>
+        {instanceBound && <section data-testid="vpn-instance-tunnels">
+          <p>{t('Instance-bound transports and BGP bindings are authored in native JSON. This editor preserves them; eligibility is not Established or verified SA continuity.')}</p>
+          {vpn.tunnels!.map((tunnel) => <details key={tunnel.id}>
+            <summary>{tunnel.id} · {simulation?.vpnTunnels?.[vpnTunnelKey(connectionId, tunnel.id)]?.state ?? t('Not assessed')}</summary>
+            <pre>{JSON.stringify(simulation?.vpnTunnels?.[vpnTunnelKey(connectionId, tunnel.id)] ?? tunnel, null, 2)}</pre>
+          </details>)}
+        </section>}
+        {privateEr && !instanceBound && <fieldset><legend>{t('ER underlay and private tunnel endpoints')}</legend>
           <p>{t('Classic active/standby RouteBased VPN gateway only. Static routing, active/active, NAT, NVA and Virtual WAN private overlays are not assessed. BGP is not an Azure prerequisite.')}</p>
           <label className="field"><span>{t('Azure ER link')}</span><select name="azureLink" required defaultValue={vpn.underlay?.azureLinkId ?? ''}>
             <option value="">{t('Select')}</option>{topology.erLinks.filter((link) => link.targetKind === 'vnet-gateway'
@@ -130,6 +141,7 @@ export function HybridConnectionEditor({ topology, connectionId, commit, simulat
         <label><input type="checkbox" name="bgp" disabled={transport === 'SDWAN'} checked={bgp}
           data-configuration-pending={bgp !== (vpn?.bgpEnabled ?? true)} onChange={(event) => setBgp(event.target.checked)} />{t('BGP enabled (required for SD-WAN)')}</label>
         <label className="field"><span>{t('Static VPN prefixes (BGP disabled)')}</span><textarea name="prefixes" defaultValue={vpn.staticPrefixes?.join('\n') ?? ''} /></label>
+        {instanceBound && <label className="field"><span>{t('CPE static Azure prefixes (BGP disabled)')}</span><textarea name="azurePrefixes" defaultValue={vpn.staticAzurePrefixes?.join('\n') ?? ''} /></label>}
       </>}
       {(vpn || er?.targetKind === 'site') && <>
         <label><input type="checkbox" checked={restrict} onChange={(event) => setRestrict(event.target.checked)} />{t('Select site prefixes advertised on this transport')}</label>
@@ -148,7 +160,7 @@ export function HybridConnectionEditor({ topology, connectionId, commit, simulat
       {error && <p role="alert">{error}</p>}
     </form>
   </section>
-  {vpn && <VpnNatConnectionEditor topology={topology} connectionId={connectionId} commit={commit} />}
+  {vpn && !instanceBound && <VpnNatConnectionEditor topology={topology} connectionId={connectionId} commit={commit} />}
   </>
 }
 

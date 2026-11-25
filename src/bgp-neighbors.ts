@@ -4,11 +4,14 @@ import { gatewayArsExchange } from './azure-net/ars-route-maps'
 import type { AzBgpRibEntry, AzNvaBgpPeer, AzNvaReceivedRoute, AzSimulationResult } from './azure-net/engine'
 import { sameWan } from './wan-scopes'
 import { vpnRoutingMode } from './model'
+import { vpnTunnelKey, type VpnTunnelAssessment } from './azure-net/vpn-sessions'
 
 export type BgpResourceKind = 'appliance' | 'route-server' | 'gateway' | 'site' | 'er-location' | 'vwan-hub'
 export interface BgpResourceRef { kind: BgpResourceKind; id: string }
 export interface BgpInstance {
   id: string
+  originalId?: string
+  ipConfigurationId?: string
   role: 'router' | 'ars-1' | 'ars-2' | 'vpn-active' | 'vpn-1' | 'vpn-2'
   address?: string
 }
@@ -33,6 +36,7 @@ export interface BgpRouteEvidence {
   routes: BgpNeighborRoute[]
 }
 export interface BgpNeighbor {
+  vpnTunnel?: VpnTunnelAssessment
   id: string
   relationshipId: string
   connectionId: string
@@ -153,13 +157,22 @@ export function inspectAzBgp(topology: AzNetTopology, simulation?: AzSimulationR
       asn: 65515, enabled: vnet.routeServer.enabled, ownerId: vnet.id,
       limitations: ['ARS speaker 1 and 2 are stable modeled roles, not a mapping of captured role arrays or physical instance IDs. Endpoint IPs are not inferred from subnet addresses.'],
     })
-    for (const gw of vnet.gateways) add('gateway', gw.id, gw.name,
+    for (const gw of vnet.gateways) {
+      const resource = add('gateway', gw.id, gw.name,
       gw.kind !== 'Vpn' || gw.activeActive === undefined ? [] : gw.activeActive ? ['vpn-1', 'vpn-2'] : ['vpn-active'], {
         asn: gw.asn, enabled: gw.enabled, ownerId: vnet.id,
         limitations: gw.kind === 'ExpressRoute' ? [opaqueMapping] : gw.activeActive === undefined ? [vpnUnknownMode]
           : [gw.activeActive ? 'Two active modeled VPN speakers; endpoint IPs and physical instance mappings are not exposed.'
             : 'One active modeled VPN speaker. A standby physical instance exists; its failure, failover timing and BGP session are not modeled.'],
       })
+      if (gw.vpnInstances !== undefined) {
+        resource.instances = gw.vpnInstances.map((instance) => ({
+          id: identity('gateway', gw.id, instance.id), originalId: instance.id, ipConfigurationId: instance.ipConfigurationId,
+          role: 'vpn-active', address: instance.defaultBgpIpAddresses.length === 1 ? instance.defaultBgpIpAddresses[0] : undefined,
+        }))
+        resource.limitations = ['Explicit authored/captured IP-configuration mapping, not capture-array order. Tunnel eligibility and historical observations remain separate; no Established session is inferred.']
+      }
+    }
   }
   for (const site of topology.sites) add('site', site.id, site.name, ['router'], { asn: site.asn })
   for (const location of topology.erLocations) add('er-location', location.id, location.name, [], {
@@ -213,6 +226,34 @@ export function inspectAzBgp(topology: AzNetTopology, simulation?: AzSimulationR
     if (!site || !target) continue
     const targetBgpEnabled = conn.targetKind !== 'vnet-gateway' ||
       topology.vnets.some((vnet) => vnet.gateways.some((gateway) => gateway.id === conn.targetId && gateway.bgpEnabled))
+    if (conn.tunnels !== undefined) {
+      if (!conn.bgpEnabled || !conn.tunnels.length) {
+        managed(identity('vpn', conn.id), conn.id, target, site,
+          conn.enabled && conn.tunnels.some((tunnel) => simulation?.vpnTunnels?.[vpnTunnelKey(conn.id, tunnel.id)]?.state === 'available'),
+          conn.bgpEnabled ? 'Configured CPE tunnel membership has not been mapped; no full mesh is inferred.'
+            : 'Static VPN routing; no BGP peering is configured on this connection.',
+          { name: conn.name, kind: conn.bgpEnabled ? 'vpn' : 'vpn-static' })
+        continue
+      }
+      for (const tunnel of conn.tunnels) {
+        const instance = target.instances.find((instance) => instance.originalId === tunnel.gatewayInstanceId)
+        const assessment = simulation?.vpnTunnels?.[vpnTunnelKey(conn.id, tunnel.id)]
+        if (!instance) {
+          managed(identity('vpn', conn.id, tunnel.id), conn.id, target, site, false,
+            assessment?.reason ?? 'Gateway instance mapping is not assessed.', { name: `${conn.name} / ${tunnel.id}`, kind: 'vpn' })
+          continue
+        }
+        const start = result.neighbors.length
+        pair(identity('vpn', conn.id, tunnel.id), conn.id, target, instance, site, site.instances[0],
+          !target.enabled || !site.enabled ? 'unavailable' : assessment?.state ?? 'not-assessed',
+          assessment?.reason ?? 'Per-tunnel eligibility has not been assessed.',
+          evidence('received-post-policy', simulation?.gatewayRibs[conn.targetId]?.filter((route) => route.connectionId === conn.id && route.vpnTunnelId === tunnel.id)),
+          undefined, evidence('received-post-policy', simulation?.siteRibs[conn.siteId]?.filter((route) => route.connectionId === conn.id && route.vpnTunnelId === tunnel.id)),
+          undefined, assessment?.limitations)
+        for (const neighbor of result.neighbors.slice(start)) neighbor.vpnTunnel = assessment
+      }
+      continue
+    }
     const underlay = conn.underlay || conn.useLocalAzureIpAddress
       ? simulation?.vpnUnderlays?.[conn.id] ?? { state: 'not-assessed', reason: 'Private VPN underlay has not been assessed.' } : undefined
     if (!target.instances.length) {

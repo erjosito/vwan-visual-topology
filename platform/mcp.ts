@@ -30,6 +30,9 @@ server.registerTool('get_schema', {
   endpointShapes: mode === 'vwan' ? [{ kind: 'spoke', id: 'ID' }, { kind: 'site', id: 'ID' }, { kind: 'hub', id: 'ID' }]
     : [{ kind: 'subnet', vnetId: 'ID', subnetId: 'ID' }, { kind: 'site', siteId: 'ID' }],
   requirementShapes: [
+    ...(mode === 'vwan' ? [] : [{ id: 'unique-tunnel-id', kind: 'vpn-tunnel', connectionId: 'original-connection-id', tunnelId: 'original-tunnel-id',
+      expectation: 'eligible or ineligible', binding: { azureAddress: 'fixed IPv4', cpeAddress: 'fixed IPv4', gatewayInstanceId: 'original-instance-id' },
+      underlayState: 'available or unavailable (ER only)', note: 'Configuration eligibility and explicit dependencies, not BGP Established or delivery. Unknown mappings cannot pass.' }]),
     ...(mode === 'vwan' ? [] : [{ kind: 'flow', expectation: 'allow',
       applianceChain: { forward: ['original-firewall-id', 'original-sdwan-id'], reverse: ['original-sdwan-id', 'original-firewall-id'] },
       note: 'Optional ordered waypoint subsequences. Each leg needs 1-16 distinct original appliance IDs. Do not combine with other waypoint fields; not HA or session enforcement.' }]),
@@ -69,6 +72,31 @@ server.registerTool('get_schema', {
         azureEndpoint: 'owned GatewaySubnet private IPv4', onPremEndpoint: 'site private device IPv4' } },
     siteErLink: { advertisedPrefixes: ['exact existing site transport prefix; host/subnet/aggregate allowed'] },
     note: 'An absent advertisedPrefixes selection exports all site routes; [] withdraws all BGP export. Configure the on-prem independent endpoint context and workload inbound local preference explicitly.',
+  },
+  optionalVpnTunnels: mode === 'vwan' ? { supported: false } : {
+    gateway: { vpnInstances: [{ id: 'stable-instance-id', ipConfigurationId: 'original-ip-configuration-id', enabled: true,
+      defaultBgpIpAddresses: ['owned GatewaySubnet IPv4'], customBgpIpAddresses: ['169.254.21.2'],
+      privateIpAddress: 'owned private outer IPv4', publicIpAddress: 'owned public outer IPv4', provenance: { kind: 'authored or capture', source: 'explicit mapping source' } }] },
+    connection: {
+      staticPrefixes: ['explicit CPE workload CIDR when BGP is disabled; [] means none'],
+      staticAzurePrefixes: ['explicit Azure workload CIDR when BGP is disabled; [] means none'],
+      bgpPeer: { address: 'effective LNG BGP IPv4', asn: 64513, provenance: { kind: 'authored or capture', source: 'LNG source' } },
+      gatewayCustomBgpIpAddresses: [{ ipConfigurationId: 'original-ip-configuration-id', customBgpIpAddress: '169.254.21.2' }],
+      tunnels: [{ id: 'original-tunnel-id', gatewayInstanceId: 'stable-instance-id', enabled: true, ipsec: 'available or unavailable or unknown',
+        transport: 'express-route underlay shape above, or {kind:internet,azureEndpoint:IPv4,onPremEndpoint:IPv4,availability:available|unavailable|unknown}',
+        bgp: { cpeLocalAddress: 'effective LNG BGP IPv4', cpePeerAddress: 'expected Azure BGP IPv4', cpeRemoteAsn: 65515, cpeInitiates: true, routingContextId: 'shared-fib' },
+        observations: [{ id: 'observation-id', source: 'capture provenance', timestamp: 'ISO timestamp', azureAddress: 'observed IPv4', cpeAddress: 'observed IPv4', initiator: 'azure or cpe', state: 'historical text only' }] }],
+    },
+    site: { vpnRouting: { contextId: 'shared-fib', localAddresses: ['owned CPE BGP IPv4'], peerRoutes: [{
+      id: 'peer-host-route', prefix: 'Azure BGP peer /32', enabled: true, sourceAddress: 'optional CPE source IPv4',
+      nextHop: { kind: 'tunnel', connectionId: 'original-connection-id', tunnelId: 'original-tunnel-id' },
+    }] } },
+    note: 'Specify only configured tunnels, not all gateway endpoints. Per-tunnel transport replaces connection-level underlay. Static tunnels require staticPrefixes and staticAzurePrefixes. CPE peerRoutes also govern workload and outer-endpoint forwarding, with ER-link/drop next hops supported. Missing captured CPE membership stays unassessed. Native snapshots preserve IDs; clean recomputation does not reproduce transition history or SA continuity.',
+  },
+  optionalVpnTransition: mode === 'vwan' ? { supported: false } : {
+    operation: 'simulate or evaluate', vpnTransition: { previousTopology: 'previous native topology JSON',
+      event: { id: 'ordered-event-id', description: 'explicit authored change, not a measured SA event' } },
+    result: 'vpnTransition section: source snapshots and derived eligibility/route deltas. inPlaceReproduction=not-assessed; no inferred SA continuity or TCP history.',
   },
   packetDestinationShapes: [{ kind: 'public-ip', publicIpId: 'original public-IP ID' },
     { kind: 'load-balancer', loadBalancerId: 'original LB ID', frontendId: 'original frontend ID' }],
@@ -116,6 +144,8 @@ server.registerTool('start_simulation', {
       locale: z.enum(['en', 'ja']).optional(),
       requirements: z.array(z.record(z.string(), z.unknown())).max(platformLimits.maxRequirements).optional(),
       application: z.record(z.string(), z.unknown()).optional(),
+      vpnTransition: z.object({ previousTopology: z.record(z.string(), z.unknown()),
+        event: z.object({ id: z.string().min(1).max(120), description: z.string().min(1).max(4096) }).strict() }).strict().optional(),
       packet: z.object({
         source: z.record(z.string(), z.unknown()), target: z.record(z.string(), z.unknown()),
         protocol: z.enum(['tcp', 'udp']), sourcePort: z.number().int().min(1).max(65535), destinationPort: z.number().int().min(1).max(65535),
@@ -140,14 +170,14 @@ server.registerTool('get_job', {
       contractVersion: result.contractVersion, engineVersion: result.engineVersion, revision: result.revision,
       resultStatus: result.status, errors: result.errors, limitations: result.limitations.slice(0, 20),
       assessments: result.assessments.map(({ id, outcome, reasons }) => ({ id, outcome, reasons })),
-      sections: ['document', 'simulation', 'bgpNeighbors', 'assessments', 'packet', 'vpnPacket', 'application'],
+      sections: ['document', 'simulation', 'bgpNeighbors', 'assessments', 'packet', 'vpnPacket', 'vpnTransition', 'application'],
     } : {}),
   })
 })
 
 server.registerTool('get_evidence', {
   description: 'Retrieve bounded JSON-text chunks of a completed job section. Concatenate all chunks in offset order before parsing; a partial chunk is not complete evidence.',
-  inputSchema: { handle: z.string().uuid(), section: z.enum(['document', 'simulation', 'bgpNeighbors', 'assessments', 'packet', 'vpnPacket', 'application']), offset: z.number().int().min(0).default(0), limit: z.number().int().min(1).max(16000).default(8000) }, annotations,
+  inputSchema: { handle: z.string().uuid(), section: z.enum(['document', 'simulation', 'bgpNeighbors', 'assessments', 'packet', 'vpnPacket', 'vpnTransition', 'application']), offset: z.number().int().min(0).default(0), limit: z.number().int().min(1).max(16000).default(8000) }, annotations,
 }, async ({ handle, section, offset, limit }) => {
   const { result } = jobs.get(handle)
   if (!result) throw new Error('Job is still running.')

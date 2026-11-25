@@ -1,5 +1,6 @@
 import type { Topology } from './model'
 import type { AzNetTopology } from './azure-net/model'
+import type { ResilienceGap, ResilienceFinding, ResilienceReport } from './failure-analysis'
 import { getGeopoliticalRegionForAzureRegion, normalizeAzureRegionName } from './er-locations-catalog'
 import { embeddedSpokeNvaSiteIds } from './topology-graph'
 
@@ -11,6 +12,30 @@ export interface FailureDomain {
 export type FaultMap = Record<string, FailureDomain[]>
 export const failureKey = (fault: FailureDomain) => `${fault.kind}:${fault.id}`
 export const failureLabel = (fault: FailureDomain) => `${fault.kind === 'region' ? 'Azure region' : fault.kind === 'site' ? 'on-premises site' : 'ER location'} ${fault.name}`
+
+export function groupResilienceGaps(gaps: ResilienceGap[]): ResilienceFinding[] {
+  const groups = new Map<string, ResilienceFinding>()
+  for (const gap of gaps) {
+    const key = `${gap.category}:${gap.scenarioId}`
+    let group = groups.get(key)
+    if (!group) {
+      group = {
+        id: `resilience-root:${encodeURIComponent(key)}`, category: gap.category,
+        scenarioId: gap.scenarioId, fault: gap.fault, endpointIds: [], occurrences: [],
+      }
+      groups.set(key, group)
+    }
+    group.occurrences.push(gap)
+    group.endpointIds = [...new Set([...group.endpointIds, ...gap.endpointIds])]
+  }
+  return [...groups.values()]
+}
+
+export function resilienceMarkers(report?: ResilienceReport): Record<string, number> {
+  const markers: Record<string, number> = {}
+  for (const finding of groupResilienceGaps(report?.gaps ?? [])) for (const id of finding.endpointIds) markers[id] = (markers[id] ?? 0) + 1
+  return markers
+}
 
 export function regionKey(region?: string): string | undefined {
   if (!region || !getGeopoliticalRegionForAzureRegion(region)) return undefined

@@ -85,7 +85,7 @@ IDs; inspector state and projected roles are not new saved configuration.
 | --- | --- | --- |
 | ARS and eligible local/directly peered NVA | Two stable ARS roles; NVA retains both distinct remote neighbors per ARS | Roles are not captured array indices, physical instance identities or inferred IPs |
 | NVA | One logical router, authored private IP and configured memberships | No vendor internal instances or independently measured endpoint route sets |
-| Standalone active/active VPN | Two active modeled speakers, each related to the configured site | Endpoint IPs and independent instance failures are not modeled |
+| Standalone active/active VPN | Legacy: two active modeled speakers; explicit `vpnInstances`/`tunnels`: original IP-configuration identities and only configured tunnel relationships | No inferred full mesh or Established state; per-instance failure is scoped only with explicit bindings |
 | Standalone active/standby VPN | One active modeled speaker | A physical standby still exists; no second established standby neighbor is invented |
 | Legacy VPN with absent `activeActive` | Multiplicity not assessed | Original absence and existing routing behavior are preserved |
 | ARS/gateway exchange | Unmapped managed relationship | B2B disabled is not proof of no native session; ARS/VPN exchange requires explicit active/active and ASN 65515 |
@@ -102,6 +102,19 @@ Browser, Electron and local platform results share this pure projection.
 `simulate`/`evaluate` expose `bgpNeighbors`; the MCP's bounded `get_evidence`
 accepts that section. Concatenate all returned chunks before parsing JSON.
 The existing output budgets and unknown-result semantics still apply.
+
+For [instance-bound classic VPN](gateway-coexistence.md#instance-bound-vpn-and-apipa-bgp),
+each neighbor's `vpnTunnel` evidence retains its original connection/tunnel,
+gateway instance/IP configuration, expected BGP endpoints, shared-CPE peer
+lookups, transport dependency and per-session route provenance. Explicit tuple
+observations and their expected/observed comparisons are labeled separately;
+an unexpected attempt does not erase a valid APIPA exchange or establish the
+cause of an outage. The inspector's existing **Session identity and
+provenance** disclosure exposes this evidence. Connection routing settings
+also expose read-only per-tunnel evidence and preserve native bindings.
+Legacy topologies without explicit mappings retain their qualified logical
+speaker behavior. Imported native endpoint configuration alone does not supply
+missing CPE membership or establish any sessions.
 
 ## Sanitized reference and expected adjacency matrix
 
