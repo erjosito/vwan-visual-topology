@@ -35,6 +35,10 @@ fit/reset view and layout controls stay beside the canvas for frequent use.
 **Routing checks** groups **Check routing** and **Advanced checks**; results and
 warnings remain visible in the workspace.
 
+On compact windows, **Workspace actions** shows or hides the tools row.
+Hiding that row also hides its tools panel and returns the panel's space to the
+canvas; reopening the row restores the panel if it was open.
+
 On the web, **Help > Windows app** opens the Windows installer releases, and
 **Help > MCP server** opens the local MCP setup guide. Both links are also
 visible on an empty canvas, open in a new tab, and leave the current design
