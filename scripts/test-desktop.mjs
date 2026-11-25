@@ -307,6 +307,48 @@ try {
     await saveDialog.getByRole('button', { name: 'Save', exact: true }).click()
     expect(await application.evaluate(() => globalThis.__desktopDownloadDone)).toBe('completed')
     expect(JSON.parse(await readFile(exportFile, 'utf8'))).toEqual(await readSaved())
+    await page.getByTestId('workspace-azure-button').click()
+    await page.getByText('Report a discrepancy', { exact: true }).click()
+    await page.getByLabel('Summary', { exact: true }).fill('Desktop offline reproduction')
+    await page.getByLabel('Expected result', { exact: true }).fill('Preserve the desktop design.')
+    await page.getByLabel('Actual result', { exact: true }).fill('Investigate an Azure discrepancy offline.')
+    await expect(page.getByRole('button', { name: 'Download issue bundle', exact: true })).toBeDisabled()
+    await page.getByRole('checkbox', { name: /I reviewed the contents and understand/ }).check()
+    const bundleFile = join(artifacts, `discrepancy-${mode}.zip`)
+    await application.evaluate(({ session }, destination) => {
+      globalThis.__desktopBundleDone = new Promise((resolve) => {
+        session.defaultSession.once('will-download', (_event, item) => {
+          item.setSavePath(destination)
+          item.once('done', (_event, state) => resolve(state))
+        })
+      })
+    }, bundleFile)
+    await page.getByRole('button', { name: 'Download issue bundle', exact: true }).click()
+    expect(await application.evaluate(() => globalThis.__desktopBundleDone)).toBe('completed')
+    expect((await readFile(bundleFile)).subarray(0, 2).toString()).toBe('PK')
+    await application.evaluate(({ shell }) => {
+      globalThis.__originalOpenExternal = shell.openExternal
+      globalThis.__openedIssue = ''
+      shell.openExternal = async url => { globalThis.__openedIssue = url }
+    })
+    try {
+      await page.getByRole('link', { name: 'Open GitHub issue and attach ZIP manually', exact: true }).click()
+      await expect.poll(() => application.evaluate(() => globalThis.__openedIssue)).toContain('https://github.com/erjosito/vwan-visual-topology/issues/new?')
+      const allowedIssue = await application.evaluate(() => globalThis.__openedIssue)
+      expect(allowedIssue).not.toContain('Desktop offline reproduction')
+      await page.evaluate(() => window.open('https://example.com/not-allowed', '_blank'))
+      expect(await application.evaluate(() => globalThis.__openedIssue)).toBe(allowedIssue)
+    } finally {
+      await application.evaluate(({ shell }) => { shell.openExternal = globalThis.__originalOpenExternal })
+    }
+    const beforeBundle = await readSaved()
+    await page.getByLabel('Issue bundle ZIP file', { exact: true }).setInputFiles(bundleFile)
+    await expect(page.getByRole('button', { name: 'Replace workspace and replay bundle', exact: true })).toBeDisabled()
+    expect(await readSaved()).toEqual(beforeBundle)
+    await page.getByRole('checkbox', { name: /I understand this replaces the current workspace/ }).check()
+    await page.getByRole('button', { name: 'Replace workspace and replay bundle', exact: true }).click()
+    expect(await readSaved()).toEqual(beforeBundle)
+    await page.getByRole('button', { name: mode === 'vwan' ? 'Close Azure files' : 'Close Azure & Bicep', exact: true }).click()
     if (mode === 'full') {
       await detailNode.focus()
       await page.keyboard.press('Shift+F10')

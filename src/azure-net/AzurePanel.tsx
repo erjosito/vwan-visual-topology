@@ -1,6 +1,8 @@
 import { lazy, Suspense } from 'react'
 import { t } from '../i18n'
 import { AzureCaptureTools } from '../AzureCaptureTools'
+import { DiscrepancyTools } from '../DiscrepancyTools'
+import type { DiscrepancyBundle } from '../discrepancy-bundle'
 import type { AzNetTopology } from './model'
 import type { AzSimulationResult } from './engine'
 import { importAzNetCapture, compareAzNetWithObservations } from './azure-import'
@@ -10,23 +12,26 @@ const AzBicepExport = lazy(() => import('./AzBicepExport').then((module) => ({ d
 const GatewayBgpNeighborsPanel = lazy(() => import('./GatewayBgpNeighborsPanel'))
 const CapturedArsRoutesPanel = lazy(() => import('./CapturedArsRoutesPanel'))
 
-export function AzurePanel({ topology, simulation, observations, comparison, notices, stale, onCaptured, onComparison, onImportFile, onCompareFile }: {
+export function AzurePanel({ topology, simulation, observations, comparison, notices, stale, onCaptured, onComparison, onImportFile, onCompareFile, onBundleImport, capture }: {
   topology: AzNetTopology; simulation: AzSimulationResult
   observations: AzCapturedObservations | null; comparison: AzNetComparisonReport | null
   notices: string[]; stale: boolean
-  onCaptured: (observations: AzCapturedObservations | null, comparison: AzNetComparisonReport | null, warnings: string[]) => void
+  onCaptured: (observations: AzCapturedObservations | null, comparison: AzNetComparisonReport | null, warnings: string[], capture: unknown) => void
   onComparison: (comparison: AzNetComparisonReport) => void; onImportFile: () => void; onCompareFile: () => void
+  onBundleImport: (bundle: DiscrepancyBundle) => void
+  capture?: unknown
 }) {
   return <>
     <p>{t('Offline files work on web and Windows. Local Azure reads require the Windows desktop app. No deployment or deletion is performed.')}</p>
     <p className="notice">{t('Comparison assesses captured NIC routes, not configuration drift or end-to-end network health. Missing, partial and unsupported evidence is not a successful match. The current design is preserved.')}</p>
+    <DiscrepancyTools source={{ mode: 'azure-network', topology, observations, comparison, notices, comparisonCurrent: !stale, capture }} onImport={onBundleImport} />
     <AzureCaptureTools mode="full" onCapture={async (file, current) => {
       if (!current()) return
       const raw = JSON.parse(file.content) as Record<string, unknown>
       if (raw.kind !== 'azure-network-capture') throw new Error(t('Expected an Azure network capture. The current design is unchanged.'))
       const imported = importAzNetCapture(raw)
       const report = imported.observations ? compareAzNetWithObservations(topology, simulation, imported.observations) : null
-      onCaptured(imported.observations ?? null, report, [...imported.warnings, ...(!imported.observations ? [t('No route observations were captured. Routing remains unassessed.')] : [])])
+      onCaptured(imported.observations ?? null, report, [...imported.warnings, ...(!imported.observations ? [t('No route observations were captured. Routing remains unassessed.')] : [])], raw)
     }} />
     {observations && <p className="azure-resource-id">{t('Captured')}: {observations.capturedAt || t('Unknown')} · {observations.subscriptionId || t('Unknown')} · {observations.resourceGroup} · {t('collector')}: {observations.collectorVersion || t('Unknown')}</p>}
     {(observations?.vngBgpPeerStatus || observations?.vngLearnedRoutes || observations?.vngAdvertisedRoutes || observations?.vngBgpEndpoints) && <Suspense fallback={null}><GatewayBgpNeighborsPanel observations={observations} /></Suspense>}

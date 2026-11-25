@@ -30,6 +30,8 @@ export default defineConfig({
           const normalized = id.replace(/\\/g, '/')
           if (/\/node_modules\/@azure\/msal-/.test(normalized)) return 'microsoft-auth'
           if (normalized.includes('/node_modules/gifenc/')) return 'flow-gif-codec'
+          if (normalized.includes('/node_modules/fflate/')) return 'discrepancy-codec'
+          if (normalized.includes('/node_modules/zod/')) return 'schema-validation'
           if (normalized.includes('node_modules')) return 'vendor'
         },
       },

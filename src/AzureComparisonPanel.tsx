@@ -11,7 +11,7 @@ import type { ComparisonProfile, ComparisonReport, ComparisonRow } from './azure
 import collectorUrl from './collect-azure-vwan.ps1?url'
 import { DEFAULT_HUB_TABLE } from './hub-routing'
 
-export interface ComparisonSession { observation: AzureObservation; profile: ComparisonProfile; report?: ComparisonReport }
+export interface ComparisonSession { observation: AzureObservation; profile: ComparisonProfile; report?: ComparisonReport; replayAt?: string; capture?: unknown }
 export function AzureComparisonPanel({ topology, session, onSession, onSelect, onClose, embedded = false }: {
   topology: Topology; session?: ComparisonSession; onSession: (session?: ComparisonSession) => void
   onSelect: (selection?: ObjectSelection) => void; onClose: () => void
@@ -29,7 +29,7 @@ export function AzureComparisonPanel({ topology, session, onSession, onSelect, o
   const change = (profile: ComparisonProfile) => {
     if (!session) return
     if (comparisonProfileKey(profile) === comparisonProfileKey(session.profile)) return
-    request.current++; onSession({ ...session, profile, report: undefined }); setError('')
+    request.current++; onSession({ ...session, profile, report: undefined, replayAt: undefined }); setError('')
   }
   const bind = (kind: 'hubs' | 'spokes', resourceId: string, value: string) => {
     if (!profile) return
@@ -89,8 +89,8 @@ export function AzureComparisonPanel({ topology, session, onSession, onSelect, o
       const id = ++request.current
       try {
         if (file.size > 8_000_000) throw new Error('size')
-        const observation = parseAzureObservation(JSON.parse(await file.text()))
-        if (id === request.current) { onSession({ observation, profile: defaultComparisonProfile(topology, observation) }); setError('') }
+        const capture: unknown = JSON.parse(await file.text()), observation = parseAzureObservation(capture)
+        if (id === request.current) { onSession({ observation, profile: defaultComparisonProfile(topology, observation), capture }); setError('') }
       } catch { if (id === request.current) setError('Invalid Azure observation capture or 8 MB size limit exceeded. The previous observation and design were preserved.') }
     }} />
     {error && <p className="notice error" role="alert">{t(error)}</p>}
@@ -124,11 +124,12 @@ export function AzureComparisonPanel({ topology, session, onSession, onSelect, o
       <label className="checkbox-field"><input type="checkbox" checked={profile.completeDesign} onChange={(event) => change({ ...profile, completeDesign: event.target.checked })} />{t('I have modeled all expected routes for these exact prefixes. A structure-only import is not a complete route baseline.')}</label>
       <label className="checkbox-field"><input type="checkbox" checked={profile.compareAsPaths} onChange={(event) => change({ ...profile, compareAsPaths: event.target.checked })} />{t('Also compare learned AS paths at the selected table boundary (including provider and inter-hub ASNs).')}</label>
       <div className="row dialog-actions"><button className="primary" onClick={() => {
-        try { const report = compareAzure(topology, observation, profile); onSession({ ...session, report }); setError('') }
+        try { const report = compareAzure(topology, observation, profile); onSession({ ...session, report, replayAt: undefined }); setError('') }
         catch (error) { setError(error instanceof Error ? error.message : 'Comparison could not be completed.') }
       }}>{t('Compare captured fields')}</button><button onClick={() => { request.current++; onSession(undefined); onSelect(undefined); setError('') }}>{t('Remove comparison capture')}</button></div>
       {session.report && !currentReport && <p className="notice" role="status">{t('The design or mappings changed. Compare again; previous results are stale.')}</p>}
       {currentReport && <section aria-label={t('Azure comparison results')}>
+        {session.replayAt && <p className="notice" role="status">{t('Historical comparison replay at {0} using the current engine; not live Azure validation.', session.replayAt)}</p>}
         <p role="status">{t('{0} compared · {1} not compared', currentReport.compared, currentReport.notCompared)}</p>
         {currentReport.limitations.map((limitation) => <p className="notice" key={limitation}>{t(limitation)}</p>)}
         <div className="form-grid">
