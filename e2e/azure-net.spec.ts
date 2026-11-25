@@ -149,6 +149,7 @@ for (const mode of ['hub-spoke', 'full']) {
     const subnet = page.getByTestId('aznet-subnet-prefix-sub-hub-fw')
     await prefixes.fill('10.30.0.0/24')
     await expect(prefixes).toHaveAttribute('aria-invalid', 'true')
+    await prefixes.blur()
     await expect(subnet).toHaveAttribute('aria-invalid', 'true')
     const errorColor = await prefixes.evaluate((element) => getComputedStyle(element).color)
     await expect(page.getByTestId('aznet-vnet-vnet-hub-weu').locator('.aznet-vnet-prefix')).toHaveCSS('fill', errorColor)

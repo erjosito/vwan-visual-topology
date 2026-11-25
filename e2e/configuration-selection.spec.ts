@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { createEmptyAzNetTopology } from '../src/azure-net/model'
 import type { Topology } from '../src/model'
+import { vpnGatewayModeTopology } from '../tests/fixtures/vpn-gateway-mode'
 
 test.use({ storageState: { cookies: [], origins: [] } })
 
@@ -34,11 +35,165 @@ async function prepare(page: Page, mode: string, topology: Topology | ReturnType
     localStorage.setItem('aznet-ui-preview:v1', String(profile.preview))
     localStorage.setItem('aznet-workspace-tools:v1', 'closed')
     localStorage.setItem('vwan-visual-topology:language:v1', profile.language)
-    if (topology.version === 1) localStorage.setItem('vwan-visual-topology:v1', JSON.stringify(topology))
-    else localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))
+    const key = topology.version === 1 ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
+    if (!localStorage.getItem(key)) localStorage.setItem(key,
+      JSON.stringify(topology.version === 1 ? topology : { sampleId: '', topology }))
   }, { topology, profile })
   await page.goto(`/?mode=${mode}`)
   await expect(page.getByTestId(mode === 'vwan' ? 'vwan-app' : 'aznet-app')).toBeVisible()
+}
+
+for (const mode of ['hub-spoke', 'full']) for (const preview of [true, false]) {
+  for (const width of [1440, 390]) test(`${mode}: site controls retain mouse focus and character-by-character edits (${preview}, ${width})`, async ({ page }) => {
+    await prepare(page, mode, nativeTopology(), { preview, language: 'en', width })
+    const node = page.getByTestId('aznet-site-site')
+    await node.click({ button: 'right' })
+    await page.getByRole('menuitem', { name: 'Configure Site & Labels', exact: true }).click()
+    await section(page, 'On-premises site configuration')
+    const card = page.getByTestId('aznet-site-config-site')
+    const name = card.locator('input').nth(0)
+    await name.click()
+    await name.press('Control+a')
+    await name.press('Backspace')
+    await name.pressSequentially('Renamed branch')
+    await expect(name).toHaveValue('Renamed branch')
+    await expect(name).toBeFocused()
+    const prefixes = card.locator('input').nth(2)
+    await prefixes.click()
+    await prefixes.press('End')
+    await prefixes.pressSequentially(', 198.51.100.0/24')
+    await expect(prefixes).toHaveValue('192.0.2.0/24, 198.51.100.0/24')
+    await expect(prefixes).toBeFocused()
+    await expect(page.locator('.configuration-edit-status:not(.configuration-section-status)')).toContainText('Unsaved configuration changes.')
+    await prefixes.blur()
+    const read = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
+    expect((await read()).sites[0]).toMatchObject({ id: 'site', name: 'Renamed branch', prefixes: ['192.0.2.0/24', '198.51.100.0/24'] })
+    await prefixes.click()
+    await prefixes.press('End')
+    await prefixes.pressSequentially(', ')
+    await expect(prefixes).toHaveValue('192.0.2.0/24, 198.51.100.0/24, ')
+    await prefixes.blur()
+    await expect(prefixes).toHaveValue('192.0.2.0/24, 198.51.100.0/24')
+    await expect(page.locator('.configuration-edit-status:not(.configuration-section-status)')).toContainText('No pending configuration edits.')
+    await prefixes.click()
+    await prefixes.press('Control+a')
+    await prefixes.press('Backspace')
+    await expect(prefixes).toHaveValue('')
+    await prefixes.blur()
+    expect((await read()).sites[0].prefixes).toEqual([])
+    const asn = card.getByRole('spinbutton')
+    await asn.click()
+    await asn.press('Control+a')
+    await asn.press('Backspace')
+    await expect(asn).toHaveValue('')
+    await asn.pressSequentially('65042')
+    await expect(asn).toBeFocused()
+    await asn.press('Tab')
+    expect((await read()).sites[0].asn).toBe(65042)
+    await page.reload()
+    expect((await read()).sites[0]).toMatchObject({ id: 'site', name: 'Renamed branch', asn: 65042, prefixes: [] })
+  })
+
+  test(`${mode}: other node editors accept typing and retain saved values (${preview})`, async ({ page }) => {
+    test.setTimeout(60_000)
+    const topology = nativeTopology()
+    const devices = vpnGatewayModeTopology().vnets[0]
+    topology.vnets[0].subnets.push(...devices.subnets.filter(subnet => subnet.id !== 'app'))
+    topology.vnets[0].gateways = devices.gateways
+    topology.vnets[0].routeServer = devices.routeServer
+    topology.vnets[0].appliances = [{ id: 'nva', name: 'NVA', kind: 'nva-vm', subnetId: 'work',
+      privateIp: '10.0.1.8', enableIpForwarding: true, staticRoutes: [], asn: 65010 }]
+    await prepare(page, mode, topology, { preview, language: 'en', width: 1440 })
+    await page.getByTestId('aznet-select-vnet-b').click({ button: 'right' })
+    await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
+    await section(page, 'VNet configuration')
+    const replace = async (input: ReturnType<Page['locator']>, value: string) => {
+      await input.click()
+      await input.press('Control+a')
+      await input.press('Backspace')
+      await input.pressSequentially(value)
+      await expect(input).toHaveValue(value)
+      await expect(input).toBeFocused()
+      await input.blur()
+    }
+    await replace(page.locator('[aria-label^="VNet name "]'), 'Renamed VNet')
+    const prefixes = page.getByTitle('VNet CIDR prefixes (comma-separated)', { exact: true })
+    await prefixes.click()
+    await prefixes.press('End')
+    await prefixes.pressSequentially(', 10.5.0.0/16')
+    await expect(prefixes).toHaveValue('10.4.0.0/16, 10.5.0.0/16')
+    await prefixes.blur()
+    await select(page, 'aznet-subnet-work')
+    await section(page, 'Subnet configuration')
+    await replace(page.getByTestId('aznet-subnet-name-work'), 'Renamed subnet')
+    await replace(page.getByTestId('aznet-subnet-prefix-work'), '10.0.2.0/24')
+    await select(page, 'aznet-erloc-er')
+    await section(page, 'ExpressRoute location configuration')
+    await replace(page.getByTestId('aznet-erloc-config-er').locator('input').first(), 'Renamed location')
+    await select(page, 'aznet-vwanhub-one')
+    await replace(page.getByRole('textbox', { name: 'Hub name', exact: true }), 'Renamed hub')
+    await replace(page.getByRole('textbox', { name: 'Hub address prefix', exact: true }), '10.110.0.0/23')
+    await select(page, 'aznet-chip-vpn')
+    await section(page, 'VNet configuration')
+    await page.getByRole('combobox', { name: 'Gateway SKU', exact: true }).selectOption('VpnGw1AZ')
+    await select(page, 'aznet-chip-ars')
+    await section(page, 'VNet configuration')
+    await page.getByRole('combobox', { name: 'ARS Hub Routing Preference', exact: true }).selectOption('VpnGateway')
+    await select(page, 'aznet-chip-nva')
+    await replace(page.getByRole('spinbutton', { name: 'Peer ASN', exact: true }), '65020')
+    await replace(page.getByRole('textbox', { name: 'Advertised prefixes', exact: true }), '203.0.113.0/24, 198.51.100.0/24')
+    await page.getByRole('button', { name: 'Save NVA BGP routing', exact: true }).click()
+    await page.reload()
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
+    expect(saved.vnets[1]).toMatchObject({ id: 'b', name: 'Renamed VNet', prefixes: ['10.4.0.0/16', '10.5.0.0/16'] })
+    expect(saved.vnets[0].subnets[0]).toMatchObject({ id: 'work', name: 'Renamed subnet', prefix: '10.0.2.0/24' })
+    expect(saved.erLocations[0]).toMatchObject({ id: 'er', name: 'Renamed location' })
+    expect(saved.vwanHubs[0]).toMatchObject({ id: 'one', name: 'Renamed hub', prefix: '10.110.0.0/23' })
+    expect(saved.vnets[0].gateways[0]).toMatchObject({ id: 'vpn', sku: 'VpnGw1AZ' })
+    expect(saved.vnets[0].routeServer).toMatchObject({ id: 'ars', hubRoutingPreference: 'VpnGateway' })
+    expect(saved.vnets[0].appliances[0]).toMatchObject({ id: 'nva', asn: 65020, advertisedPrefixes: ['203.0.113.0/24', '198.51.100.0/24'] })
+    expect(saved.sites).toEqual(topology.sites)
+  })
+}
+
+for (const preview of [true, false]) {
+  test(`vwan: node names and prefix lists accept character-by-character replacement (${preview})`, async ({ page }) => {
+    test.setTimeout(60_000)
+    const topology: Topology = { version: 1, name: 'Typing audit',
+      hubs: [{ id: 'hub', name: 'Hub', region: 'westeurope', preference: 'ExpressRoute',
+        routingIntent: { private: false, internet: false, privatePrefixes: [] } }],
+      spokes: [{ id: 'spoke', name: 'VNet', prefixes: ['10.0.0.0/16'] }],
+      sites: [{ id: 'site', name: 'Site', asn: 65001, prefixes: ['192.0.2.0/24'] }],
+      erLocations: [{ id: 'er', name: 'Location', sku: 'Standard' }], connections: [], siteLinks: [], routeMaps: [] }
+    await prepare(page, 'vwan', topology, { preview, language: 'en', width: 1440 })
+    for (const id of ['site', 'spoke', 'hub', 'er']) {
+      const node = page.locator(`[data-node-id="${id}"]`)
+      await node.focus()
+      await node.press('Shift+F10')
+      await page.getByRole('menuitem', { name: 'Edit configuration', exact: true }).click()
+      const editor = page.locator('.object-editor')
+      const replace = async (field: string, value: string) => {
+        const input = editor.locator(`[name="${field}"]`)
+        await input.click()
+        await input.press('Control+a')
+        await input.press('Backspace')
+        await input.pressSequentially(value)
+        await expect(input).toHaveValue(value)
+        await expect(input).toBeFocused()
+      }
+      await replace('name', `Renamed ${id}`)
+      if (id === 'site') await replace('prefix', '192.0.2.0/24, 198.51.100.0/24')
+      if (id === 'spoke') await replace('prefixes', '10.0.0.0/16, 10.1.0.0/16')
+      await editor.getByRole('button', { name: 'Save changes', exact: true }).click()
+      await expect(editor).toHaveCount(0)
+    }
+    await page.reload()
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('vwan-visual-topology:v1')!))
+    expect(saved.sites[0]).toMatchObject({ id: 'site', name: 'Renamed site', prefixes: ['192.0.2.0/24', '198.51.100.0/24'] })
+    expect(saved.spokes[0]).toMatchObject({ id: 'spoke', name: 'Renamed spoke', prefixes: ['10.0.0.0/16', '10.1.0.0/16'] })
+    expect(saved.hubs[0]).toMatchObject({ id: 'hub', name: 'Renamed hub' })
+    expect(saved.erLocations[0]).toMatchObject({ id: 'er', name: 'Renamed er' })
+  })
 }
 
 for (const profile of profiles) {
