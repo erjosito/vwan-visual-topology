@@ -1204,7 +1204,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         title: 'Canvas Actions',
         actions: [
           {
-            label: 'Add Spoke VNet here',
+            label: t('Add VNet here'),
             onSelect: () => addSpokeVnet(target.svgX, target.svgY),
           },
           ...(simulatorMode === 'full'

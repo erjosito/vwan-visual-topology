@@ -1475,6 +1475,7 @@ export const ja: Record<string, string> = {
   'Edit advertisements ({0})': 'アドバタイズを編集 ({0})',
   '+ VNet': '+ VNet',
   'Add Azure VNet': 'Azure VNet を追加',
+  'Add VNet here': 'ここに VNet を追加',
   'Configure BGP NVA': 'BGP NVA を構成',
   'Add downstream VNet': '下流の VNet を追加',
   'Add downstream site': '下流のサイトを追加',
