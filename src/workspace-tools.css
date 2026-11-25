@@ -29,6 +29,11 @@
   .simulator-shell:has(.workspace-tools-panel):not(.canvas-maximized) .aznet-workspace { padding-left: 280px; }
   .simulator-shell:has(.workspace-tools-panel):not(.canvas-maximized) .canvas-app > footer { padding-left: 298px; }
 }
+@media (min-width: 901px) and (max-width: 1250px) {
+  .simulator-shell[data-ui-preview]:not([data-header-actions]) .canvas-app > main,
+  .simulator-shell[data-ui-preview]:not([data-header-actions]) .aznet-workspace { padding-left: 0; }
+  .simulator-shell[data-ui-preview]:not([data-header-actions]) .canvas-app > footer { padding-left: 18px; }
+}
 @media (max-width: 900px) {
   .workspace-tools-panel { width: min(320px, calc(100vw - 48px)); }
   .workspace-tools-backdrop {

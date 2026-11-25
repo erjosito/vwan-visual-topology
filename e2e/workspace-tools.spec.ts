@@ -9,6 +9,47 @@ for (const mode of ['vwan', 'hub-spoke', 'full'] as const) {
   const sample = mode === 'vwan' ? 'hub-routing-preferences' : 'hub-spoke-firewall-udr'
   const rootId = mode === 'vwan' ? 'vwan-app' : 'aznet-app'
 
+  test(`${mode}: collapsing compact header tools reclaims their canvas space`, async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 })
+    await page.addInitScript(() => {
+      localStorage.setItem('aznet-ui-preview:v1', 'true')
+      localStorage.setItem('aznet-workspace-tools:v1', 'open')
+    })
+    await page.goto(`/?mode=${mode}&sample=${sample}`)
+    await expect(page.getByTestId(rootId)).toBeVisible()
+    const tools = page.getByRole('complementary', { name: 'Workspace controls', exact: true })
+    const canvas = page.locator(mode === 'vwan' ? '.canvas-stage' : '.aznet-canvas-shell')
+    const bounds = () => canvas.evaluate(element => {
+      const { x, width } = element.getBoundingClientRect()
+      return { x, width }
+    })
+    await expect(tools).toBeVisible()
+    await expect.poll(bounds).toEqual({ x: 280, width: 1160 })
+    const original = await page.evaluate(key => localStorage.getItem(key), key)
+    const actions = page.getByRole('button', { name: 'Workspace actions', exact: true })
+    for (const width of [1250, 1024, 901]) {
+      await page.setViewportSize({ width, height: 1000 })
+      await expect(tools).toBeHidden()
+      await expect.poll(bounds).toEqual({ x: 0, width })
+      await actions.click()
+      await expect(tools).toBeVisible()
+      await expect.poll(bounds).toEqual({ x: 280, width: width - 280 })
+      await actions.click()
+      await expect(tools).toBeHidden()
+      await expect.poll(bounds).toEqual({ x: 0, width })
+    }
+    await page.setViewportSize({ width: 900, height: 1000 })
+    await expect(tools).toBeHidden()
+    await expect.poll(bounds).toEqual({ x: 0, width: 900 })
+    await page.setViewportSize({ width: 1440, height: 1000 })
+    await expect(tools).toBeVisible()
+    await expect.poll(bounds).toEqual({ x: 280, width: 1160 })
+    await page.getByTitle('Workspace controls', { exact: true }).click()
+    await expect(tools).toHaveCount(0)
+    await expect.poll(bounds).toEqual({ x: 0, width: 1440 })
+    expect(await page.evaluate(key => localStorage.getItem(key), key)).toBe(original)
+  })
+
   test(`${mode}: searchable controls reserve space and collapse without changing saved design or coordinates`, async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 })
     await page.goto(`/?mode=${mode}&sample=${sample}`)
