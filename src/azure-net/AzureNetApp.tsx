@@ -112,6 +112,7 @@ const BgpNeighborsPanel = lazy(() => import('../BgpNeighborsPanel'))
 const PeeringScopeEditor = lazy(() => import('./PeeringScopeEditor'))
 const VnetRoutingSettings = lazy(() => import('./VnetRoutingSettings'))
 const SubnetPrefixEditor = lazy(() => import('./AddressPrefixEditors').then((module) => ({ default: module.SubnetPrefixEditor })))
+const SitePrefixEditor = lazy(() => import('./AddressPrefixEditors').then((module) => ({ default: module.SitePrefixEditor })))
 const LearningInspection = lazy(() => import('../learning/LearningInspection').then(module => ({ default: module.LearningInspection })))
 const FindingEvidence = lazy(() => import('./FindingEvidence'))
 
@@ -4663,37 +4664,25 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                               <input
                                 type="number"
                                 className="aznet-input"
-                                value={site.asn}
-                                onChange={(e) => {
-                                  const asn = Number(e.target.value)
+                                key={`${site.id}:${site.asn}`}
+                                defaultValue={site.asn}
+                                data-configuration-saved={String(site.asn)}
+                                required min={1} max={4294967294} step={1}
+                                onBlur={(e) => {
+                                  if (!e.currentTarget.reportValidity()) return
+                                  const asn = e.currentTarget.valueAsNumber
+                                  if (asn === site.asn) return
                                   commitTopology((draft) => {
                                     const s = draft.sites.find((x) => x.id === site.id)
-                                    if (s && Number.isFinite(asn) && asn > 0) s.asn = asn
+                                    if (s) s.asn = asn
                                   })
                                 }}
+                                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
                                 style={{ width: 75 }}
                               />
+                              <small className="configuration-save-hint">{t('Save on blur')}</small>
                             </label>
-                            <input
-                              type="text"
-                              className="aznet-input"
-                              value={site.prefixes.join(', ')}
-                              title="Advertised prefixes (comma-separated)"
-                              onChange={(e) => {
-                                const raw = e.target.value
-                                commitTopology((draft) => {
-                                  const s = draft.sites.find((x) => x.id === site.id)
-                                  if (s) {
-                                    const parsed = raw
-                                      .split(',')
-                                      .map((p) => p.trim())
-                                      .filter(Boolean)
-                                    if (parsed.length > 0) s.prefixes = parsed
-                                  }
-                                })
-                              }}
-                              style={{ width: 150, fontSize: 11.5 }}
-                            />
+                            <Suspense fallback={null}><SitePrefixEditor site={site} onChange={commitTopology} /></Suspense>
                           </div>
                           <button
                             type="button"

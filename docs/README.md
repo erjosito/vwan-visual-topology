@@ -39,6 +39,12 @@ On compact windows, **Workspace actions** shows or hides the tools row.
 Hiding that row also hides its tools panel and returns the panel's space to the
 canvas; reopening the row restores the panel if it was open.
 
+In the mixed-network inspector, on-premises advertised prefixes, site ASNs and
+VNet address-space lists **save on blur** (click outside the field or press Tab).
+Comma-separated prefix lists retain commas and spaces while you type; clearing a
+site's list withdraws its advertised prefixes. Names still update immediately.
+Legacy Virtual WAN configuration dialogs use **Save changes** instead.
+
 On the web, **Help > Windows app** opens the Windows installer releases, and
 **Help > MCP server** opens the local MCP setup guide. Both links are also
 visible on an empty canvas, open in a new tab, and leave the current design
