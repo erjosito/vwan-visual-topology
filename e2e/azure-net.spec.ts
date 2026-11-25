@@ -636,7 +636,7 @@ test.describe('AzNet bounded workspace and durable gestures', () => {
     }
     await expect.poll(async () => (await counts(page)).simulation).toBeGreaterThan(beforeDissociation.simulation)
     const beforeRegion = await counts(page)
-    await page.getByTestId('aznet-vnet-region-vnet-spoke-data').fill('eastus')
+    await page.getByTestId('aznet-vnet-region-vnet-spoke-data').selectOption('East US')
     await expect.poll(async () => (await counts(page)).simulation).toBeGreaterThan(beforeRegion.simulation)
     await expect.poll(async () => (await counts(page)).connectivity).toBeGreaterThan(beforeRegion.connectivity)
   })
@@ -1047,7 +1047,7 @@ test.describe('AzNetSim native workspace compatibility', () => {
     await openNodeMenu(page, 'aznet-vnet-vnet-custom-1')
     await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
     await expect(page.getByTestId('aznet-editor-scope-banner')).toContainText('Spoke-VNet-1')
-    await page.getByTestId('aznet-vnet-region-vnet-custom-1').fill('Sweden Central')
+    await page.getByTestId('aznet-vnet-region-vnet-custom-1').selectOption('Sweden Central')
     await expect(page.getByTestId('aznet-vnet-vnet-custom-1')).toContainText('Sweden Central')
 
     // #49: Subnet CRUD (create, rename, delete)

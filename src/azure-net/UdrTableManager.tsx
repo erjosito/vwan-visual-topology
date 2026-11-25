@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { t } from '../i18n'
 import { ConfigurationEditStatus } from '../WorkspacePresentation'
+import { AzureRegionSelect } from '../AzureRegionSelect'
 import { createUdrTable, udrAssociations } from './udr-tables'
 import { resolveUdrRegion } from './udr-regions'
 import type { AzNetTopology } from './model'
@@ -71,7 +72,7 @@ export default function UdrTableManager({ topology, request, commit, onClose }: 
       {form.sourceId && <p>{t('Copies routes and propagation settings with fresh IDs, without subnet associations. Next-hop addresses are not rewritten when choosing another region.')}</p>}
       <label className="field">{t('Route-table name')}<input name="name" required maxLength={120} value={form.name}
         onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
-      <label className="field">{t('Route-table region')}<input name="region" required value={form.region}
+      <label className="field">{t('Route-table region')}<AzureRegionSelect name="region" required aria-label={t('Route-table region')} value={form.region}
         onChange={(event) => setForm({ ...form, region: event.target.value })} /></label>
       {error && <p role="alert">{error}</p>}
       <div className="row dialog-actions"><button type="button" onClick={() => { setForm(undefined); setError('') }}>{t('Cancel')}</button>
