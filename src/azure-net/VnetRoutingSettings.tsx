@@ -2,7 +2,7 @@ import { lazy, Suspense, useState } from 'react'
 import { t } from '../i18n'
 import { registerJapaneseMessages } from '../messages'
 import { InspectorSection } from '../WorkspacePresentation'
-import { ALL_KNOWN_AZURE_REGIONS } from '../er-locations-catalog'
+import { AzureRegionSelect } from '../AzureRegionSelect'
 import { validateAdvertisedGatewayPrefixes, type AzArsPreference, type AzNetTopology, type AzVNet, type AzVnetGateway } from './model'
 import { addNva, nvaSubnetError } from './subnet-allocation'
 
@@ -213,7 +213,7 @@ export default function VnetRoutingSettings({ topology, vnet, preview, usesRemot
             }} style={{ fontWeight: 700, width: 145 }} />
         </label>
         <label className="presentation-vnet-field"><span hidden={!preview}>{t('VNet region')}</span>
-          <input type="text" className="aznet-input" list={`aznet-region-datalist-${vnet.id}`} data-testid={`aznet-vnet-region-${vnet.id}`}
+          <AzureRegionSelect className="aznet-select" data-testid={`aznet-vnet-region-${vnet.id}`}
             aria-label={t('VNet region {0}', vnet.name)} title="Azure Region / Location (e.g. westeurope, eastus)"
             value={vnet.region} onChange={(event) => {
               const value = event.target.value
@@ -226,9 +226,6 @@ export default function VnetRoutingSettings({ topology, vnet, preview, usesRemot
               })
             }} style={{ width: 130, fontSize: 11.5 }} />
         </label>
-        <datalist id={`aznet-region-datalist-${vnet.id}`}>
-          {ALL_KNOWN_AZURE_REGIONS.map((region) => <option key={region} value={region} />)}
-        </datalist>
         <Suspense fallback={null}><VnetPrefixEditor topology={topology} vnet={vnet} preview={preview} onChange={onTopologyChange} /></Suspense>
         <Suspense fallback={null}><VnetCommunityEditor key={vnet.id} value={vnet.bgpCommunities} onChange={(value) => onChange((target) => {
           if (value) target.bgpCommunities = value

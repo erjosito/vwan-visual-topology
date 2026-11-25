@@ -75,7 +75,7 @@ for (const mode of ['hub-spoke', 'full']) {
     await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology.vnets[0].bgpCommunities))
       .toEqual({ virtualNetworkCommunity: '12076:281', regionalCommunity: '12076:50004' })
     await page.context().setOffline(false)
-    await page.getByTestId('aznet-vnet-region-hub').fill('eastus')
+    await page.getByTestId('aznet-vnet-region-hub').selectOption('East US')
     await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology.vnets[0].bgpCommunities))
       .toEqual({ virtualNetworkCommunity: '12076:281' })
   })
