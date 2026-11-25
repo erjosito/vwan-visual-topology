@@ -61,6 +61,21 @@ async function menu(page: Page, node: Locator) {
   await page.keyboard.press('Shift+F10')
 }
 
+test('a failed optional resilience module reports failure and supports explicit reload recovery', async ({ page }) => {
+  await page.route('**/src/failure-analysis.ts*', (route) => route.abort())
+  await page.goto('/?mode=full')
+  await page.getByText('Failure-domain resilience analysis (N-1)', { exact: true }).click()
+  await page.getByRole('button', { name: 'Analyze N-1 resilience', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('Reconnect and reload to retry')
+  await expect(page.getByTestId('resilience-results')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Analyze N-1 resilience', exact: true })).toBeEnabled()
+  await page.unroute('**/src/failure-analysis.ts*')
+  await page.reload()
+  await page.getByText('Failure-domain resilience analysis (N-1)', { exact: true }).click()
+  await page.getByRole('button', { name: 'Analyze N-1 resilience', exact: true }).click()
+  await expect(page.getByTestId('resilience-results')).toBeVisible()
+})
+
 for (const mode of ['vwan', 'hub-spoke', 'full']) {
   test(`${mode} supports offline domain failures, fault-only menus including regional children, and exact baseline restoration`, async ({ page }) => {
     const topology = mode === 'vwan' ? vwanFixture() : azFixture(mode === 'full')

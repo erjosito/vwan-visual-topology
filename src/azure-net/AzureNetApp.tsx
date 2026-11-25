@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
-import { projectAzFailures, regionKey, failureKey, failureLabel, type FailureDomain } from '../failures'
-import { analyzeAzResilience, resilienceMarkers, type ResilienceReport } from '../failure-analysis'
+import { projectAzFailures, regionKey, failureKey, failureLabel, resilienceMarkers, type FailureDomain } from '../failures'
+import type { ResilienceReport } from '../failure-analysis'
 import { FailurePanel } from '../FailurePanel'
 import './azure-net.css'
 import { AZNET_MAX_JSON_LENGTH, parseAzNetJson, parseAzNetTopology } from './admission'
@@ -2540,7 +2540,10 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       <FailurePanel faults={faults} unassessed={unassessedFailures} onRestore={restoreFault} onRestoreAll={() => setFaults([])}
         revision={baselineRevision} onReport={(report) => setResilience({ revision: baselineRevision, report })} focusEndpoint={resilience?.revision === baselineRevision ? resilienceEndpoint : undefined} onSimulate={addFault}
         presentReport={(report) => azDisplayResult(report, displayNames)}
-        analyze={() => measureAzWork('resilience', () => analyzeAzResilience(routingTopology, {}, validationErrors))} />
+        analyze={async () => {
+          const { analyzeAzResilience } = await import('../failure-analysis')
+          return measureAzWork('resilience', () => analyzeAzResilience(routingTopology, {}, validationErrors))
+        }} />
       {/* Top Navigation & Actions Bar */}
       <header
         className={`aznet-topbar ${

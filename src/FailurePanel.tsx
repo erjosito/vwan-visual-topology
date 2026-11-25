@@ -7,11 +7,13 @@ const ResilienceResults = lazy(() => import('./ResilienceResults'))
 
 export function FailurePanel({ faults, unassessed, onRestore, onRestoreAll, analyze, onSimulate, revision, onReport, focusEndpoint, presentReport }: {
   faults: FailureDomain[]; unassessed: string[]; onRestore: (fault: FailureDomain) => void; onRestoreAll: () => void
-  analyze: () => ResilienceReport; onSimulate: (fault: FailureDomain) => void; revision: string
+  analyze: () => ResilienceReport | Promise<ResilienceReport>; onSimulate: (fault: FailureDomain) => void; revision: string
   onReport?: (report: ResilienceReport) => void; focusEndpoint?: string
   presentReport?: (report: ResilienceReport) => ResilienceReport
 }) {
   const [result, setResult] = useState<{ revision: string; report: ResilienceReport }>()
+  const [running, setRunning] = useState(false)
+  const [error, setError] = useState('')
   const rawReport = result?.revision === revision ? result.report : undefined
   const report = rawReport && presentReport ? presentReport(rawReport) : rawReport
   return <section className="failure-controls" aria-label="Offline failure and resilience analysis">
@@ -25,7 +27,16 @@ export function FailurePanel({ faults, unassessed, onRestore, onRestoreAll, anal
     <details open={focusEndpoint ? true : undefined}>
       <summary>Failure-domain resilience analysis (N-1)</summary>
       <p>Checks baseline-working required landscape flows against each single site, ER-location and Azure-region loss, separately from current simulated outages.</p>
-      <button onClick={() => { const report = analyze(); setResult({ revision, report }); onReport?.(report) }}>Analyze N-1 resilience</button>
+      <button disabled={running} aria-busy={running} onClick={async () => {
+        setRunning(true); setError('')
+        try {
+          const report = await analyze()
+          setResult({ revision, report }); onReport?.(report)
+        } catch (error) {
+          setError(`Resilience analysis failed: ${error instanceof Error ? error.message : 'unavailable'}. Reconnect and reload to retry.`)
+        } finally { setRunning(false) }
+      }}>Analyze N-1 resilience</button>
+      {error && <p role="alert">{error}</p>}
       {!!unassessed.length && <p role="status">Regional coverage unassessed: {unassessed.join(' ')}</p>}
       {report && <Suspense fallback={null}><ResilienceResults report={report} focusEndpoint={focusEndpoint} onSimulate={onSimulate} /></Suspense>}
     </details>
