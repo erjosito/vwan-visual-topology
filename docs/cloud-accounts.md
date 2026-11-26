@@ -466,11 +466,51 @@ recover changes that were never uploaded, and in-account soft deletion is not an
 independent disaster-recovery backup.
 
 Users should keep portable JSON copies of designs they need. Profile recovery
-and a cloud save are not substitutes for a user-controlled backup. Batch export
-and reimport of selected designs or the whole cloud library is a proposed
-improvement, not an available feature or a replacement for existing individual
-topology export/import. No new cloud resources or protection settings are
-authorized by that proposal.
+and a cloud save are not substitutes for a user-controlled backup. The cloud
+library's **Library backup and import** tools support selected or whole-library
+backups without changing existing individual topology export/import workflows.
+This feature uses the existing cloud API, not new storage or protection settings.
+
+### Back up and restore your cloud library
+
+1. Sign in, open the cloud library, then choose **Library backup and import**.
+   Select saves and choose **Prepare selected backup**, or choose
+   **Prepare whole-library backup**. Only a complete batch becomes downloadable.
+   Source revisions are checked before and after collection, but this is not an
+   atomic snapshot of concurrent edits. If a save changes or disappears, refresh
+   and prepare again.
+2. Choose **Download backup** and verify that the browser or desktop actually
+   saved the file. The application can request a download but cannot confirm its
+   completion. Store the file safely: it includes native topology content, names,
+   descriptions, resource identities and supported retained fields. Secrets
+   embedded in a design are not redacted. Account credentials, server ETags,
+   sharing links/permissions, desktop file capabilities, browser recovery data
+   and learning history are not included.
+3. To restore, choose the backup JSON file in these tools and inspect the
+   read-only preview and destination account. Nothing uploads until
+   **Confirm batch import** and its confirmation dialog. Missing saves are
+   created under their original cloud-save GUIDs. Identical GUID/content pairs
+   are skipped. A changed save with the same GUID defaults to **Keep existing**;
+   select **Overwrite reviewed cloud version** individually to replace it.
+   Overwrites require the exact reviewed revision and can change what existing
+   shared links display. Import does not restore sharing links or permissions.
+
+The version 1 `aznetsim-cloud-library` JSON container supports up to 50 entries
+and 32 MiB of UTF-8 data, with the existing 4 MiB limit per saved topology.
+Choose smaller batches if needed. Both supported native model families retain
+their resource IDs; cloud-save GUIDs are separate and are also preserved.
+Unsupported versions, duplicate GUIDs and invalid entries are rejected before
+upload. An empty library produces a valid empty backup.
+
+Imports are not transactional. Results distinguish uploaded saves, matching
+content confirmed after a retry, skipped saves, failures, unconfirmed uploads
+and entries not started after cancellation. Cancellation stops further work,
+but a submitted request may finish. Refresh the import preview before retrying,
+especially for unconfirmed uploads. Stable GUIDs avoid duplicate copies, and
+refreshing clears all previous overwrite choices. A newer cloud revision
+requires a new review. Signing out or changing accounts discards the old batch.
+The active design, document tabs, practice workspace and learning history are
+not imported or replaced.
 
 ### Read-only configuration check, 2026-11-26
 

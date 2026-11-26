@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react'
 import { useLanguage } from '../i18n'
 import { useDocumentSaveState, useWorkspaceSession } from '../workspace-context'
 import { cloudLimits, parseCloudTopology, type CloudEntry } from './contracts'
-import { CloudHttpError } from './client'
+import { CloudHttpError, type CloudClient } from './client'
 import { useCloudSession } from './useCloudSession'
 import './cloud-panel.css'
 import { CloudSharing } from './CloudSharing'
@@ -10,6 +10,7 @@ import { DocumentSaveStatus } from './DocumentSaveStatus'
 import { progressStatusLabel } from './progress-status'
 import { CloudLibraryButton, CloudLibraryIcon } from './CloudLibraryButton'
 import { CloudMetadataEditor } from './CloudMetadataEditor'
+const CloudLibraryBackup = lazy(() => import('./CloudLibraryBackup'))
 const noSubscribe = () => () => {}
 const noSnapshot = () => undefined
 
@@ -29,6 +30,8 @@ export function CloudPanel({ onClose, returnFocus }: { onClose: () => void; retu
   const [sort, setSort] = useState('updated')
   const [sharing, setSharing] = useState<{ entry?: CloudEntry }>()
   const [editing, setEditing] = useState<CloudEntry>()
+  const [backup, setBackup] = useState<CloudClient>()
+  const [listedApi, setListedApi] = useState<CloudClient>()
   const [description, setDescription] = useState('')
   const desktop = !!window.desktopSimulator
   const search = useRef<HTMLInputElement>(null)
@@ -63,7 +66,7 @@ export function CloudPanel({ onClose, returnFocus }: { onClose: () => void; retu
     const ticket = documentSave?.scope(cloud.account?.id)
     try {
       const entries = await api.listTopologies()
-      setEntries(entries); setListed(true); setListError('')
+      setEntries(entries); setListed(true); setListedApi(api); setListError('')
       documentSave?.listed(entries, ticket)
     }
     catch (error) { documentSave?.listUnavailable(ticket); setListed(false); setListError(failure(error)) }
@@ -74,7 +77,7 @@ export function CloudPanel({ onClose, returnFocus }: { onClose: () => void; retu
     let active = true
     const ticket = documentSave?.scope(cloud.account?.id)
     void api.listTopologies().then(values => {
-      if (active) { documentSave?.listed(values, ticket); setEntries(values); setListed(true); setListError('') }
+      if (active) { documentSave?.listed(values, ticket); setEntries(values); setListed(true); setListedApi(api); setListError('') }
     })
       .catch(error => { if (active) { documentSave?.listUnavailable(ticket); setListed(false); setListError(failure(error)) } })
       .finally(() => { if (active) setBusy(false) })
@@ -236,6 +239,9 @@ export function CloudPanel({ onClose, returnFocus }: { onClose: () => void; retu
         <p id="cloud-library-help">{text('Load in new tab opens a cloud save without replacing your current design. Overwrite cloud save uploads your current design to that save. Delete removes only the cloud save. Nothing is deployed to Azure.',
           '新しいタブに読み込むと、現在のデザインを置き換えずに保存内容を開きます。クラウドの保存を上書きすると、現在のデザインをアップロードします。削除はクラウドの保存だけを削除します。Azure へのデプロイは行いません。')}</p>
         <button ref={refreshButton} type="button" disabled={busy} onClick={() => { setBusy(true); setNotice(''); void refresh() }}>{text('Refresh cloud topologies', 'クラウドの一覧を更新')}</button>
+        <button type="button" disabled={saving || listedApi !== api || !!session?.practice} onClick={() => setBackup(api)}>
+          {text('Library backup and import', 'ライブラリのバックアップと取込')}
+        </button>
         {listError && <p role="alert">{listError}</p>}
         {busy && <p role="status">{text('Cloud operation in progress…', 'クラウドの操作中…')}</p>}
         {!busy && listed && !entries.length && <p>{text('No saved cloud topologies.', 'クラウドに保存されたトポロジはありません。')}</p>}
@@ -291,6 +297,10 @@ export function CloudPanel({ onClose, returnFocus }: { onClose: () => void; retu
       {!desktop && sharing && <CloudSharing api={api} entries={entries} entry={sharing.entry && entries.find(value => value.id === sharing.entry!.id)} refreshed={refresh} />}
     </>}
     {notice && <p role="status">{notice}</p>}
+    {backup === api && api && cloud.account && <Suspense fallback={<p role="status">{text('Loading backup tools...', 'バックアップを読み込み中...')}</p>}>
+      <CloudLibraryBackup api={api} accountName={cloud.account.name} entries={entries}
+        onClose={() => setBackup(undefined)} onChanged={() => { void refresh() }} />
+    </Suspense>}
     {editing && api && <CloudMetadataEditor entry={editing} api={api} onClose={() => setEditing(undefined)}
       onSaved={async (metadata, etag) => {
         const owner = cloud.account?.id
