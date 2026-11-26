@@ -173,6 +173,47 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) for (const language of ['en', 
   })
 }
 
+for (const mode of ['vwan', 'full']) for (const language of ['en', 'ja']) {
+  test(`${mode} ${language}: empty canvas shortcuts reuse existing workflows without reserving space`, async ({ page }) => {
+    const text = (en: string, ja: string) => language === 'ja' ? ja : en
+    await page.setViewportSize({ width: language === 'ja' ? 390 : 1440, height: 900 })
+    await page.addInitScript(language => {
+      localStorage.setItem('vwan-visual-topology:language:v1', language)
+      localStorage.setItem('aznet-workspace-tools:v1', 'closed')
+    }, language)
+    await page.goto(`/?mode=${mode}`)
+    const start = page.getByRole('navigation', { name: text('Start your design', 'デザインを開始'), exact: true })
+    await expect(start).toBeInViewport()
+    const svg = page.locator(mode === 'vwan' ? '.diagram-scroll > svg' : '.aznet-diagram-svg')
+    await start.getByRole('button', { name: text('Open a design', 'デザインを開く'), exact: true }).click()
+    const library = page.getByRole('dialog', { name: text('Workspace', 'ワークスペース'), exact: true })
+    await expect(library).toBeVisible()
+    await page.keyboard.press('Escape')
+    await start.getByRole('button', { name: text('Load an example', 'サンプルを開く'), exact: true }).click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await start.getByRole('button', { name: text('Add a resource', 'リソースを追加'), exact: true }).click()
+    const tools = page.getByRole('complementary', { name: text('Workspace controls', 'ワークスペースの操作'), exact: true })
+    await expect(tools).toBeVisible()
+    await tools.getByRole('button', { name: '+ VNet', exact: true }).click()
+    if (mode === 'vwan') {
+      await expect(page.getByRole('dialog')).toBeVisible()
+      await page.keyboard.press('Escape')
+    } else {
+      await expect(start).toHaveCount(0)
+      await openWorkspaceActions(page)
+      await page.getByRole('button', { name: text('Undo', '元に戻す'), exact: true }).click()
+      await expect(start).toBeVisible()
+    }
+    if (await tools.isVisible()) await tools.getByRole('button', { name: text('Close workspace controls', 'ワークスペースの操作を閉じる'), exact: true }).click()
+    const before = await svg.boundingBox()
+    await start.getByRole('button', { name: text('Hide start actions', '開始アクションを非表示'), exact: true }).click()
+    await expect(start).toHaveCount(0)
+    await expect(svg).toBeFocused()
+    expect(await svg.boundingBox()).toEqual(before)
+  })
+}
+
 test('desktop does not promote the Windows download or MCP client', async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(window, 'desktopSimulator', { value: {} }))
   await page.goto('/?mode=full')
