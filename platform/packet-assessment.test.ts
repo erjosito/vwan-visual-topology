@@ -6,6 +6,7 @@ import { executePlatform } from '../src/platform/service'
 import type { PacketRequirement, PlatformRequest } from '../src/platform/contract'
 import { PlatformJobs } from './jobs'
 import { overlappingVnets, overlapEndpoint } from '../tests/fixtures/overlapping-vnets'
+import { composedNat, composedNatRequest } from '../tests/fixtures/composed-nat'
 
 const compiled = createRequire(import.meta.url)('../platform-dist/service.cjs') as { executePlatform: typeof executePlatform }
 function input(): PlatformRequest {
@@ -44,6 +45,23 @@ const healthy = (request: PlatformRequest) => {
 }
 
 describe('bounded original packet configuration rubrics', () => {
+  it('preserves composed translations and negative return controls in source, compiled and isolated execution', async () => {
+    const network = composedNat()
+    const request: PlatformRequest = { contractVersion: 1, operation: 'evaluate', document: { mode: 'full', topology: network },
+      requirements: [{ id: 'private-chain', kind: 'packet', sourceAddress: '10.90.1.4', destinationAddress: '10.90.4.4',
+        expectation: 'configured', packet: composedNatRequest }] }
+    const jobs = new PlatformJobs(resolve('platform-dist', 'worker.cjs'))
+    try {
+      for (const broken of [false, true]) {
+        if (broken) network.vnets[0].appliances[1].staticRoutes.push({ id: 'discard-return', prefix: '10.90.2.0/24', nextHopKind: 'drop', enabled: true })
+        const result = executePlatform(request)
+        expect(result.errors).toEqual([])
+        expect(result.assessments[0].outcome).toBe(broken ? 'violated' : 'satisfied')
+        expect(compiled.executePlatform(request)).toEqual(result)
+        expect(await jobs.run(request)).toEqual(result)
+      }
+    } finally { jobs.close() }
+  })
   it('grades overlapping endpoints by original network and preserves that binding in compiled and isolated execution', async () => {
     const network = overlappingVnets()
     const request: PlatformRequest = { contractVersion: 1, operation: 'evaluate', document: { mode: 'full', topology: network },
