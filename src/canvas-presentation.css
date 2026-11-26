@@ -51,6 +51,8 @@
 }
 .simulator-shell.canvas-maximized .canvas-stage { flex: 1; height: auto; min-height: 0; }
 .canvas-maximize-icon { display: none; }
+.canvas-start-actions { position: absolute; z-index: 3; top: 20px; left: 50%; transform: translateX(-50%); display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: max-content; max-width: calc(100% - 24px); }
+.canvas-start-actions button { min-height: 44px; padding: 8px 12px; }
 @media (max-width: 900px) {
   .simulator-shell[data-ui-preview] .canvas-app .canvas-toolbar { max-height: min(80px, 10dvh); overflow-y: auto; }
   .simulator-shell[data-ui-preview] .canvas-app .legend { flex-shrink: 0; max-height: min(48px, 6dvh); overflow-y: auto; }

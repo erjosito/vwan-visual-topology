@@ -1,5 +1,5 @@
 import { useEffect, useId, useState, type ReactNode } from 'react'
-import { t } from './i18n'
+import { t, useLanguage } from './i18n'
 import { CanvasPresentationContext, useCanvasPresentation, type CanvasStyle, type ConnectionStyle } from './useCanvasPresentation'
 import { useWorkspaceSession } from './workspace-context'
 import './canvas-presentation.css'
@@ -80,6 +80,26 @@ export function CanvasBackground({ x, y, width, height }: { x: number; y: number
     </defs>
     <rect x={x} y={y} width={width} height={height} fill={`url(#${patternId})`} pointerEvents="none" />
   </>
+}
+
+export function CanvasStartActions({ onAdd, onExamples }: { onAdd: () => void; onExamples: () => void }) {
+  const session = useWorkspaceSession(), language = useLanguage()
+  const { headerActionsOpen, toggleHeaderActions } = useCanvasPresentation()
+  const [hidden, setHidden] = useState(false)
+  const text = (en: string, ja: string) => language === 'ja' ? ja : en
+  if (!session || session.practice || hidden) return null
+  return <nav className="canvas-start-actions" aria-label={text('Start your design', 'デザインを開始')}>
+    <button type="button" onClick={() => {
+      if (!headerActionsOpen) toggleHeaderActions()
+      onAdd()
+    }}>{text('Add a resource', 'リソースを追加')}</button>
+    <button type="button" onClick={session.openLibrary}>{text('Open a design', 'デザインを開く')}</button>
+    <button type="button" onClick={onExamples}>{text('Load an example', 'サンプルを開く')}</button>
+    <button type="button" onClick={event => {
+      event.currentTarget.closest('.canvas-stage, .aznet-canvas-shell')?.querySelector<SVGSVGElement>('svg[tabindex]')?.focus()
+      setHidden(true)
+    }} aria-label={text('Hide start actions', '開始アクションを非表示')}>x</button>
+  </nav>
 }
 
 export function CanvasEdgeSelection({ selected, path }: { selected: boolean; path: string }) {

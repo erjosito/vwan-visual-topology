@@ -52,6 +52,7 @@ interface Props {
   onClearSelection: () => void
   layoutControls?: ReactNode
   canvasStatus?: ReactNode
+  emptyActions?: ReactNode
 }
 
 function SpokeNvaIcon({ spokeId }: { spokeId: string }) {
@@ -61,7 +62,7 @@ function SpokeNvaIcon({ spokeId }: { spokeId: string }) {
   </g>
 }
 
-export function TopologyDiagram({ readOnly = false, topology, faults = {}, risks = {}, onRisk, issues = [], onShowIssues, hubId, erLocationId, selected, selectedSiteRoutes, sourceSiteLinkIds = [], sourceConnectionIds = [], sourceErLinkIds = [], layout = 'layered', zoom = 1, paths, sourceSpokeIds = [], tracing, selection, onObjectClick, onVnetConnectionClick, onObjectContextMenu, onNodeMove, onShowRouteMapRules, onZoom, onClearSelection, layoutControls, canvasStatus }: Props) {
+export function TopologyDiagram({ readOnly = false, topology, faults = {}, risks = {}, onRisk, issues = [], onShowIssues, hubId, erLocationId, selected, selectedSiteRoutes, sourceSiteLinkIds = [], sourceConnectionIds = [], sourceErLinkIds = [], layout = 'layered', zoom = 1, paths, sourceSpokeIds = [], tracing, selection, onObjectClick, onVnetConnectionClick, onObjectContextMenu, onNodeMove, onShowRouteMapRules, onZoom, onClearSelection, layoutControls, canvasStatus, emptyActions }: Props) {
   const language = useLanguage()
   const { connectionStyle } = useCanvasPresentation()
   const diagramCurve = (a: NodePosition, b: NodePosition, aSize: NodePosition, bSize: NodePosition, bend = 0, index = 0, count = 1, reversed = false) =>
@@ -366,6 +367,7 @@ export function TopologyDiagram({ readOnly = false, topology, faults = {}, risks
     panDrag.current = undefined; setPanning(false)
   }
   return <>
+    {!readOnly && !topology.hubs.length && !topology.spokes.length && !topology.sites.length && !topology.erLocations?.length && emptyActions}
     <div ref={scroll} className={`diagram-scroll ${moving ? 'is-repositioning' : ''} ${panning ? 'is-panning' : ''}`} onScroll={closePreview}><svg ref={svg} className={`diagram layout-${layout}`} viewBox={`${pan.x + (fitted?.x ?? 0)} ${pan.y + (fitted?.y ?? 0)} ${width} ${height}`} style={{ width: (fitted ? viewport.width : pixelWidth) * zoom, height: (fitted ? viewport.height : pixelHeight) * zoom }} role="group" tabIndex={0} aria-label={readOnly ? language === 'ja' ? '読み取り専用の Virtual WAN トポロジ' : 'Read-only Virtual WAN topology' : t("Interactive Virtual WAN topology. Drag blank canvas to pan; drag nodes to arrange; right-click for actions. Home resets the view. Alt+Arrow keys move a focused node.")} aria-description={t('Canvas zoom shortcuts: Ctrl+plus/minus or mouse wheel. Gestures apply only inside the canvas.')} onPointerDownCapture={closePreview}
     onPointerDown={(event) => {
       if (event.pointerType !== 'mouse' || event.button !== 0 || !event.isPrimary
