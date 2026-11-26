@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 import { createEmptyAzNetTopology, sampleHubSpokeFirewallUdr, type AzNetTopology } from '../src/azure-net/model'
 import { vpnGatewayModeTopology } from '../tests/fixtures/vpn-gateway-mode'
+import type { Topology } from '../src/model'
 import { readFileSync } from 'node:fs'
 import { waitForWorkspaceSample } from './workspace-storage-helpers'
 
@@ -511,6 +512,135 @@ test.describe('subnet and gateway menu disclosure', () => {
     })
   }
 })
+
+function disclosureTopology(configured: boolean): Topology {
+  return {
+    version: 1, name: 'Editor disclosure', hubs: [{ id: 'hub', name: 'Hub', region: 'West Europe', preference: 'ExpressRoute',
+      routingIntent: { private: false, internet: false, privatePrefixes: [] } }],
+    spokes: [
+      { id: 'app', name: 'Application', hubId: 'hub', region: 'West Europe', prefixes: ['10.0.0.0/16'],
+        ...(configured ? { label: 'Existing label', propagateDefaultRoute: true, nvaSpokeIds: ['nva'],
+          bgpCommunities: { virtualNetworkCommunity: '12076:20001', regionalCommunity: '12076:50004' } } : {}) },
+      { id: 'nva', name: 'Transit', hubId: 'hub', prefixes: ['10.1.0.0/16'] },
+    ],
+    sites: [{ id: 'peer', name: 'NVA', asn: 65001, prefixes: [], role: 'spoke-nva' }],
+    connections: [{ id: 'peer-link', name: 'BGP peering', spokeId: 'nva', hubId: 'hub', siteId: 'peer',
+      peerIp: '10.1.0.4', transport: 'SpokeNVA', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [] }],
+    siteLinks: [],
+  }
+}
+
+for (const language of ['en', 'ja']) for (const configured of [false, true]) {
+  test(`vwan ${language}: spoke disclosure preserves ${configured ? 'configured settings' : 'defaults'} and collapsed drafts`, async ({ page }) => {
+    const text = (en: string, ja: string) => language === 'ja' ? ja : en
+    await page.setViewportSize({ width: language === 'ja' ? 390 : 1440, height: 1000 })
+    await page.addInitScript(({ language, topology }) => {
+      localStorage.setItem('vwan-visual-topology:language:v1', language)
+      localStorage.setItem('aznet-theme', language === 'ja' ? 'dark' : 'light')
+      localStorage.setItem('aznet-ui-preview:v1', 'true')
+      localStorage.setItem('vwan-visual-topology:v1', JSON.stringify(topology))
+    }, { language, topology: disclosureTopology(configured) })
+    await page.goto('/?mode=vwan')
+    const node = page.locator('[data-node-id="app"]')
+    await node.focus()
+    await page.keyboard.press('Shift+F10')
+    await page.getByRole('menuitem', { name: text('Edit configuration', '構成を編集'), exact: true }).click()
+    const editor = page.locator('.object-editor')
+    const sections = editor.locator('.presentation-inspector-section')
+    const labels = sections.nth(0), routing = sections.nth(1)
+    const before = await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))
+    await expect(sections).toHaveCount(3)
+    await expect(editor.getByRole('textbox', { name: text('Name', '名前'), exact: true })).toBeVisible()
+    await expect(editor.locator('[name="hub"]')).toBeVisible()
+    await expect(editor.locator('[name="region"]')).toBeVisible()
+    await expect(editor.locator('[name="prefixes"]')).toBeVisible()
+    await expect(sections.locator(':scope > summary')).toContainText(configured
+      ? ['Existing label', '12076:20001', '1']
+      : [text('Optional diagram labels', '省略可能な図のラベル'), text('No optional routing settings', '省略可能なルーティング設定はありません'), '0'])
+    if (configured) {
+      await expect(editor.locator('.presentation-inspector-section[open]')).toHaveCount(3)
+      await expect(editor.locator('[name="propagateDefaultRoute"]')).toBeChecked()
+      await expect(editor.locator('[name="nvaSpokeIds"]')).toBeChecked()
+    } else {
+      await expect(editor.locator('.presentation-inspector-section[open]')).toHaveCount(0)
+      await labels.locator(':scope > summary').click()
+      await routing.locator(':scope > summary').focus()
+      await page.keyboard.press('Enter')
+    }
+    await editor.locator('[name="label"]').fill('Draft label')
+    const community = editor.getByRole('textbox', { name: text('VNet BGP community', 'VNet BGP コミュニティ'), exact: true })
+    await community.fill('invalid')
+    await routing.locator(':scope > summary').click()
+    await expect(routing.locator(':scope > summary')).toContainText(text('Check configuration input.', '構成の入力内容を確認してください。'))
+    await expect(editor.getByText(text('Virtual WAN stores VNet communities but does not propagate them.', 'Virtual WAN は VNet コミュニティを保存しますが、伝達はしません。'), { exact: true })).toBeVisible()
+    await routing.locator(':scope > summary').click()
+    await community.fill('12076:281')
+    for (const section of await sections.all()) {
+      if (await section.getAttribute('open') !== null) await section.locator(':scope > summary').click()
+    }
+    const compactCount = await editor.locator('input:visible, select:visible, button:visible').count()
+    await page.getByTestId('ui-preview-toggle').dispatchEvent('click')
+    await expect(community).toBeVisible()
+    await expect(community).toHaveValue('12076:281')
+    await expect(editor.locator('[name="label"]')).toHaveValue('Draft label')
+    expect(await editor.locator('input:visible, select:visible, button:visible').count()).toBeGreaterThan(compactCount)
+    await page.getByTestId('ui-preview-toggle').dispatchEvent('click')
+    await expect(community).not.toBeVisible()
+    expect(await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))).toBe(before)
+    expect((await new AxeBuilder({ page }).include('.object-editor').analyze()).violations).toEqual([])
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await editor.getByRole('button', { name: text('Save changes', '変更を保存'), exact: true }).click()
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('vwan-visual-topology:v1')!) as Topology)
+    expect(saved.spokes[0]).toMatchObject({ label: 'Draft label', prefixes: ['10.0.0.0/16'], hubId: 'hub',
+      bgpCommunities: { virtualNetworkCommunity: '12076:281', ...(configured ? { regionalCommunity: '12076:50004' } : {}) } })
+    expect(saved.spokes[0].propagateDefaultRoute).toBe(configured ? true : undefined)
+    expect(saved.spokes[0].nvaSpokeIds).toEqual(configured ? ['nva'] : undefined)
+    expect(saved.connections).toEqual(JSON.parse(before!).connections)
+  })
+}
+
+for (const language of ['en', 'ja']) {
+  test(`vwan ${language}: hub disclosure preserves routing intent and keeps model warnings visible`, async ({ page }) => {
+    const configured = language === 'ja'
+    const topology = disclosureTopology(false)
+    if (configured) {
+      topology.hubs[0].routingIntent = { private: true, internet: true, privatePrefixes: ['100.64.0.0/10'] }
+      topology.hubs[0].routeTables = [{ id: 'custom', name: 'Custom table', labels: [], staticRoutes: [] }]
+    }
+    await page.addInitScript(({ language, topology }) => {
+      localStorage.setItem('vwan-visual-topology:language:v1', language)
+      localStorage.setItem('aznet-ui-preview:v1', 'true')
+      localStorage.setItem('vwan-visual-topology:v1', JSON.stringify(topology))
+    }, { language, topology })
+    await page.goto('/?mode=vwan')
+    await page.getByLabel(language === 'ja' ? 'ハブ Hub を選択' : 'Select hub Hub', { exact: true }).focus()
+    await page.keyboard.press('Shift+F10')
+    await page.getByRole('menuitem', { name: language === 'ja' ? '構成を編集' : 'Edit configuration', exact: true }).click()
+    const editor = page.locator('.object-editor')
+    const intent = editor.locator('.presentation-inspector-section').nth(1)
+    const before = await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))
+    if (configured) {
+      await expect(intent).toHaveAttribute('open')
+      await expect(editor.locator('[name="privateIntent"]')).toBeChecked()
+      await expect(editor.locator('[name="internetIntent"]')).toBeChecked()
+      await expect(editor.locator('[name="privatePrefixes"]')).toHaveValue('100.64.0.0/10')
+      await intent.locator(':scope > summary').click()
+      await expect(editor.getByRole('alert')).toBeVisible()
+    } else {
+      await expect(intent).not.toHaveAttribute('open')
+      await intent.locator(':scope > summary').click()
+      await editor.locator('[name="privatePrefixes"]').fill('100.64.0.0/10')
+      await intent.locator(':scope > summary').click()
+      await editor.getByRole('button', { name: 'Save changes', exact: true }).click()
+      await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('vwan-visual-topology:v1')!).hubs[0].routingIntent))
+        .toEqual({ private: false, internet: false, privatePrefixes: ['100.64.0.0/10'] })
+    }
+    if (configured) {
+      await expect(editor.getByText(/Azure は以前の設定を復元しません/)).toBeVisible()
+      expect(await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))).toBe(before)
+    }
+  })
+}
 
 async function openVnetConfiguration(page: Page, mode: string, topology: AzNetTopology, section: 'vnet' | 'subnet' | false = 'vnet') {
   await page.goto(`/?mode=${mode}`)
