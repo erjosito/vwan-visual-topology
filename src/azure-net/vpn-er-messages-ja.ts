@@ -1,6 +1,12 @@
 import { registerJapaneseMessages } from '../messages'
 
 registerJapaneseMessages({
+  'Azure connection routing weight': 'Azure 接続のルーティング重み',
+  'ER routing weight must be an integer from 0 to 32000.': 'ER のルーティング重みには 0 から 32000 の整数を指定してください。',
+  'Higher weight wins for the same prefix before AS-path length. This is local to Azure, not advertised to the site.': '同じプレフィックスでは AS パス長より先に大きい重みを優先します。Azure 内の設定であり、サイトには広告されません。',
+  'Site-to-Azure AS-path prepend': 'サイトから Azure への AS パス プリペンド',
+  'Applied to this circuit advertisement toward Azure. Private ASNs are retained on ExpressRoute private peering. Reverse selection uses site inbound policy.': 'この回線から Azure への広告に適用します。ExpressRoute プライベート ピアリングではプライベート ASN を保持します。逆方向の選択にはサイトの受信ポリシーを使用します。',
+  'Configure customer AS-path prepends on the site ER link. Imported Azure-link prepend values are preserved but not modeled for classic ER gateways.': '顧客側の AS パス プリペンドはサイトの ER リンクで設定します。インポートした Azure 側リンクのプリペンド値は保持しますが、従来型 ER ゲートウェイではモデル化しません。',
   'Instance-bound transports and BGP bindings are authored in native JSON. This editor preserves them; eligibility is not Established or verified SA continuity.': 'インスタンスに対応するトランスポートと BGP バインドはネイティブ JSON で設定します。このエディターでは設定を保持します。適格性は Established 状態や SA 継続性の検証を意味しません。',
   'CPE static Azure prefixes (BGP disabled)': 'CPE の Azure 宛て静的プレフィックス (BGP 無効時)',
   'VPN over ER private peering': 'ER プライベート ピアリング経由の VPN',

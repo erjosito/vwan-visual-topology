@@ -306,7 +306,9 @@ export interface AzErLink {
   targetKind: 'vnet-gateway' | 'vwan-hub' | 'site'
   targetId: string
   enabled: boolean
+  /** Azure-side connection selection, integer 0-32000; not advertised to the site. */
   weight?: number
+  /** Site-to-Azure advertisement or VWAN hub inbound prepend; not classic gateway ingress. */
   prepend?: number[]
   hubRouting?: HubRoutingConfiguration
   learnSiteRoutes?: boolean
