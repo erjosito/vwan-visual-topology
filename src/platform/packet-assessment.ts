@@ -12,6 +12,8 @@ export function assessPacket(topology: InventoryTopology, simulation: Simulation
     if (target.kind === 'workload') return workload(target)?.config.privateIp
     if (target.kind === 'external') return target.address
     if (target.kind === 'public-ip') return topology.inventory?.publicIps.find((ip) => ip.id === target.publicIpId)?.address
+    if (target.kind === 'private-endpoint') return topology.version === 2
+      ? topology.vnets.flatMap((vnet) => vnet.subnets.flatMap((subnet) => subnet.privateEndpoints ?? [])).find((endpoint) => endpoint.id === target.privateEndpointId)?.ipAddress : undefined
     const frontend = topology.inventory?.loadBalancers?.find((lb) => lb.id === target.loadBalancerId)?.frontends.find((frontend) => frontend.id === target.frontendId)
     return frontend?.kind === 'private' ? frontend.privateIp : frontend?.kind === 'public'
       ? topology.inventory?.publicIps.find((ip) => ip.id === frontend.publicIpId)?.address : undefined
@@ -31,7 +33,7 @@ export function assessPacket(topology: InventoryTopology, simulation: Simulation
   if (blocked) return assessment(requirement.expectation === 'blocked')
   const forward = packet.forward.routing === 'reachable' && packet.nsg?.forward.outcome === 'allowed'
     && (requirement.packet.target.kind !== 'external' || packet.egress === 'configured')
-    && (!['public-ip', 'load-balancer'].includes(requirement.packet.target.kind) || packet.ingress === 'configured')
+    && (!['public-ip', 'load-balancer', 'private-endpoint'].includes(requirement.packet.target.kind) || packet.ingress === 'configured')
   if (!forward) return unknown('Forward routing, filtering, mapping or eligible backend configuration is unknown; not a pass or proven blocker.', packet)
   if (requirement.expectation === 'blocked') return assessment(false)
   if (packet.haPorts?.symmetry === 'asymmetric') return assessment(false)

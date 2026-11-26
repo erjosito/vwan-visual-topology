@@ -14,8 +14,49 @@ import { nvaBgpTopology } from '../tests/fixtures/nva-bgp'
 import { readFileSync } from 'node:fs'
 import { vpnErTopology } from '../tests/fixtures/vpn-er'
 import { vpnInstanceTopology, vpnMigrationSnapshots } from '../tests/fixtures/vpn-instance'
+import { privateLinkTopology, privateLinkRequest } from '../tests/fixtures/private-link'
 
 const serverPath = resolve(process.env.MCP_PACKAGE_DIR ?? 'platform-dist', 'mcp.cjs')
+
+it('retains explicit Private Link connection identity and complete translated evidence through stdio', async () => {
+  const client = new Client({ name: 'private-link-contract-test', version: '1' })
+  await client.connect(new StdioClientTransport({ command: process.execPath, args: [serverPath], stderr: 'pipe' }))
+  const call = async (name: string, args: Record<string, unknown> = {}) => {
+    const response = await client.callTool({ name, arguments: args })
+    const data = response.structuredContent
+    if (response.isError || !data || typeof data !== 'object' || Array.isArray(data)) throw new Error(JSON.stringify(response.content))
+    return data as Record<string, unknown>
+  }
+  try {
+    const schema = await call('get_schema', { mode: 'full' })
+    expect(schema.packetDestinationShapes).toContainEqual({ kind: 'private-endpoint', privateEndpointId: 'original consumer Private Endpoint ID' })
+    const topology = privateLinkTopology()
+    const request = { contractVersion: 1 as const, operation: 'simulate' as const, document: { mode: 'full' as const, topology },
+      packet: privateLinkRequest('b') }
+    const { handle } = await call('start_simulation', { request })
+    let status: unknown
+    for (let attempt = 0; attempt < 100; attempt++) {
+      status = (await call('get_job', { handle })).status
+      if (status === 'finished') break
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    expect(status).toBe('finished')
+    const chunks: string[] = []
+    let complete = false
+    for (let offset = 0; offset < 1_000_000;) {
+      const chunk = await call('get_evidence', { handle, section: 'packet', offset, limit: 4000 })
+      if (typeof chunk.jsonText !== 'string' || !chunk.jsonText.length) throw new Error('Missing Private Link evidence chunk.')
+      chunks.push(chunk.jsonText)
+      if (chunk.complete) { complete = true; break }
+      offset += chunk.jsonText.length
+    }
+    expect(complete).toBe(true)
+    const packet: unknown = JSON.parse(chunks.join(''))
+    expect(packet).toEqual(executePlatform(request).packet)
+    expect(packet).toMatchObject({ ingress: 'configured', reply: { session: 'conditional-response' },
+      forward: { steps: expect.arrayContaining([expect.objectContaining({ entity: { kind: 'private-endpoint', id: 'b-pe' }, routeId: 'b-connection' })]) } })
+  } finally { await client.close() }
+}, 20000)
 
 it('exposes private VPN ER dependencies and directional protection through the actual stdio worker', async () => {
   const client = new Client({ name: 'vpn-over-er-contract-test', version: '1' })

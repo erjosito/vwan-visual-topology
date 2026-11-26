@@ -2547,7 +2547,7 @@ function traceAzNetFlowCore(
         // Private Endpoint /32 system route!
         for (const candidateVnet of topology.vnets) {
           for (const candidateSub of candidateVnet.subnets) {
-            const pe = (candidateSub.privateEndpoints ?? []).find((p) => p.id === matched.nextHopResourceId || p.ipAddress === destinationIp)
+            const pe = (candidateSub.privateEndpoints ?? []).find((p) => p.id === matched.nextHopResourceId && p.ipAddress === destinationIp)
             if (pe) {
               if (candidateVnet.id !== vnet.id) {
                 const check = validatePeeringTransition(vnet, candidateVnet, stepCursor.fromExternalVnet, stepCursor.viaVnra)
