@@ -58,7 +58,7 @@ unchanged. The standalone Windows development installer is unsigned.
    - **Virtual Hubs**: Configure the hub routing preference (`ExpressRoute`, `VPN`, or `ASPath`), enable **Secured Virtual Hub** Azure Firewall Routing Intent (Private traffic and/or Internet traffic), inspect the **BGP table** / **Learned routes** / **Advertised routes** / **Firewall routes**, or click **Highlight preferred routes**.
    - **Spoke VNets**: Attach a **BGP NVA**, connect downstream standalone Azure VNets or downstream on-premises sites behind that NVA, or configure spoke connection route maps.
    - **On-Premises Sites**: Connect to hubs via **ExpressRoute**, **VPN** (BGP or Static), or **SD-WAN**; add site-to-site WAN links; or configure site route maps and static routing tables.
-5. **Save, Share, or Load JSON Topologies**: Click **Share Link** (`#s=...` permalink in Full Hybrid / Hub & Spoke modes) or **Export JSON** in the top bar to save your topology as a portable `.json` file, or click **Import JSON** to load any saved topology.
+5. **Save, Share, or Load JSON Topologies**: Use **Load**, **Save** and **Save As** for explicit artifact operations; recovery storage is not a JSON backup. See the [document lifecycle](./document-lifecycle.md) for destination and close behavior. Web users can explicitly save a cloud copy and enable a revocable read-only link through [Cloud account](./cloud-accounts.md#read-only-sharing). Old `#s=...` links remain read-only embedded snapshots; new full-topology links are no longer generated. Desktop users can share local JSON files.
 
 ---
 

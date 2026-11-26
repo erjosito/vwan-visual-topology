@@ -18,7 +18,7 @@ Windows app downloads and MCP setup are available from **Help** in the web app, 
 
 Microsoft documents [VNet communities as incompatible with Virtual WAN](https://learn.microsoft.com/azure/expressroute/how-to-configure-custom-bgp-communities). Accordingly, saved VNet configuration does **not** automatically tag VWAN, VPN, peering or NVA-origin advertisements. Use existing explicit [VWAN community route-map actions](https://learn.microsoft.com/azure/virtual-wan/route-maps-about) when appropriate; these are distinct from the VNet resource property. This is modeled routing, not live Azure qualification.
 
-**Local platform (development):** [PLATFORM.md](PLATFORM.md) documents the shared browser/Node service, local stdio MCP/Copilot skill and unsigned Windows Electron build, including privacy boundaries, supported requirements and production release gates. The existing web UI remains browser-local; no hosting migration or cloud progress backend is introduced.
+**Local platform:** [the living contract map](PLATFORM.md#living-contracts-and-sources) links the shared browser/Node service, local stdio MCP/Copilot skill, unsigned Windows Electron build, document lifecycle and release gates. Simulation remains local. [Optional cloud accounts](docs/cloud-accounts.md) provide private saves, sharing and curriculum history synchronization, not cloud simulation.
 
 **Diagnostics and learning roadmap:** [Cross-layer investigations, service coverage and curriculum stages](docs/diagnostics-learning-roadmap.md) connects planned DNS/application support, evidence-backed troubleshooting and curated learning content.
 

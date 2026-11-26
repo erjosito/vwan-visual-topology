@@ -15,6 +15,25 @@ local simulation contract. Windows cloud sign-in is configured separately under
 [cloud accounts](docs/cloud-accounts.md#configure-windows-cloud-sign-in).
 Verified awards and resource-deployment APIs remain outside this implementation.
 
+## Living contracts and sources
+
+This page describes current source behavior, not proof of a deployed version or
+live Azure fidelity. Use this small contract map instead of copying mutable
+versions and capability lists into feature narratives:
+
+| Contract | Authoritative source and interpretation |
+| --- | --- |
+| Native documents, request versions, engine and execution budgets | [`src/platform/contract.ts`](src/platform/contract.ts), with admission in [`service.ts`](src/platform/service.ts). Native topology versions, platform contract versions and engine revisions are separate. Discover the installed build through MCP `get_capabilities` / `get_schema`, rather than copying an engine revision from a feature's introduction. |
+| Provider support | [`src/workspace-capabilities.ts`](src/workspace-capabilities.ts) and the platform capability response. [`applicationCapabilities`](src/application-inventory.ts) advertises identity-only application/DNS inventory with no implemented service providers; retaining a service name is not simulation support. |
+| Uncertainty and evidence authority | [Scoped routing evidence](#scoped-routing-evidence-386), [`routing-evidence.ts`](src/routing-evidence.ts) and platform request/result validation. Captured observations remain distinct from modeled results. Unknown, incomplete or stale evidence cannot earn a pass; warning severity and acknowledgement cannot authorize grading. |
+| Document ownership, recovery and artifact saving | [Document lifecycle](docs/document-lifecycle.md), including the implemented tabs/Save integration for #364/#374. Recovery storage, an acknowledged file/cloud save and routing/evidence revisions have different authority. |
+| Hosts and optional online services | [Clients and data flow](#clients-and-data-flow), [cloud accounts](docs/cloud-accounts.md) and [privacy](PRIVACY.md). Local execution does not imply an AI client keeps tool inputs/results offline. |
+| Quality evidence and release qualification | [Quality evaluation](docs/quality-evaluation.md), its executable manifests and [release gates](docs/releasing.md). Regression conformance is not usability, learning effectiveness, live Azure qualification or release approval. |
+
+The [2026-11-21 assessment](docs/software-architecture-analysis-2026-11-21.md)
+is a dated analysis pinned to its recorded commit. Its metrics and backlog
+statements are historical, not assertions about current source.
+
 ## Scoped routing evidence (#386)
 
 Mixed-provider exact-route assessments carry additive `coverage`: provider,
@@ -67,12 +86,20 @@ v1 Virtual WAN editor/provider as an explicit compatibility path rather than
 converting unsupported semantics to v2. Both native engines, existing links/files
 and independent practice remain supported.
 
+Normal designs now have document-owned tabs, histories and recovery payloads.
+[`workspace-tabs.ts`](src/workspace-tabs.ts) defines the tab index and per-document
+storage mapping; [`workspace-documents.ts`](src/workspace-documents.ts) enforces
+active-writer ownership. [Document lifecycle](docs/document-lifecycle.md) is the
+shared tabs/Save contract. Profile recovery does not confirm an explicitly saved
+file or cloud artifact, and a restored destination hint grants no file permission.
+
 **Workspace** opens the saved-design/recovery library or starts an empty mixed
-design. `network-simulator:workspace:v1` stores only the active native provider;
-the existing `vwan-visual-topology:v1` and `aznet-visual-topology:v1` payloads stay
-authoritative for their own families. Without a selection, two legacy saves
-require an explicit choice. A single legacy save resumes in its compatible
-editor. Legacy architecture aliases are consumed once; H&S aliases never delete
+design. For legacy startup/migration, `network-simulator:workspace:v1` selects
+the native provider, and `vwan-visual-topology:v1` / `aznet-visual-topology:v1`
+retain the original family payloads. Normal tab storage maps those family keys
+to document-owned payloads, not one global editable topology. Without a legacy
+selection, two legacy saves require an explicit choice; a single legacy save
+resumes in its compatible editor. Legacy architecture aliases are consumed once; H&S aliases never delete
 mixed virtual hubs or branch connections. Native imports/captures and v2 shared
 snapshots select the appropriate provider, retaining native capture review and
 comparison behavior. Explicit sample URLs are consumed after load.
@@ -348,9 +375,11 @@ The sidebar does not write or reset this legacy ledger. Retained
 progress is per browser origin or Electron profile, **not encrypted,
 account-backed or synchronized**. The status panel provides an original-byte
 legacy backup; legacy attempts/drafts grant no guided-course credit. Guided
-reset never changes those bytes or the visual workspace. No exercises/results are uploaded, no Azure
-resources are created and basic help/grading requires no AI subscription.
-Account-backed progress and server-verified awards remain P4.
+reset never changes those bytes or the visual workspace. This legacy ledger is
+not uploaded. Optional signed-in curriculum history synchronization is a
+separate service described in [cloud accounts](docs/cloud-accounts.md); it does
+not verify awards. No Azure resources are created and basic help/grading requires
+no AI subscription. Server-verified awards remain outside this implementation.
 
 ### Small-corpus authoring rules
 
@@ -477,8 +506,8 @@ References: [components](https://learn.microsoft.com/en-us/azure/load-balancer/c
 
 ### Bounded internal HA-ports NVA forwarding (#245)
 
-Engine `2026.11.17.3`, native topology v2, contract 1 flow/route checks and
-contract 2 packet predicates support one internal Standard LB/frontend/pool
+Native topology v2 and the platform's flow/route checks and packet predicates
+support one internal Standard LB/frontend/pool
 and one floating HA-ports rule. Use the existing frontend's private IP as a
 subnet UDR `VirtualAppliance` next hop. The rule declares `haPorts: true`,
 `floatingIp: true`, protocol `all`, frontend/backend ports `0`, and
@@ -520,9 +549,27 @@ Reference: [HA ports and configuration-specific symmetry](https://learn.microsof
 
 | Client | Execution and persistence | Network / privilege boundary |
 | --- | --- | --- |
-| Web | Existing UI/engines and diagnostics workers remain browser-local. `src/platform/browser.ts` adds a separately tested worker contract adapter for new consumers; the existing UI is not wholesale migrated to that facade. Native saves remain per browser origin. | Static-site loading and deliberately selected existing web integrations retain their current behavior. No Azure credentials or new backend. |
+| Web | Existing UI/engines and diagnostics workers remain browser-local. `src/platform/browser.ts` adds a separately tested worker contract adapter for new consumers; the existing UI is not wholesale migrated to that facade. Recovery stays per browser origin; explicit file saves use browser capabilities or downloads. | Website loading needs connectivity; this is not offline fresh-navigation support. Optional configured cloud accounts provide explicit topology storage/sharing and signed-in curriculum synchronization. They are not simulation backends. Azure captures are imported files, not direct browser CLI access. |
 | Local MCP | `platform-dist/mcp.cjs`, Node workers, process-local jobs/evidence. No file, Azure, shell or UI mutation tools. | Stdio only; no HTTP listener. Your selected AI provider can receive tool inputs/results. Local MCP does **not** make hosted Copilot offline. |
 | Windows desktop | Packaged React UI/assets in Electron; isolated Node workers and deliberate file dialogs. Same native JSON and existing capture review. | Renderer has no Node, filesystem or generic IPC/process API. Anonymous startup/local modeling make no automatic HTTP(S) requests. Optional signed-in cloud access uses the main-process API broker; the renderer stays network-locked. No updates, telemetry or crash uploads. Feedback/share-link features are disabled. Azure collection uses its separate local read-only CLI broker. |
+
+File operations use the [document lifecycle contract](docs/document-lifecycle.md):
+desktop paths stay behind document-bound main-process tokens, and browser
+overwrite authority stays with the original private handle and file revision.
+Neither exposes arbitrary renderer paths or a generic shell capability.
+
+Simulation remains local in all three clients. Browser/desktop flow exports
+render locally on demand; MCP rendering uses bounded, process-local jobs and
+expiring artifact chunks, not file writes or uploads. Execution budgets are
+defined in `platformLimits`; render budgets in `capabilities.rendering.limits`,
+both in [`contract.ts`](src/platform/contract.ts). Job retention is enforced by
+[`platform/jobs.ts`](platform/jobs.ts) and
+[`platform/render-jobs.ts`](platform/render-jobs.ts).
+Cloud consent, account isolation and conditional ETags remain separate from
+these local jobs. Cloud sharing scale and restore assumptions are documented
+under [cloud operations](docs/cloud-accounts.md#operational-evidence-and-follow-ups).
+Signed distribution remains #146, subject to its publisher, cost and
+exact-artifact approval gates; it is not enabled by these contracts.
 
 Core/Node bundle import guards reject React, browser locale state and browser
 worker dependencies. Presentation helpers accept a renderer rather than reading
@@ -532,8 +579,10 @@ contract locale does not mutate global locale or change routing decisions.
 
 ## Contract v1
 
-`src/platform/contract.ts` defines the schema. Discover engine version,
-capabilities and limits at runtime; an explicit incompatible version is rejected.
+[`src/platform/contract.ts`](src/platform/contract.ts) defines supported versions,
+capabilities and limits. This example uses the retained v1 envelope; newer
+application/DNS declarations require the separately described v2 contract.
+Discover capabilities at runtime; an explicit incompatible version is rejected.
 
 ```json
 {
