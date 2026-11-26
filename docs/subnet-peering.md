@@ -51,6 +51,13 @@ Validation checks one link per distinct VNet pair, unique owned references,
 VNet's links, participating parent-address-space restrictions and cross-link
 address-space uniqueness. Invalid scopes cannot certify reachability or isolation.
 
+A VNet with its own VPN or ExpressRoute gateway cannot enable
+`useRemoteGateways`, even when that local gateway is disabled in the simulator.
+Canvas and full peering editors prevent enabling this combination but permit
+clearing an invalid saved flag. Imported conflicts retain their original
+configuration for repair and appear in topology validation. A disabled local
+gateway does not make the peer's gateway an eligible routing fallback.
+
 ## Isolated overlapping VNets
 
 H&S and Full Hybrid allow separate VNets to reuse IPv4 prefixes and workload

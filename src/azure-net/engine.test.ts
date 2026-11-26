@@ -73,6 +73,33 @@ describe('AzNetSim VNet Engine & Diagnostics', () => {
 
   const expectedPair = { scope: 'pair', sourceKey: 'subnet:spoke:work', destinationKey: 'site:site:172.16.0.0/24' } as const
 
+  it.each([
+    ['ExpressRoute', true, false], ['ExpressRoute', false, false],
+    ['Vpn', true, false], ['Vpn', false, false],
+    ['ExpressRoute', true, true], ['ExpressRoute', false, true],
+    ['Vpn', true, true], ['Vpn', false, true],
+  ] as const)('rejects remote gateway transit with a local %s gateway (enabled=%s, reversed=%s)', (kind, enabled, reversed) => {
+    const topology = transitTopology()
+    const spoke = topology.vnets[1]
+    spoke.subnets.push({ id: 'local-gateway-subnet', name: 'GatewaySubnet', prefix: '10.1.255.0/27' })
+    spoke.gateways.push({ id: 'local-gateway', name: 'Local gateway', kind, asn: 65515, enabled, bgpEnabled: true })
+    if (reversed) {
+      const peer = topology.vnetPeerings[0]
+      Object.assign(peer, { vnetAId: peer.vnetBId, vnetBId: peer.vnetAId, aToB: peer.bToA, bToA: peer.aToB })
+    }
+    const imported = parseAzNetJson(JSON.stringify(topology))
+    expect(validateAzNetTopology(imported)).toContainEqual(expect.stringContaining('has its own Virtual Network Gateway'))
+    const activeRemoteRoute = (value: AzNetTopology) => simulateAzNet(value).subnetTables.work.routes
+      .some((route) => route.active && route.prefix === '172.16.0.0/24')
+    expect(activeRemoteRoute(imported)).toBe(false)
+    const simulation = simulateAzNet(imported)
+    expect(traceAzNetFlow(imported, simulation, { kind: 'site', siteId: 'site' }, '10.1.1.4').status).not.toBe('delivered')
+    imported.vnets[1].gateways = []
+    expect(validateAzNetTopology(imported)).toEqual([])
+    expect(activeRemoteRoute(imported)).toBe(true)
+    expect(traceAzNetFlow(imported, simulateAzNet(imported), { kind: 'site', siteId: 'site' }, '10.1.1.4').status).toBe('delivered')
+  })
+
   it('performs one prefix parse per active LPM row and does not cache mutable route-table state', () => {
     const table = simulateAzNet(transitTopology('Vpn')).subnetTables.work
     table.routes.reverse()

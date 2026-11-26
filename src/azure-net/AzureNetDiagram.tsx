@@ -2120,10 +2120,10 @@ export function AzureNetDiagram({
         const vnetA = topology.vnets.find((v) => v.id === peering.vnetAId)
         const vnetB = topology.vnets.find((v) => v.id === peering.vnetBId)
         const vnetAHasGwOrArs = Boolean(
-          vnetA && (vnetA.gateways.some((g) => g.enabled) || vnetA.routeServer?.enabled),
+          vnetA && (vnetA.gateways.length > 0 || vnetA.routeServer?.enabled),
         )
         const vnetBHasGwOrArs = Boolean(
-          vnetB && (vnetB.gateways.some((g) => g.enabled) || vnetB.routeServer?.enabled),
+          vnetB && (vnetB.gateways.length > 0 || vnetB.routeServer?.enabled),
         )
         return (
           <div

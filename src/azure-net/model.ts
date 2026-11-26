@@ -1443,6 +1443,14 @@ export function validateAzNetTopology(input: unknown): string[] {
       }
     }
   }
+  for (const peering of candidate.vnetPeerings) {
+    for (const [vnetId, flags] of [[peering.vnetAId, peering.aToB], [peering.vnetBId, peering.bToA]] as const) {
+      const vnet = candidate.vnets.find((entry) => entry.id === vnetId)
+      if (flags.useRemoteGateways && vnet?.gateways.length) {
+        errors.push(`Peering "${peering.name}": VNet "${vnet.name}" has its own Virtual Network Gateway and cannot use remote gateways, even when the local gateway is disabled.`)
+      }
+    }
+  }
   for (const table of candidate.udrTables ?? []) {
     if (table.region !== undefined && !udrRegionKey(table.region)) errors.push(`Route table "${table.name}" has an invalid region.`)
     for (const route of table.routes ?? []) {

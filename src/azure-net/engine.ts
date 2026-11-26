@@ -699,7 +699,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
         rel.reverseFlags.useRemoteGateways
       ) {
         const spokeHasLocalGatewayOrArs =
-          other.gateways.some((g) => g.enabled) || Boolean(other.routeServer?.enabled)
+          other.gateways.length > 0 || Boolean(other.routeServer?.enabled)
         if (!hubHasGatewayOrArs) {
           warnings.push(
             `Peering "${rel.peering.name}": "${vnet.name}" sets allowGatewayTransit=true, but "${vnet.name}" has no enabled Virtual Network Gateway or Route Server.`,
@@ -1693,7 +1693,7 @@ function compileSingleSubnetEffectiveRoutes(
   // Remote Gateways / ARS via VNet Peering (`useRemoteGateways` on this VNet + `allowGatewayTransit` on peer)
   // Azure prohibits `useRemoteGateways=true` if this VNet already has a local Gateway or Route Server.
   const localHasGatewayOrArs =
-    vnet.gateways.some((g) => g.enabled) || Boolean(vnet.routeServer?.enabled)
+    vnet.gateways.length > 0 || Boolean(vnet.routeServer?.enabled)
   if (!localHasGatewayOrArs) {
     for (const peerVnet of topology.vnets) {
       if (peerVnet.id === vnet.id) continue
