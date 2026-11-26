@@ -52,6 +52,7 @@ export interface AzRouteMapSelection {
 
 interface AzureNetDiagramProps {
   emptyActions?: ReactNode
+  selectionActions?: ReactNode
   readOnly?: boolean
   frameRequest?: { vnetId: string; revision: number }
   faults?: import('../failures').FaultMap
@@ -230,6 +231,7 @@ function computePositions(topology: AzNetTopology): {
 
 export function AzureNetDiagram({
   emptyActions,
+  selectionActions,
   readOnly = false,
   topology,
   vpnUnderlays,
@@ -759,6 +761,7 @@ export function AzureNetDiagram({
 
   return (
     <div ref={shellRef} className="aznet-canvas-shell" data-testid="aznet-canvas-shell">
+      {!readOnly && selectionActions}
       {!readOnly && !topology.vnets.length && !topology.vwanHubs.length && !topology.sites.length && !topology.erLocations.length && emptyActions}
       <svg
         ref={svgRef}

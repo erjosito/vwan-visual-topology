@@ -214,6 +214,68 @@ for (const mode of ['vwan', 'full']) for (const language of ['en', 'ja']) {
   })
 }
 
+for (const mode of ['vwan', 'full']) for (const language of ['en', 'ja']) {
+  test(`${mode} ${language}: selection exposes common actions without a context click`, async ({ page }) => {
+    const text = (en: string, ja: string) => language === 'ja' ? ja : en
+    await page.setViewportSize({ width: language === 'ja' ? 390 : 1440, height: 1000 })
+    await page.addInitScript(language => {
+      localStorage.setItem('vwan-visual-topology:language:v1', language)
+      localStorage.setItem('aznet-workspace-tools:v1', 'closed')
+      localStorage.setItem('aznet-ui-preview:v1', 'true')
+    }, language)
+    await page.goto(`/?mode=${mode}&sample=${mode === 'vwan' ? 'hub-routing-preferences' : 'hub-spoke-firewall-udr'}`)
+    const node = page.getByRole('button', { name: mode === 'vwan' ? /^(Select hub |ハブ )/ : /^VNet / }).first()
+    await node.focus()
+    await node.press('Enter')
+    const actions = page.getByRole('navigation', { name: text('Selected object actions', '選択したオブジェクトの操作'), exact: true })
+    await expect(actions).toBeInViewport()
+    expect(await actions.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
+    await actions.getByRole('button', { name: text('Minimize selection actions', '選択アクションを最小化'), exact: true }).click()
+    await expect(actions.getByRole('button', { name: text('Inspect routes', '経路を確認'), exact: true })).toHaveCount(0)
+    await actions.getByRole('button', { name: text('Expand selection actions', '選択アクションを展開'), exact: true }).click()
+    const key = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
+    const original = await page.evaluate(key => localStorage.getItem(key), key)
+    await actions.getByRole('button', { name: text('Inspect routes', '経路を確認'), exact: true }).click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await actions.getByRole('button', { name: text('Trace path', 'パスを追跡'), exact: true }).click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await page.keyboard.press('Escape')
+    expect(await page.evaluate(key => localStorage.getItem(key), key)).toBe(original)
+    expect((await new AxeBuilder({ page }).include('.canvas-selection-actions').analyze()).violations).toEqual([])
+    await actions.getByRole('button', { name: text('All actions', 'すべての操作'), exact: true }).click()
+    await expect(page.getByRole('complementary', { name: text('Workspace controls', 'ワークスペースの操作'), exact: true })).toBeVisible()
+  })
+}
+
+test('selected VNet peering uses the existing target menu and excludes already-connected peers', async ({ page }) => {
+  await page.addInitScript(topology => {
+    localStorage.setItem('aznet-workspace-tools:v1', 'closed')
+    localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology: { ...topology, vnetPeerings: [] } }))
+  }, sampleHubSpokeFirewallUdr)
+  await page.goto('/?mode=full')
+  const node = page.getByRole('button', { name: /^VNet / }).first()
+  await node.focus()
+  await node.press('Enter')
+  const actions = page.getByRole('navigation', { name: 'Selected object actions', exact: true })
+  await actions.getByRole('button', { name: 'Peer', exact: true }).click()
+  await expect(page.getByRole('menu')).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(actions.getByRole('button', { name: 'Peer', exact: true })).toBeFocused()
+  await actions.getByRole('button', { name: 'Peer', exact: true }).click()
+  const targets = await page.getByRole('menuitem').count()
+  const chosen = await page.getByRole('menuitem').first().textContent()
+  await page.getByRole('menuitem').first().click()
+  await expect.poll(async () => JSON.parse((await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1')))!).topology.vnetPeerings.length).toBe(1)
+  if (targets === 1) await expect(actions.getByRole('button', { name: 'Peer', exact: true })).toBeDisabled()
+  else {
+    await actions.getByRole('button', { name: 'Peer', exact: true }).click()
+    await expect(page.getByRole('menuitem')).toHaveCount(targets - 1)
+    await expect(page.getByRole('menuitem', { name: chosen!, exact: true })).toHaveCount(0)
+    await page.keyboard.press('Escape')
+  }
+})
+
 test('desktop does not promote the Windows download or MCP client', async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(window, 'desktopSimulator', { value: {} }))
   await page.goto('/?mode=full')

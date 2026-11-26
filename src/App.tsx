@@ -56,6 +56,7 @@ import { pruneDeletedInventory } from './inventory'
 import { measureAzWork, useMeasuredRender } from './azure-net/performance'
 
 const NetworkDetail = lazy(() => import('./NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
+const CanvasSelectionActions = lazy(() => import('./CanvasSelectionActions').then(module => ({ default: module.CanvasSelectionActions })))
 const VwanVnetConnectionPanel = lazy(() => import('./VwanVnetConnectionPanel'))
 const VpnRoutingWizard = lazy(() => import('./VpnRoutingWizard').then((module) => ({ default: module.VpnRoutingWizard })))
 const RouteMapsPanel = lazy(() => import('./RouteMapsPanel').then((module) => ({ default: module.RouteMapsPanel })))
@@ -526,11 +527,11 @@ function App() {
           })
         },
       }] : []),
-      { label: t("Edit configuration"), previewPrimary: true, run: () => setEditorRequest(contextSelection) },
+      { label: t("Edit configuration"), previewPrimary: true, selectionAction: 'configure', run: () => setEditorRequest(contextSelection) },
       ...(contextSelection.kind === 'spoke' ? [{ label: t('Open VNet detail'), previewPrimary: true, run: () => setDetailOwner(contextSelection.id) }] : []),
       ...(['hub', 'site', 'erLocation'].includes(contextSelection.kind) ? [
         { label: t('BGP neighbors'), run: () => openBgpNeighbors(contextSelection) },
-        { label: t("BGP table"), run: () => showRoutes(contextSelection) },
+        { label: t("BGP table"), selectionAction: 'inspect' as const, run: () => showRoutes(contextSelection) },
         { label: t("Learned routes"), run: () => showRoutes(contextSelection, false, 'learned') },
         { label: t("Advertised routes"), run: () => showRoutes(contextSelection, false, 'advertised') },
         { label: t('Highlight preferred routes'), run: () => { selectRouter(contextSelection); setDiagnosticHighlight(undefined); setHighlighting(true); setTracing(false) } },
@@ -541,7 +542,7 @@ function App() {
       ...(['hub', 'site', 'spoke'].includes(contextSelection.kind) ? [
         { label: t("Show path to"), disabled: !simulation.converged, children: pathActions(contextSelection as PathNode, 'to') },
         { label: t("Show path from"), disabled: !simulation.converged, children: pathActions(contextSelection as PathNode, 'from') },
-        { label: t("Open path explorer"), previewPrimary: true, run: () => openPath(contextSelection as PathNode, 'to') },
+        { label: t("Open path explorer"), previewPrimary: true, selectionAction: 'trace' as const, run: () => openPath(contextSelection as PathNode, 'to') },
       ] : []),
       ...(contextSelection.kind === 'hub' ? [
         { label: t(topology.hubs.find((hub) => hub.id === contextSelection.id)?.firewall ? 'Configure Azure Firewall' : 'Add Azure Firewall'),
@@ -579,10 +580,10 @@ function App() {
       ...(contextSelection.kind === 'spoke' ? [
         { label: t('Clone VNet...'), previewPrimary: true, run: () => setCloneVnetId(contextSelection.id) },
         ...(spokeObj?.hubId || spokeObj?.nvaSpokeIds?.length ? [{
-          label: t('Configure virtual hub connection'), previewPrimary: true, run: () => spokeObj?.hubId
+          label: t('Configure virtual hub connection'), previewPrimary: true, selectionAction: 'connect' as const, run: () => spokeObj?.hubId
             ? openVnetConnection(spokeObj.id) : setEditorRequest(contextSelection),
         }] : [{
-          label: t('Connect to virtual hub'), previewPrimary: true, allowDisabledChildren: true,
+          label: t('Connect to virtual hub'), previewPrimary: true, selectionAction: 'connect' as const, allowDisabledChildren: true,
           children: topology.hubs.length ? topology.hubs.map((hub) => ({
             label: hub.name,
             run: () => {
@@ -850,6 +851,9 @@ function App() {
             reset(source.topology); setComparisonSession(source.session); setPanel('comparison')
           }} onImportFile={() => importer.current?.click()} onCompare={() => { finishCaptureImport(); setHighlighting(false); setTracing(false); setPanel('comparison') }} onConfirmImport={() => { if (pendingAzureImport) { reset(validateTopology(pendingAzureImport.topology)); finishCaptureImport() } }} onCancelImport={() => { finishCaptureImport(); setPanel(undefined) }} onClose={() => { finishCaptureImport(); closePanel() }} /></Suspense>}
           <TopologyDiagram topology={topology} faults={scenario.affected} risks={risks} onRisk={setResilienceEndpoint} onClearSelection={() => setSelection(undefined)}
+            selectionActions={selection && selectedObject && <Suspense fallback={null}><CanvasSelectionActions key={`${selection.kind}:${selection.id}`}
+              title={selectedObject.name} actions={getContextActions(selection, undefined, true)}
+              onRun={() => setContextMenu(undefined)} onAll={() => setToolsOpenRequest(request => request + 1)} /></Suspense>}
             emptyActions={<CanvasStartActions onAdd={() => setToolsOpenRequest(request => request + 1)} onExamples={() => setPanel('samples')} />}
             canvasStatus={(highlighting || tracing || !!diagnosticPaths?.length || routingIssues.length > 0) && <div className="highlight-status" role="status">{(highlighting || tracing || !!diagnosticPaths?.length) ? (diagnosticPaths?.length ? t('Diagnostic path evidence') : tracing ? groupTrace ? `${groupSummary} · ${paths.length ? pathStatus : t("No matching sources or destination prefixes configured")}` : t('Path: {0} → {1} · {2} · {3}', sourceNode?.name ?? t('source'), targetNode?.name ?? destination, destinationPrefix || destination, pathStatus) : prefix ? t("Preferred routes to {0}", prefix) : t("Preferred routes · {0}", inspected?.name ?? t('Router'))) : t('{0} routing issues', routingIssues.length)}{tracing && <button onClick={() => setPanel('paths')}>{t("Path details")}</button>}{(highlighting || tracing || !!diagnosticPaths?.length) && <button onClick={() => { setDiagnosticHighlight(undefined); setHighlighting(false); setTracing(false); setPrefix('') }}>{t("Clear highlighting")}</button>}{routingIssues.length > 0 && <button onClick={clearHighlightsAndIcons}>{t("Clear highlights & icons")}</button>}</div>}
             onZoom={setZoom} layoutControls={<>

@@ -12,6 +12,8 @@ Windows app downloads and MCP setup are available from **Help** in the web app, 
 
 An empty canvas offers compact **Add a resource**, **Open a design**, and **Load an example** shortcuts over the canvas, without reserving a separate row. Hide them at any time; they disappear when resources are added. Existing Tools, Workspace, and Explore entry points remain available.
 
+Selecting a resource in the compact presentation exposes applicable **Configure**, **Inspect routes**, **Trace path**, and connection shortcuts on the canvas. These reuse the same commands and disabled states as contextual menus; **All actions** opens the existing searchable Tools drawer. Right-click remains available.
+
 **Name and compatibility:** AzNetSim grew from a Virtual WAN-only tool into a broader Azure network simulator. The repository/clone URL (`erjosito/vwan-visual-topology`), private npm package name, saved-data keys, native formats, MCP identifiers, and desktop application identity remain unchanged for compatibility. Virtual WAN is a supported architecture, not the product's scope.
 
 **Routing behavior and prioritized application recommendations:** [ROUTING-LOGIC.md](ROUTING-LOGIC.md).
