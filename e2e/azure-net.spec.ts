@@ -76,6 +76,34 @@ test('shows routing-intent policy routes, default precedence and withdrawal in t
 })
 
 for (const mode of ['hub-spoke', 'full']) {
+  for (const profile of [{ preview: true, language: 'en' }, { preview: false, language: 'en' }, { preview: true, language: 'ja' }]) {
+    test(`uses neutral VNet canvas creation wording in ${mode} (${profile.preview}, ${profile.language})`, async ({ page }) => {
+      await page.addInitScript(({ preview, language }) => {
+        localStorage.setItem('aznet-ui-preview:v1', String(preview))
+        localStorage.setItem('vwan-visual-topology:language:v1', language)
+        localStorage.setItem('aznet-workspace-tools:v1', 'closed')
+      }, profile)
+      await loadTopology(page, createEmptyAzNetTopology(), mode)
+      const canvas = page.getByTestId('aznet-diagram-svg')
+      const bounds = await canvas.boundingBox()
+      if (!bounds) throw new Error('The topology canvas is not visible.')
+      const point = { x: Math.round(bounds.x + 400), y: Math.round(bounds.y + 80) }
+      const expected = await canvas.evaluate((svg: SVGSVGElement, point) => ({
+        x: Math.round(svg.viewBox.baseVal.x + (point.x - svg.getBoundingClientRect().left) * svg.viewBox.baseVal.width / svg.getBoundingClientRect().width),
+        y: Math.round(svg.viewBox.baseVal.y + (point.y - svg.getBoundingClientRect().top) * svg.viewBox.baseVal.height / svg.getBoundingClientRect().height),
+      }), point)
+      await page.mouse.click(point.x, point.y, { button: 'right' })
+      await expect(page.getByRole('menuitem', { name: 'Add Spoke VNet here', exact: true })).toHaveCount(0)
+      await page.getByRole('menuitem', { name: profile.language === 'ja' ? 'ここに VNet を追加' : 'Add VNet here', exact: true }).click()
+      await expect(page.getByTestId('aznet-vnet-vnet-custom-1')).toBeVisible()
+      const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
+      expect(saved.vnets).toHaveLength(1)
+      expect(saved.vnets[0]).toMatchObject({ ...expected, role: 'spoke', prefixes: ['10.51.0.0/16'],
+        subnets: [{ prefix: '10.51.1.0/24' }], gateways: [], appliances: [] })
+      expect(saved.vwanHubs).toEqual([])
+    })
+  }
+
   test(`separates Firewall and NVA creation, subnet selection, HA ownership and history in ${mode}`, async ({ page }) => {
     const topology = structuredClone(AZURE_NET_SAMPLES.find((sample) => sample.id === 'hub-spoke-firewall-udr')!.topology)
     topology.vnets[0].appliances[0].enableIpForwarding = false
@@ -149,6 +177,7 @@ for (const mode of ['hub-spoke', 'full']) {
     const subnet = page.getByTestId('aznet-subnet-prefix-sub-hub-fw')
     await prefixes.fill('10.30.0.0/24')
     await expect(prefixes).toHaveAttribute('aria-invalid', 'true')
+    await prefixes.blur()
     await expect(subnet).toHaveAttribute('aria-invalid', 'true')
     const errorColor = await prefixes.evaluate((element) => getComputedStyle(element).color)
     await expect(page.getByTestId('aznet-vnet-vnet-hub-weu').locator('.aznet-vnet-prefix')).toHaveCSS('fill', errorColor)
@@ -636,7 +665,7 @@ test.describe('AzNet bounded workspace and durable gestures', () => {
     }
     await expect.poll(async () => (await counts(page)).simulation).toBeGreaterThan(beforeDissociation.simulation)
     const beforeRegion = await counts(page)
-    await page.getByTestId('aznet-vnet-region-vnet-spoke-data').fill('eastus')
+    await page.getByTestId('aznet-vnet-region-vnet-spoke-data').selectOption('East US')
     await expect.poll(async () => (await counts(page)).simulation).toBeGreaterThan(beforeRegion.simulation)
     await expect.poll(async () => (await counts(page)).connectivity).toBeGreaterThan(beforeRegion.connectivity)
   })
@@ -1047,7 +1076,7 @@ test.describe('AzNetSim native workspace compatibility', () => {
     await openNodeMenu(page, 'aznet-vnet-vnet-custom-1')
     await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
     await expect(page.getByTestId('aznet-editor-scope-banner')).toContainText('Spoke-VNet-1')
-    await page.getByTestId('aznet-vnet-region-vnet-custom-1').fill('Sweden Central')
+    await page.getByTestId('aznet-vnet-region-vnet-custom-1').selectOption('Sweden Central')
     await expect(page.getByTestId('aznet-vnet-vnet-custom-1')).toContainText('Sweden Central')
 
     // #49: Subnet CRUD (create, rename, delete)

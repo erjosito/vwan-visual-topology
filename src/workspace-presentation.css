@@ -16,6 +16,21 @@
   background: var(--surface); box-shadow: 0 8px 24px var(--shadow);
 }
 .presentation-group-content > button { text-align: left; width: 100%; }
+.platform-link {
+  display: inline-flex; align-items: center; min-height: 44px; padding: 8px 11px;
+  box-sizing: border-box; border: 1px solid var(--border); border-radius: 6px;
+  color: var(--accent); background: var(--surface); font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.platform-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.empty-workspace-platforms {
+  align-self: center; flex-shrink: 0; width: 460px; max-width: calc(100% - 28px);
+  margin: 14px; padding: 14px; box-sizing: border-box; border: 1px solid var(--border);
+  border-radius: 8px; color: var(--text); background: var(--surface);
+}
+.empty-workspace-platforms h2 { margin: 0 0 8px; font-size: 16px; }
+.empty-workspace-platforms p { margin: 0 0 10px; font-size: 12px; }
+.empty-workspace-platforms > div { display: flex; flex-wrap: wrap; gap: 8px; }
 .presentation-group-content > .presentation-group-close { text-align: center; justify-self: end; width: auto; }
 .presentation-group-content > label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .presentation-group-content > select { max-width: 100%; }

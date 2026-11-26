@@ -4,6 +4,7 @@ import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import { useWorkspaceEditorState } from './workspace-context'
 import type { KeyboardEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
 import { CanvasBackground, CanvasControls, CanvasEdgeSelection } from './CanvasPresentation'
+import { EmptyWorkspacePlatforms } from './PlatformLinks'
 import type { LayoutMode, NodePosition, ObjectSelection, RouteMapDirection, RouterSelection, Topology } from './model'
 import { topologyObject, transportLabels } from './model'
 import { sameWan } from './wan-scopes'
@@ -365,7 +366,9 @@ export function TopologyDiagram({ readOnly = false, topology, faults = {}, risks
     if (event.type === 'pointerup' && !panDrag.current.moved && Math.hypot(event.clientX - panDrag.current.start.x, event.clientY - panDrag.current.start.y) < 4) onClearSelection()
     panDrag.current = undefined; setPanning(false)
   }
-  return <><div ref={scroll} className={`diagram-scroll ${moving ? 'is-repositioning' : ''} ${panning ? 'is-panning' : ''}`} onScroll={closePreview}><svg ref={svg} className={`diagram layout-${layout}`} viewBox={`${pan.x + (fitted?.x ?? 0)} ${pan.y + (fitted?.y ?? 0)} ${width} ${height}`} style={{ width: (fitted ? viewport.width : pixelWidth) * zoom, height: (fitted ? viewport.height : pixelHeight) * zoom }} role="group" tabIndex={0} aria-label={readOnly ? language === 'ja' ? '読み取り専用の Virtual WAN トポロジ' : 'Read-only Virtual WAN topology' : t("Interactive Virtual WAN topology. Drag blank canvas to pan; drag nodes to arrange; right-click for actions. Home resets the view. Alt+Arrow keys move a focused node.")} aria-description={t('Canvas zoom shortcuts: Ctrl+plus/minus or mouse wheel. Gestures apply only inside the canvas.')} onPointerDownCapture={closePreview}
+  return <>
+    {!readOnly && !topology.hubs.length && !topology.spokes.length && !topology.sites.length && !topology.erLocations?.length && <EmptyWorkspacePlatforms />}
+    <div ref={scroll} className={`diagram-scroll ${moving ? 'is-repositioning' : ''} ${panning ? 'is-panning' : ''}`} onScroll={closePreview}><svg ref={svg} className={`diagram layout-${layout}`} viewBox={`${pan.x + (fitted?.x ?? 0)} ${pan.y + (fitted?.y ?? 0)} ${width} ${height}`} style={{ width: (fitted ? viewport.width : pixelWidth) * zoom, height: (fitted ? viewport.height : pixelHeight) * zoom }} role="group" tabIndex={0} aria-label={readOnly ? language === 'ja' ? '読み取り専用の Virtual WAN トポロジ' : 'Read-only Virtual WAN topology' : t("Interactive Virtual WAN topology. Drag blank canvas to pan; drag nodes to arrange; right-click for actions. Home resets the view. Alt+Arrow keys move a focused node.")} aria-description={t('Canvas zoom shortcuts: Ctrl+plus/minus or mouse wheel. Gestures apply only inside the canvas.')} onPointerDownCapture={closePreview}
     onPointerDown={(event) => {
       if (event.pointerType !== 'mouse' || event.button !== 0 || !event.isPrimary
         || (event.target as Element).closest('g[role="button"], .network-link, .edge-badge, .policy-guide, .routing-path-stop')) return

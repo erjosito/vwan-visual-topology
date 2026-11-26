@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
-import { projectAzFailures, regionKey, failureKey, failureLabel, type FailureDomain } from '../failures'
-import { analyzeAzResilience, resilienceMarkers, type ResilienceReport } from '../failure-analysis'
+import { projectAzFailures, regionKey, failureKey, failureLabel, resilienceMarkers, type FailureDomain } from '../failures'
+import type { ResilienceReport } from '../failure-analysis'
 import { FailurePanel } from '../FailurePanel'
 import './azure-net.css'
 import { AZNET_MAX_JSON_LENGTH, parseAzNetJson, parseAzNetTopology } from './admission'
@@ -112,6 +112,7 @@ const BgpNeighborsPanel = lazy(() => import('../BgpNeighborsPanel'))
 const PeeringScopeEditor = lazy(() => import('./PeeringScopeEditor'))
 const VnetRoutingSettings = lazy(() => import('./VnetRoutingSettings'))
 const SubnetPrefixEditor = lazy(() => import('./AddressPrefixEditors').then((module) => ({ default: module.SubnetPrefixEditor })))
+const SitePrefixEditor = lazy(() => import('./AddressPrefixEditors').then((module) => ({ default: module.SitePrefixEditor })))
 const LearningInspection = lazy(() => import('../learning/LearningInspection').then(module => ({ default: module.LearningInspection })))
 const FindingEvidence = lazy(() => import('./FindingEvidence'))
 
@@ -194,6 +195,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const [captureRevision, setCaptureRevision] = useWorkspaceEditorState<string>('aznet.captureRevision')
   const [captureNotices, setCaptureNotices] = useWorkspaceEditorState<string[]>('aznet.captureNotices', [])
   const [captureObservations, setCaptureObservations] = useWorkspaceEditorState<AzCapturedObservations | null>('aznet.captureObservations', null)
+  const [originalCapture, setOriginalCapture] = useWorkspaceEditorState<unknown>('aznet.originalCapture')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const compareFileInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -343,6 +345,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const applyLoadedTopology = (id: string, nextTopology: AzNetTopology) => {
     nextTopology = replaceTopology(id, nextTopology)
     setCaptureObservations(null)
+    setOriginalCapture(undefined)
     sampleRequest.current++
     setTraceActive(false)
     setGroupTrace(null)
@@ -370,6 +373,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     setCaptureComparison(importedComparison)
     setCaptureRevision(azRoutingInput(imported.topology).revision)
     setCaptureObservations(imported.observations ?? null)
+    setOriginalCapture(raw)
     setWorkspaceNotice('')
     setActiveTab('azure')
   }
@@ -1200,7 +1204,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         title: 'Canvas Actions',
         actions: [
           {
-            label: 'Add Spoke VNet here',
+            label: t('Add VNet here'),
             onSelect: () => addSpokeVnet(target.svgX, target.svgY),
           },
           ...(simulatorMode === 'full'
@@ -2537,7 +2541,10 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       <FailurePanel faults={faults} unassessed={unassessedFailures} onRestore={restoreFault} onRestoreAll={() => setFaults([])}
         revision={baselineRevision} onReport={(report) => setResilience({ revision: baselineRevision, report })} focusEndpoint={resilience?.revision === baselineRevision ? resilienceEndpoint : undefined} onSimulate={addFault}
         presentReport={(report) => azDisplayResult(report, displayNames)}
-        analyze={() => measureAzWork('resilience', () => analyzeAzResilience(routingTopology, {}, validationErrors))} />
+        analyze={async () => {
+          const { analyzeAzResilience } = await import('../failure-analysis')
+          return measureAzWork('resilience', () => analyzeAzResilience(routingTopology, {}, validationErrors))
+        }} />
       {/* Top Navigation & Actions Bar */}
       <header
         className={`aznet-topbar ${
@@ -2810,6 +2817,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                   const imported = importAzNetCapture(raw)
                   setCaptureNotices(imported.warnings)
                   setCaptureObservations(imported.observations ?? null)
+                  setOriginalCapture(raw)
                   if (imported.observations) {
                     const report = compareAzNetWithObservations(
                       topology,
@@ -4659,37 +4667,25 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                               <input
                                 type="number"
                                 className="aznet-input"
-                                value={site.asn}
-                                onChange={(e) => {
-                                  const asn = Number(e.target.value)
+                                key={`${site.id}:${site.asn}`}
+                                defaultValue={site.asn}
+                                data-configuration-saved={String(site.asn)}
+                                required min={1} max={4294967294} step={1}
+                                onBlur={(e) => {
+                                  if (!e.currentTarget.reportValidity()) return
+                                  const asn = e.currentTarget.valueAsNumber
+                                  if (asn === site.asn) return
                                   commitTopology((draft) => {
                                     const s = draft.sites.find((x) => x.id === site.id)
-                                    if (s && Number.isFinite(asn) && asn > 0) s.asn = asn
+                                    if (s) s.asn = asn
                                   })
                                 }}
+                                onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
                                 style={{ width: 75 }}
                               />
+                              <small className="configuration-save-hint">{t('Save on blur')}</small>
                             </label>
-                            <input
-                              type="text"
-                              className="aznet-input"
-                              value={site.prefixes.join(', ')}
-                              title="Advertised prefixes (comma-separated)"
-                              onChange={(e) => {
-                                const raw = e.target.value
-                                commitTopology((draft) => {
-                                  const s = draft.sites.find((x) => x.id === site.id)
-                                  if (s) {
-                                    const parsed = raw
-                                      .split(',')
-                                      .map((p) => p.trim())
-                                      .filter(Boolean)
-                                    if (parsed.length > 0) s.prefixes = parsed
-                                  }
-                                })
-                              }}
-                              style={{ width: 150, fontSize: 11.5 }}
-                            />
+                            <Suspense fallback={null}><SitePrefixEditor site={site} onChange={commitTopology} /></Suspense>
                           </div>
                           <button
                             type="button"
@@ -4982,10 +4978,19 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             {activeTab === 'azure' && (
               <Suspense fallback={<p role="status">{t('Loading workspace…')}</p>}><AzurePanel
                 topology={topology} simulation={simulation} observations={captureObservations} comparison={captureComparison}
-                notices={captureNotices} stale={captureRevision !== baselineRevision}
-                onCaptured={(observations, comparison, warnings) => {
+                notices={captureNotices} stale={captureRevision !== baselineRevision} capture={originalCapture}
+                onCaptured={(observations, comparison, warnings, capture) => {
                   setCaptureObservations(observations); setCaptureComparison(comparison); setCaptureNotices(warnings); setCaptureRevision(baselineRevision)
+                  setOriginalCapture(capture)
                 }} onComparison={(report) => { setCaptureComparison(report); setCaptureRevision(baselineRevision) }}
+                onBundleImport={({ source, manifest }) => {
+                  if (source.mode !== 'azure-network') throw new Error('Expected an Azure networking issue bundle.')
+                  applyLoadedTopology('', source.topology)
+                  setCaptureObservations(source.observations); setCaptureComparison(source.comparison)
+                  setOriginalCapture(source.capture)
+                  setCaptureNotices([...source.notices, t('Imported historical evidence from app {0}, revision {1}. Current-engine replay is not live Azure validation.', manifest.app.version, manifest.app.revision)])
+                  setCaptureRevision(azRoutingInput(source.topology).revision); setActiveTab('azure')
+                }}
                 onImportFile={() => fileInputRef.current?.click()} onCompareFile={() => compareFileInputRef.current?.click()} /></Suspense>
             )}
           </div>

@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 import { comparisonDesign, observationFixture } from '../tests/azure-observation-fixture'
+import { createEmptyAzNetTopology } from '../src/azure-net/model'
 
 const subscriptionId = '11111111-1111-1111-1111-111111111111'
 const tenantId = '22222222-2222-2222-2222-222222222222'
@@ -30,6 +31,38 @@ async function desktop(page: Page, capture: unknown, failure = '') {
     } })
   }, { capture, failure, subscriptionId, tenantId, wanId })
 }
+
+test('Bicep export validation cannot crash Azure capture tools or replace the saved design', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  await desktop(page, null)
+  const topology = createEmptyAzNetTopology()
+  topology.udrTables.push({ id: 'legacy-table', name: 'Unused legacy table', disableBgpRoutePropagation: false, routes: [] })
+  await page.goto('/?mode=full')
+  const upload = () => page.locator('input[type=file]').first().setInputFiles({
+    name: 'legacy.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
+  })
+  await upload()
+  await expect(page.getByTestId('aznet-app')).toBeVisible()
+  const saved = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
+  await page.getByTestId('workspace-azure-button').click()
+  const card = page.getByTestId('aznet-bicep-export-card')
+  await expect(card.getByRole('alert')).toContainText('Route table "Unused legacy table" requires an explicit region')
+  await expect(card.getByTestId('aznet-download-bicep-btn')).toBeDisabled()
+  await expect(card.getByTestId('aznet-bicep-code')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Read existing Azure session', exact: true }).click()
+  await expect(page.getByRole('combobox', { name: 'Select subscription and tenant', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: '🔍 Compare Capture Against Current Topology', exact: true })).toBeVisible()
+  expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(saved)
+  await page.getByRole('button', { name: 'Close Azure & Bicep', exact: true }).click()
+  topology.udrTables[0].region = 'centralus'
+  await upload()
+  await page.getByTestId('workspace-azure-button').click()
+  await expect(card.getByRole('alert')).toHaveCount(0)
+  await expect(card.getByTestId('aznet-download-bicep-btn')).toBeEnabled()
+  await expect(card.getByTestId('aznet-bicep-code')).toContainText("location: 'centralus'")
+  expect(errors).toEqual([])
+})
 
 for (const mode of ['vwan', 'full']) {
   test(`Azure entry preserves ${mode} canvas and explains offline/web capabilities at narrow widths`, async ({ page }) => {
@@ -154,4 +187,37 @@ test('mixed-network local capture preserves the open design and invalidates resu
   await expect(page.getByTestId('aznet-comparison-report')).toHaveCount(0)
   await page.getByRole('button', { name: 'Compare captured fields', exact: true }).click()
   await expect(page.getByTestId('aznet-comparison-report')).toBeVisible()
+})
+
+test('renamed Azure resources compare by captured address spaces and show the matched design context', async ({ page }) => {
+  const topology = createEmptyAzNetTopology()
+  topology.vnets = [{ id: 'design-vnet', name: 'Customer spoke', region: 'westeurope', role: 'spoke',
+    prefixes: ['10.1.1.0/24'], gateways: [], appliances: [],
+    subnets: [{ id: 'design-subnet', name: 'Customer workload', prefix: '10.1.1.0/26' }] }]
+  await desktop(page, {
+    kind: 'azure-network-capture', version: 2, resourceGroup: 'network',
+    vnets: [{ name: 'fmg-vwan-cu-spoke-1', location: 'centralus', addressSpace: { addressPrefixes: ['10.1.1.0/24'] },
+      subnets: [{ name: 'snet-01', addressPrefix: '10.1.1.0/26' }] }],
+    nicEffectiveRoutes: [{ nicName: 'deployed-nic', vnetName: 'fmg-vwan-cu-spoke-1', subnetName: 'snet-01',
+      privateIp: '10.1.1.4', effectiveRoutes: [
+        { addressPrefix: ['10.1.1.0/24'], source: 'Default', state: 'Active', nextHopType: 'VnetLocal' },
+      ] }],
+  })
+  await page.goto('/?mode=full')
+  await page.locator('input[type=file]').first().setInputFiles({
+    name: 'desired.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
+  })
+  await expect(page.getByTestId('aznet-vnet-design-vnet')).toBeVisible()
+  const saved = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
+  await page.getByTestId('workspace-azure-button').click()
+  await page.getByRole('button', { name: 'Read existing Azure session', exact: true }).click()
+  await page.getByRole('combobox', { name: 'Select subscription and tenant', exact: true }).selectOption(subscriptionId)
+  await page.getByRole('button', { name: 'Read available collection targets', exact: true }).click()
+  await page.getByRole('combobox', { name: 'Resource group', exact: true }).selectOption('network')
+  await page.getByRole('checkbox', { name: /Confirm read-only capture scope/ }).check()
+  await page.getByRole('button', { name: 'Capture → Compare current design', exact: true }).click()
+  const report = page.getByTestId('aznet-comparison-report')
+  await expect(report).toContainText('1 matched, 0 mismatched')
+  await expect(report).toContainText('Matched by address space and subnet context: Customer spoke/Customer workload')
+  expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(saved)
 })

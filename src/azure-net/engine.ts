@@ -4,7 +4,8 @@ import { routingLimitation, unscopedRoutingLimitations, type RoutingLimitation }
 import { mappedVpnAddress, translateVpnRoutes, validateVpnNat } from '../vpn-nat'
 import { loadBalancerOutboundCandidates, namedEndpoints, natGatewayForSubnet } from '../inventory'
 import { resolveHaPortsNextHop, type HaPortsAssessment } from '../ha-ports'
-import { chooseVwanHubRoutes, RFC1918_PREFIXES, type Candidate } from '../routing'
+import { chooseVwanHubRoutes, RFC1918_PREFIXES } from '../hub-route-selection'
+import type { Candidate } from '../routing'
 import { evaluateErSkuRegionalCompatibility, type ErSkuCompatibilityResult } from '../er-locations-catalog'
 import { applyAzHubRouteMap, applyAzSiteRouteMap } from './route-maps'
 import { peeringPrefixes, peeringSubnetIds, subnetPeeringLimitations, validateSubnetPeeringScopes } from './subnet-peering'
@@ -16,6 +17,8 @@ import { connectionStaticRoutes } from './vnet-connection-routes'
 import type { RouteMapDirection, Transport } from '../model'
 import { udrAssociationError, udrAssociationFindings } from './udr-regions'
 import { assessVpnEr, selectedAdvertisements, type VpnErAssessment } from './vpn-er'
+import { assessVpnTunnel, vpnConnectionEligible, vpnTunnelKey, type VpnTunnelAssessment } from './vpn-sessions'
+import { lookupCpeRoutes, type CpeRouteLookup } from './cpe-routing'
 import type {
   AzAppliance,
   AzArsPreference,
@@ -67,6 +70,8 @@ export interface AzEffectiveRoute {
 }
 
 export interface AzBgpRibEntry {
+  vpnTunnelId?: string
+  vpnGatewayInstanceId?: string
   natOriginalPrefix?: string
   natRuleId?: string
   id: string
@@ -93,6 +98,7 @@ export interface AzBgpRibEntry {
   hubPath?: string[]
   vpnStatic?: boolean
   hubTransport?: Transport | 'VNet'
+  erVwanVnetOrigin?: boolean
   secureOrigin?: boolean
   localPreference?: number
   staticRouteName?: string
@@ -147,6 +153,8 @@ export interface AzNvaBgpPeer {
 }
 
 export interface AzSimulationResult {
+  vpnTunnels?: Record<string, VpnTunnelAssessment>
+  vpnTransitionAssessment?: { state: 'not-assessed'; reason: string }
   routingLimitations?: RoutingLimitation[]
   vpnUnderlays?: Record<string, VpnErAssessment>
   controlPlaneComplete?: boolean
@@ -173,6 +181,8 @@ export type AzEndpointRef =
   | { kind: 'internet'; ip?: string }
 
 export interface AzTraceHop {
+  cpeLookup?: CpeRouteLookup
+  vpnTunnelIds?: string[]
   index: number
   nodeKind: 'subnet' | 'vnet-gateway' | 'route-server' | 'appliance' | 'vwan-hub' | 'er-location' | 'site' | 'internet'
   nodeId: string
@@ -213,6 +223,7 @@ export type AzTraceStatus =
   | 'not-assessed'
 
 export interface AzFlowTrace {
+  vpnTunnelPaths?: { connectionId: string; tunnelIds: string[]; protection: 'intended-ipsec' | 'direct-er-without-ipsec' | 'not-assessed' }[]
   vpnProtection?: { connectionId: string; protection: 'intended-ipsec' | 'direct-er-without-ipsec' | 'not-assessed'; underlay: VpnErAssessment }[]
   source: AzEndpointRef
   destinationIp: string
@@ -319,7 +330,8 @@ function chooseBgpWinners(
 
   const output: AzBgpRibEntry[] = []
   for (const [, candidates] of byPrefix) {
-    const rank = (route: AzBgpRibEntry) => siteSelection && route.nextHopKind === 'local' ? -1 : protocolRank(route)
+    const rank = (route: AzBgpRibEntry) => siteSelection && route.nextHopKind === 'local' ? -2
+      : siteSelection && route.originProtocol === 'Static' && route.vpnTunnelId ? -1 : protocolRank(route)
     const minProto = Math.min(...candidates.map(rank))
     const protoFiltered = candidates.filter((c) => rank(c) === minProto)
     const maxLocalPreference = Math.max(...protoFiltered.map((route) => siteSelection ? route.localPreference ?? 100 : 100))
@@ -414,18 +426,46 @@ function hubAdvertisements(
 }
 
 export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
-  const overlays = topology.vpnConnections.filter((connection) => connection.underlay || connection.useLocalAzureIpAddress)
-  if (!overlays.length) return simulateAzNetSettled(topology)
+  const overlays = topology.vpnConnections.filter((connection) => connection.tunnels === undefined && (connection.underlay || connection.useLocalAzureIpAddress))
+  const bound = topology.vpnConnections.filter((connection) => connection.tunnels !== undefined)
+  if (!overlays.length && !bound.length) return simulateAzNetSettled(topology)
   // Resolve outer routes with every private overlay withdrawn, never from their own learned routes.
-  const underlay = simulateAzNetSettled({ ...topology, vpnConnections: topology.vpnConnections.filter((connection) => !connection.underlay && !connection.useLocalAzureIpAddress) })
+  const underlay = simulateAzNetSettled({ ...topology, vpnConnections: topology.vpnConnections.filter((connection) =>
+    connection.tunnels === undefined && !connection.underlay && !connection.useLocalAzureIpAddress) })
   const vpnUnderlays = Object.fromEntries(overlays.map((connection) => [connection.id, assessVpnEr(topology, connection, underlay)]))
-  const result = simulateAzNetSettled({ ...topology, vpnConnections: topology.vpnConnections.filter((connection) =>
-    (!connection.underlay && !connection.useLocalAzureIpAddress) || vpnUnderlays[connection.id].state === 'available') })
+  const assessTunnels = (peers?: AzSimulationResult) => Object.fromEntries(bound.flatMap((connection) => connection.tunnels!.map((tunnel) =>
+    [vpnTunnelKey(connection.id, tunnel.id), assessVpnTunnel(topology, connection, tunnel, underlay, peers)])))
+  const eligibleTopology = (tunnels: Record<string, VpnTunnelAssessment>): AzNetTopology => ({
+    ...topology, vpnConnections: topology.vpnConnections.filter((connection) => connection.tunnels !== undefined
+      ? vpnConnectionEligible(connection, tunnels)
+      : (!connection.underlay && !connection.useLocalAzureIpAddress) || vpnUnderlays[connection.id].state === 'available')
+      .map((connection) => connection.tunnels === undefined ? connection : {
+        ...connection, tunnels: connection.tunnels.filter((tunnel) => tunnels[vpnTunnelKey(connection.id, tunnel.id)].state === 'available'),
+      }),
+  })
+  const preliminary = assessTunnels()
+  const vpnTunnels = bound.length ? assessTunnels(simulateAzNetSettled(eligibleTopology(preliminary))) : {}
+  const result = simulateAzNetSettled(eligibleTopology(vpnTunnels))
+  for (const assessment of Object.values(vpnTunnels)) {
+    assessment.routeProvenance = {
+      gateway: (result.gatewayRibs[assessment.azureResourceId] ?? []).filter((route) =>
+        route.connectionId === assessment.connectionId && route.vpnTunnelId === assessment.tunnelId),
+      cpe: (result.siteRibs[assessment.cpeResourceId] ?? []).filter((route) =>
+        route.connectionId === assessment.connectionId && route.vpnTunnelId === assessment.tunnelId),
+    }
+  }
+  const unmappedCaptures = bound.filter((connection) => !connection.tunnels!.length && connection.capturedConfiguration)
   const warnings = [...result.warnings, ...overlays.filter(connection => vpnUnderlays[connection.id].state === 'not-assessed').map(connection =>
-    `VPN over ER "${connection.name}": not assessed. ${vpnUnderlays[connection.id].reason}`)]
+    `VPN over ER "${connection.name}": not assessed. ${vpnUnderlays[connection.id].reason}`),
+    ...Object.values(vpnTunnels).filter((assessment) => assessment.state === 'not-assessed').map((assessment) =>
+      `VPN tunnel "${assessment.connectionId}/${assessment.tunnelId}": not assessed. ${assessment.reason}`),
+    ...unmappedCaptures.map((connection) => `VPN "${connection.name}": captured configuration has no explicitly mapped CPE tunnel membership; fan-out is not assessed.`)]
   return {
-    ...result, vpnUnderlays,
-    controlPlaneComplete: result.controlPlaneComplete !== false && !Object.values(vpnUnderlays).some((assessment) => assessment.state === 'not-assessed'),
+    ...result, ...(overlays.length ? { vpnUnderlays } : {}),
+    ...(bound.length ? { vpnTunnels, vpnTransitionAssessment: { state: 'not-assessed' as const,
+      reason: 'Clean steady-state recomputation does not assess in-place transition history, SA persistence or live TCP/BGP changes. Preserve source snapshots and explicit events separately.' } } : {}),
+    controlPlaneComplete: result.controlPlaneComplete !== false && !unmappedCaptures.length
+      && ![...Object.values(vpnUnderlays), ...Object.values(vpnTunnels)].some((assessment) => assessment.state === 'not-assessed'),
     warnings, routingLimitations: unscopedRoutingLimitations(warnings, result.routingLimitations),
   }
 }
@@ -809,6 +849,8 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
               id: `erloc:${loc.id}:vhub:${link.id}:${route.nextHopId}:${route.prefix}`,
               connectionId: link.id,
               asPath: [12076, ...stripPrivateAsnsForMsee(route.asPath)],
+              erVwanVnetOrigin: route.erVwanVnetOrigin || route.originProtocol === 'VNet'
+                || route.originProtocol === 'InterHub' && route.hubTransport === 'VNet',
               hubPath: [...new Set([...(route.hubPath ?? []), hub.id])],
               nextHopName: `${hub.name} (${link.name})`,
               nextHopKind: 'vwan-hub',
@@ -918,39 +960,45 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
         for (const conn of vpnConns) {
           const site = topology.sites.find((s) => s.id === conn.siteId)
           if (!site) continue
-          if (conn.bgpEnabled && gw.bgpEnabled) {
-            const siteRoutes = translateVpnRoutes(topology, conn,
-              sitePolicy(site.id, conn.id, 'outbound', selectedAdvertisements((siteRibs[site.id] ?? []).filter((r) => r.preferred), conn.advertisedPrefixes)), 'IngressSNAT')
-            for (const sr of siteRoutes) {
-              entries.push({
-                ...sr,
-                id: `gw:${gw.id}:vpn:${conn.id}:${sr.prefix}`,
-                connectionId: conn.id,
-                prefix: sr.prefix,
-                asPath: [...(conn.inboundPrepend ?? []), ...sr.asPath],
-                nextHopName: `${site.name} (${conn.name})`,
-                nextHopKind: 'site',
-                nextHopId: site.id,
-                originProtocol: 'VPN',
-                preferred: true,
-                explanation: `Learned via BGP over S2S VPN ${conn.name} from ${site.name}${sr.natOriginalPrefix ? `. ${sr.explanation}` : ''}`,
-              })
-            }
-          } else {
-            const statics = conn.staticPrefixes?.length ? conn.staticPrefixes : site.prefixes
-            for (const prefix of statics) {
-              entries.push({
-                id: `gw:${gw.id}:vpn-static:${conn.id}:${prefix}`,
-                connectionId: conn.id,
-                prefix,
-                asPath: [],
-                nextHopName: `${site.name} (${conn.name})`,
-                nextHopKind: 'site',
-                nextHopId: site.id,
-                originProtocol: 'VPN',
-                preferred: true,
-                explanation: `Static S2S VPN route via ${conn.name} to ${site.name}`,
-              })
+          for (const tunnel of conn.tunnels ?? [undefined]) {
+            const provenance = tunnel ? { vpnTunnelId: tunnel.id, vpnGatewayInstanceId: tunnel.gatewayInstanceId } : {}
+            const suffix = tunnel ? `:${tunnel.id}` : ''
+            if (conn.bgpEnabled && gw.bgpEnabled) {
+              const siteRoutes = translateVpnRoutes(topology, conn,
+                sitePolicy(site.id, conn.id, 'outbound', selectedAdvertisements((siteRibs[site.id] ?? []).filter((r) => r.preferred), conn.advertisedPrefixes)), 'IngressSNAT')
+              for (const sr of siteRoutes) {
+                entries.push({
+                  ...sr,
+                  ...provenance,
+                  id: `gw:${gw.id}:vpn:${conn.id}${suffix}:${sr.prefix}`,
+                  connectionId: conn.id,
+                  prefix: sr.prefix,
+                  asPath: [...(conn.inboundPrepend ?? []), ...sr.asPath],
+                  nextHopName: `${site.name} (${conn.name})`,
+                  nextHopKind: 'site',
+                  nextHopId: site.id,
+                  originProtocol: 'VPN',
+                  preferred: true,
+                  explanation: `Learned via BGP over S2S VPN ${conn.name} from ${site.name}${sr.natOriginalPrefix ? `. ${sr.explanation}` : ''}`,
+                })
+              }
+            } else {
+              const statics = conn.tunnels !== undefined ? conn.staticPrefixes ?? [] : conn.staticPrefixes?.length ? conn.staticPrefixes : site.prefixes
+              for (const prefix of statics) {
+                entries.push({
+                  ...provenance,
+                  id: `gw:${gw.id}:vpn-static:${conn.id}${suffix}:${prefix}`,
+                  connectionId: conn.id,
+                  prefix,
+                  asPath: [],
+                  nextHopName: `${site.name} (${conn.name})`,
+                  nextHopKind: 'site',
+                  nextHopId: site.id,
+                  originProtocol: 'VPN',
+                  preferred: true,
+                  explanation: `Static S2S VPN route via ${conn.name} to ${site.name}`,
+                })
+              }
             }
           }
         }
@@ -1161,12 +1209,17 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
           !(r.nextHopKind === 'vwan-hub' && r.nextHopId === hub.id) &&
           r.nextHopKind !== 'er-location',
       )) {
+        let asPath = mseeAdvertisedAsPath(lr)
+        if (lr.nextHopKind === 'vwan-hub' && lr.erVwanVnetOrigin) {
+          // Learned-hub path hypothesis from Azure calibration; see ROUTING-LOGIC.md.
+          asPath = [...(hub.preference === 'ASPath' ? [12076, 12076] : [12076]), ...asPath]
+        }
         entries.push({
           ...lr,
           id: `vhub:${hub.id}:er:${link.id}:${lr.prefix}:${lr.nextHopId}`,
           connectionId: link.id,
           prefix: lr.prefix,
-          asPath: [...(link.prepend ?? []), ...mseeAdvertisedAsPath(lr)],
+          asPath: [...(link.prepend ?? []), ...asPath],
           nextHopName: `${loc.name} → ${lr.nextHopName}`,
           nextHopKind: lr.nextHopKind,
           nextHopId: lr.nextHopId,
@@ -1338,22 +1391,31 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
         const ownerVnet = topology.vnets.find((v) => v.gateways.some((g) => g.id === conn.targetId && g.enabled))
         const gw = ownerVnet?.gateways.find((g) => g.id === conn.targetId)
         if (!ownerVnet || !gw) continue
-        const received = (conn.nat && !conn.bgpEnabled ? [] : advertisedVnetPrefixes(ownerVnet, `gateway:${gw.id}`)).map((adv): AzBgpRibEntry => ({
-            id: `site:${site.id}:vpn:${conn.id}:${adv.prefix}`,
+        for (const tunnel of conn.tunnels ?? [undefined]) {
+          const staticTunnel = !!tunnel && !conn.bgpEnabled
+          const advertisements: VnetAdvertisement[] = staticTunnel
+            ? (conn.staticAzurePrefixes ?? []).map((prefix) => ({ prefix, asPath: [], sourceName: gw.name }))
+            : conn.nat && !conn.bgpEnabled ? [] : advertisedVnetPrefixes(ownerVnet, `gateway:${gw.id}`)
+          const received = advertisements.map((adv): AzBgpRibEntry => ({
+            ...(tunnel ? { vpnTunnelId: tunnel.id, vpnGatewayInstanceId: tunnel.gatewayInstanceId } : {}),
+            id: `site:${site.id}:vpn:${conn.id}${tunnel ? `:${tunnel.id}` : ''}:${adv.prefix}`,
             connectionId: conn.id,
             prefix: adv.prefix,
-            asPath: [...(conn.outboundPrepend ?? []), ...adv.asPath],
+            asPath: staticTunnel ? [] : [...(conn.outboundPrepend ?? []), ...adv.asPath],
             nextHopName: `${gw.name} (${conn.name})`,
             nextHopKind: 'vnet-gateway',
             nextHopId: gw.id,
-            originProtocol: 'VPN',
+            originProtocol: staticTunnel ? 'Static' : 'VPN',
+            ...(staticTunnel ? { vpnStatic: true } : {}),
             preferred: false,
-            explanation: `Learned from ${gw.name} over S2S VPN ${conn.name} from ${adv.sourceName}`,
+            explanation: staticTunnel ? `Explicit CPE static route over ${conn.name} to ${adv.prefix}; not BGP learning.`
+              : `Learned from ${gw.name} over S2S VPN ${conn.name} from ${adv.sourceName}`,
             advertisedSummaryFrom: adv.advertisedSummaryFrom,
             routeMapTrace: adv.routeMapTrace,
             communities: adv.communities,
-        }))
-        learnedFromAzure.push(...sitePolicy(site.id, conn.id, 'inbound', translateVpnRoutes(topology, conn, received, 'EgressSNAT')))
+          }))
+          learnedFromAzure.push(...(staticTunnel ? received : sitePolicy(site.id, conn.id, 'inbound', translateVpnRoutes(topology, conn, received, 'EgressSNAT'))))
+        }
       } else if (conn.bgpEnabled && conn.targetKind === 'appliance') {
         const ownerVnet = topology.vnets.find((vnet) => vnet.appliances.some((app) => app.id === conn.targetId))
         const app = ownerVnet?.appliances.find((app) => app.id === conn.targetId && app.bgpEnabled && app.enableIpForwarding)
@@ -1996,11 +2058,31 @@ export function locateDestinationIp(
  */
 export function traceAzNetFlow(...args: Parameters<typeof traceAzNetFlowCore>): AzFlowTrace {
   const [topology, simulation, source, destinationIp, options] = args
-  const effective = simulation.vpnUnderlays ? {
+  const effective = simulation.vpnUnderlays || simulation.vpnTunnels ? {
     ...topology, vpnConnections: topology.vpnConnections.filter((connection) =>
-      (!connection.underlay && !connection.useLocalAzureIpAddress) || simulation.vpnUnderlays?.[connection.id]?.state === 'available'),
+      connection.tunnels !== undefined ? vpnConnectionEligible(connection, simulation.vpnTunnels)
+        : (!connection.underlay && !connection.useLocalAzureIpAddress) || simulation.vpnUnderlays?.[connection.id]?.state === 'available'),
   } : topology
   const trace = traceAzNetFlowCore(effective, simulation, source, destinationIp, options)
+  for (const connection of topology.vpnConnections.filter((connection) => connection.tunnels !== undefined)) {
+    const site = topology.sites.find((site) => site.id === connection.siteId)
+    if (!trace.traversedEdgeIds.includes(connection.id) && !(source.kind === 'site' && source.siteId === site?.id)
+      && !site?.prefixes.some((prefix) => contains(prefix, ipv4(destinationIp) ?? -1))) continue
+    const ribs = source.kind === 'site' ? simulation.siteRibs[connection.siteId] : simulation.gatewayRibs[connection.targetId]
+    const candidates = (ribs ?? []).filter((route) => route.preferred && contains(route.prefix, ipv4(destinationIp) ?? -1))
+    const length = Math.max(...candidates.map((route) => cidr(route.prefix)?.length ?? -1))
+    const selectedTunnels = trace.hops.filter((hop) => hop.edgeId === connection.id).flatMap((hop) => hop.vpnTunnelIds ?? [])
+    const tunnelIds = selectedTunnels.length ? selectedTunnels
+      : candidates.filter((route) => cidr(route.prefix)?.length === length && route.connectionId === connection.id)
+        .flatMap((route) => route.vpnTunnelId ? [route.vpnTunnelId] : [])
+    const protection = trace.traversedEdgeIds.includes(connection.id) && tunnelIds.length ? 'intended-ipsec'
+      : trace.traversedEdgeIds.some((id) => topology.erLinks.some((link) => link.id === id)) ? 'direct-er-without-ipsec' : 'not-assessed'
+    ;(trace.vpnTunnelPaths ??= []).push({ connectionId: connection.id, tunnelIds, protection })
+    for (const hop of trace.hops.filter((hop) => hop.edgeId === connection.id)) {
+      hop.detail += ` Configured eligible tunnel candidates: ${tunnelIds.join(', ')}. Intended IPsec under explicit assumptions; no measured session or packet delivery.`
+    }
+    if (protection === 'direct-er-without-ipsec') trace.summaryReason += ' Direct ExpressRoute without IPsec: this direction bypasses the instance-bound VPN overlay.'
+  }
   for (const [connectionId, assessment] of Object.entries(simulation.vpnUnderlays ?? {})) {
     const connection = topology.vpnConnections.find((connection) => connection.id === connectionId)!
     const site = topology.sites.find((site) => site.id === connection.siteId)
@@ -3387,7 +3469,7 @@ function traceAzNetFlowCore(
             if (selectedGatewayRoute?.connectionId) return c.id === selectedGatewayRoute.connectionId
             if (c.bgpEnabled && gw.bgpEnabled) return false
             const site = topology.sites.find((s) => s.id === c.siteId)
-            const prefixes = c.staticPrefixes?.length ? c.staticPrefixes : (site?.prefixes ?? [])
+            const prefixes = c.tunnels !== undefined ? c.staticPrefixes ?? site?.prefixes ?? [] : c.staticPrefixes?.length ? c.staticPrefixes : (site?.prefixes ?? [])
             return prefixes.some((p) => cidr(p) && contains(p, ipNum))
           })
           if (vpnConn) {
@@ -3757,6 +3839,48 @@ function traceAzNetFlowCore(
         }
       }
 
+      const cpeLookup = site.vpnRouting ? lookupCpeRoutes(site, simulation, destinationIp, options?.sourceAddress) : undefined
+      const configured = cpeLookup?.routes.filter((route) => route.provenance.startsWith('configured-peer-route:')) ?? []
+      const stopAtSite = (status: AzTraceStatus, reason: string): AzFlowTrace => {
+        pushHop({ nodeKind: 'site', nodeId: site.id, nodeName: site.name, action: 'dropped', detail: reason, cpeLookup })
+        return { source, destinationIp, destinationLabel: targetInfo.label, status, hops,
+          traversedApplianceIds, traversedEdgeIds, traversedVnetIds, summaryReason: reason }
+      }
+      if (cpeLookup?.sourceRequired) return stopAtSite('not-assessed',
+        `Shared CPE FIB ${cpeLookup.contextId} has source-qualified routes to ${destinationIp}; an explicit packet source address is required.`)
+      if (configured.length > 1) return stopAtSite('not-assessed',
+        `Shared CPE FIB ${cpeLookup!.contextId} has multiple equal-prefix configured next hops to ${destinationIp}; no unique forwarding path is inferred.`)
+      if (configured.length === 1) {
+        const selected = configured[0]
+        if (selected.kind === 'drop') return stopAtSite('dropped-blackhole',
+          `Shared CPE FIB ${cpeLookup!.contextId} selects explicit drop route ${selected.prefix} (${selected.provenance}).`)
+        if (selected.kind === 'er-link') {
+          const link = topology.erLinks.find((link) => link.id === selected.erLinkId && link.enabled
+            && link.targetKind === 'site' && link.targetId === site.id)
+          if (!link) return stopAtSite('dropped-no-route', `Configured CPE route ${selected.prefix} selects an unavailable ER link; no dynamic fallback is inferred.`)
+          pushHop({ nodeKind: 'site', nodeId: site.id, nodeName: site.name, action: 'er-transit', edgeId: link.id, cpeLookup,
+            detail: `${site.name} selects configured route ${selected.prefix} over ExpressRoute "${link.name}" in ${cpeLookup!.contextId}.` })
+          cursor = { kind: 'er-location', locationId: link.locationId, fromTargetId: site.id }
+          continue
+        }
+        if (selected.kind === 'tunnel') {
+          const assessment = simulation.vpnTunnels?.[vpnTunnelKey(selected.connectionId!, selected.tunnelId!)]
+          const connection = topology.vpnConnections.find((connection) => connection.id === selected.connectionId && connection.enabled
+            && connection.siteId === site.id && connection.targetKind === 'vnet-gateway'
+            && connection.tunnels?.some((tunnel) => tunnel.id === selected.tunnelId && tunnel.enabled))
+          const owner = topology.vnets.find((vnet) => vnet.gateways.some((gateway) => gateway.id === connection?.targetId))
+          if (!assessment || assessment.state === 'not-assessed') return stopAtSite('not-assessed',
+            `Configured CPE route ${selected.prefix} selects tunnel ${selected.connectionId}/${selected.tunnelId} with unknown eligibility; no fallback is inferred.`)
+          if (assessment.state !== 'available' || !connection || !owner) return stopAtSite('dropped-no-route',
+            `Configured CPE route ${selected.prefix} selects unavailable tunnel ${selected.connectionId}/${selected.tunnelId}; no dynamic fallback is inferred.`)
+          pushHop({ nodeKind: 'site', nodeId: site.id, nodeName: site.name, action: 'gateway-transit', edgeId: connection.id,
+            cpeLookup, vpnTunnelIds: [selected.tunnelId!],
+            detail: `${site.name} selects configured route ${selected.prefix} over tunnel ${connection.id}/${selected.tunnelId} in ${cpeLookup!.contextId}.` })
+          cursor = { kind: 'vnet-gateway', vnetId: owner.id, gatewayId: connection.targetId, direction: 'ingress' }
+          continue
+        }
+      }
+
       // Site is originating or transiting toward Azure / another site
       const siteRoutes = (simulation.siteRibs[site.id] ?? []).filter(
         (r) => r.preferred && cidr(r.prefix) && contains(r.prefix, ipNum),
@@ -3884,8 +4008,8 @@ export function traceAzNetPair(
   destination: AzEndpointRef,
   destinationIp: string,
 ): AzPairFlowAnalysis {
-  const forward = traceAzNetFlow(topology, simulation, source, destinationIp)
-  const reverse = traceAzNetFlow(topology, simulation, destination, sourceIp)
+  const forward = traceAzNetFlow(topology, simulation, source, destinationIp, { sourceAddress: sourceIp })
+  const reverse = traceAzNetFlow(topology, simulation, destination, sourceIp, { sourceAddress: destinationIp })
 
   const statefulIds = new Set<string>()
   const applianceNames = new Map<string, string>()

@@ -1,5 +1,6 @@
 import { useId, useState, type InputHTMLAttributes } from 'react'
 import { t } from '../i18n'
+import { cidr } from '../validation'
 import { subnetAddressError, vnetAddressError } from './addressing'
 import { resizeAzSubnet, subnetNeedsReaddressing } from './subnet-address-editing'
 import type { AzNetTopology, AzSubnet, AzVNet } from './model'
@@ -8,11 +9,15 @@ interface EditorProps {
   topology: AzNetTopology
   vnet: AzVNet
   preview?: boolean
-  onChange: (updater: (draft: AzNetTopology) => void) => void
+  onChange: (updater: (draft: AzNetTopology) => void) => boolean | void
 }
 
-function PrefixInput({ value, deferred, onCommit, validate, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'defaultValue' | 'onChange' | 'onBlur'> & {
-  value: string; deferred: boolean; onCommit: (value: string) => void; validate: (value: string) => string | undefined
+const prefixes = (raw: string) => raw.split(',').map((prefix) => prefix.trim()).filter(Boolean)
+const formatPrefixes = (raw: string) => prefixes(raw).join(', ')
+
+function PrefixInput({ value, deferred, onCommit, validate, format, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'defaultValue' | 'onChange' | 'onBlur'> & {
+  value: string; deferred: boolean; onCommit: (value: string) => boolean | void; validate: (value: string) => string | undefined
+  format?: (value: string) => string
 }) {
   const [draft, setDraft] = useState(value)
   const errorId = useId()
@@ -23,22 +28,44 @@ function PrefixInput({ value, deferred, onCommit, validate, ...props }: Omit<Inp
     aria-describedby={error ? [props['aria-describedby'], errorId].filter(Boolean).join(' ') : props['aria-describedby']}
     style={{ ...props.style, color: error ? 'var(--error)' : props.style?.color, borderColor: error ? 'var(--error)' : props.style?.borderColor }}
     onChange={(event) => deferred ? setDraft(event.target.value) : onCommit(event.target.value)}
-    onBlur={() => { if (deferred && draft !== value) onCommit(draft) }} />
+    onBlur={() => {
+      if (deferred && draft !== value && onCommit(draft) !== false) setDraft(format ? format(draft) : draft)
+    }} />
     {deferred && <small className="configuration-save-hint">{t('Save on blur')}</small>}
     {error && <span id={errorId} role="alert" style={{ color: 'var(--error)', fontSize: 11, maxWidth: 250 }}>{t(error)}</span>}</>
 }
 
-export function VnetPrefixEditor({ topology, vnet, preview, onChange }: EditorProps) {
+export function VnetPrefixEditor({ vnet, preview, onChange }: EditorProps) {
   return <label className="presentation-vnet-field"><span hidden={!preview}>{t('Address spaces')}</span>
-    <PrefixInput key={topology.inventory ? vnet.prefixes.join(', ') : undefined}
-      type="text" className="aznet-input" value={vnet.prefixes.join(', ')} deferred={topology.inventory !== undefined}
+    <PrefixInput key={vnet.prefixes.join(', ')}
+      type="text" className="aznet-input" value={vnet.prefixes.join(', ')} deferred
+      format={formatPrefixes}
       aria-label={t('VNet CIDR prefixes {0}', vnet.name)} title="VNet CIDR prefixes (comma-separated)"
-      validate={(raw) => vnetAddressError({ ...vnet, prefixes: raw.split(',').map((prefix) => prefix.trim()).filter(Boolean) })}
+      validate={(raw) => vnetAddressError({ ...vnet, prefixes: prefixes(raw) })}
       onCommit={(raw) => onChange((draft) => {
         const target = draft.vnets.find((entry) => entry.id === vnet.id)
-        if (target) target.prefixes = raw.split(',').map((prefix) => prefix.trim()).filter(Boolean)
+        if (target) target.prefixes = prefixes(raw)
       })}
       style={{ width: 130, fontSize: 11.5 }} />
+  </label>
+}
+
+export function SitePrefixEditor({ site, onChange }: {
+  site: AzNetTopology['sites'][number]; onChange: EditorProps['onChange']
+}) {
+  return <label className="presentation-vnet-field">
+    <span>{t('Advertised prefixes')}</span>
+    <PrefixInput key={site.prefixes.join(', ')} type="text" className="aznet-input"
+      value={site.prefixes.join(', ')} deferred aria-label={t('Advertised prefixes')}
+      format={formatPrefixes}
+      title="Advertised prefixes (comma-separated)"
+      validate={(raw) => prefixes(raw).some((prefix) => !cidr(prefix))
+        ? 'Enter valid IPv4 CIDR prefixes.' : undefined}
+      onCommit={(raw) => onChange((draft) => {
+        const target = draft.sites.find((entry) => entry.id === site.id)
+        if (target) target.prefixes = prefixes(raw)
+      })}
+      style={{ width: 150, fontSize: 11.5 }} />
   </label>
 }
 

@@ -38,6 +38,11 @@ to see every table, including unused tables and all shared subnet associations.
 Creation requires a name and region and starts with no routes or associations;
 subnet-specific **Create & Associate** explicitly associates only that subnet.
 
+VNet and route-table region fields use native dropdowns with supported region
+choices, not free-text inputs. Existing imported aliases, unknown regions and
+missing values remain unchanged until explicitly replaced with a supported
+choice. The same controls are used in the web and Windows apps.
+
 VNet configuration uses the same table editor and links to the global library.
 Route and propagation edits apply immediately to all associated subnets;
 region changes require **Apply region**. Cloud saving remains a separate action.

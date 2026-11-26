@@ -77,9 +77,10 @@ for (const width of [1440, 390]) {
 }
 
 for (const language of ['en', 'ja']) for (const theme of ['light', 'dark']) {
-  test(`${language} ${theme}: Help discovers Windows and MCP only after deliberate activation`, async ({ page }, info) => {
+  test(`${language} ${theme}: Help directly exposes Windows and MCP without changing the design`, async ({ page, context }, info) => {
     const text = (en: string, ja: string) => language === 'ja' ? ja : en
     const requests: string[] = [], downloads: string[] = []
+    await context.route('https://github.com/**', route => route.fulfill({ contentType: 'text/html', body: 'Platform destination' }))
     page.on('request', request => requests.push(request.url()))
     page.on('download', download => downloads.push(download.suggestedFilename()))
     await page.setViewportSize({ width: language === 'ja' ? 390 : 1440, height: 900 })
@@ -87,9 +88,6 @@ for (const language of ['en', 'ja']) for (const theme of ['light', 'dark']) {
       localStorage.setItem('vwan-visual-topology:language:v1', language)
       localStorage.setItem('aznet-theme', theme)
       localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))
-      const calls: unknown[][] = []
-      Reflect.set(window, 'platformOpenCalls', calls)
-      window.open = (...args) => { calls.push(args); return null }
     }, { language, theme, topology: sampleHubSpokeFirewallUdr })
     await page.goto('/?mode=full')
     await expect(page.getByTestId('aznet-app')).toBeVisible()
@@ -101,38 +99,76 @@ for (const language of ['en', 'ja']) for (const theme of ['light', 'dark']) {
     })
     await help.locator('summary').focus()
     await page.keyboard.press('Enter')
-    expect(requests.some(url => url.includes('OtherPlatformsDialog'))).toBe(false)
+    expect(requests.some(url => url.includes('FeedbackDialog'))).toBe(false)
+    await expect(help.getByRole('link', { name: text('Windows app', 'Windows アプリ'), exact: true })).toBeVisible()
+    await expect(help.getByRole('link', { name: text('MCP server', 'MCP サーバー'), exact: true })).toBeVisible()
     await help.getByRole('button', { name: text('Feedback', 'フィードバック'), exact: true }).press('Enter')
     await expect(page.getByRole('dialog')).toBeVisible()
     await page.keyboard.press('Escape')
     await expect(page.getByRole('dialog')).toHaveCount(0)
-    expect(requests.some(url => url.includes('OtherPlatformsDialog'))).toBe(false)
     await help.locator('summary').focus()
     await page.keyboard.press('Enter')
-    await help.getByRole('button', { name: text('Use AzNetSim elsewhere', 'ほかの環境で AzNetSim を使う'), exact: true }).press('Enter')
-    const panel = page.getByRole('dialog', { name: text('Use AzNetSim elsewhere', 'ほかの環境で AzNetSim を使う'), exact: true })
-    await expect(panel).toBeVisible()
-    await expect(panel.getByRole('button', { name: text('Close', '閉じる'), exact: true })).toBeFocused()
-    expect(await page.evaluate(() => Reflect.get(window, 'platformOpenCalls'))).toEqual([])
     expect(downloads).toEqual([])
     expect(requests.some(url => url.startsWith('https://github.com/'))).toBe(false)
-    expect((await new AxeBuilder({ page }).include('dialog[open]').analyze()).violations).toEqual([])
-    expect(await panel.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
-    await panel.screenshot({ path: info.outputPath(`other-platforms-${language}-${theme}.png`) })
-    await panel.getByRole('button', { name: text('Windows app - downloads', 'Windows アプリ - ダウンロード'), exact: true }).press('Enter')
-    await panel.getByRole('button', { name: text('MCP server - install and use', 'MCP サーバー - 導入と使い方'), exact: true }).press('Enter')
-    expect(await page.evaluate(() => Reflect.get(window, 'platformOpenCalls'))).toEqual([
-      ['https://github.com/erjosito/vwan-visual-topology/releases/latest', '_blank', 'noopener,noreferrer'],
-      ['https://github.com/erjosito/vwan-visual-topology/blob/main/PLATFORM.md#local-mcp--copilot-skill', '_blank', 'noopener,noreferrer'],
-    ])
+    expect((await new AxeBuilder({ page }).include('.presentation-group[open]').analyze()).violations).toEqual([])
+    await help.screenshot({ path: info.outputPath(`platform-links-${language}-${theme}.png`) })
+    for (const [label, target] of [
+      [text('Windows app', 'Windows アプリ'), 'https://github.com/erjosito/vwan-visual-topology/releases/latest'],
+      [text('MCP server', 'MCP サーバー'), 'https://github.com/erjosito/vwan-visual-topology/blob/main/PLATFORM.md#local-mcp--copilot-skill'],
+    ]) {
+      if (!await help.getByRole('link', { name: label, exact: true }).isVisible()) await help.locator('summary').press('Enter')
+      const link = help.getByRole('link', { name: label, exact: true })
+      await expect(link).toHaveAttribute('target', '_blank')
+      await expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+      const popup = page.waitForEvent('popup')
+      await link.press('Enter')
+      const opened = await popup
+      await expect(opened).toHaveURL(target)
+      await opened.close()
+      await expect(help.locator('summary')).toBeFocused()
+    }
     expect(page.url()).toBe(url)
     expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(original)
     expect(downloads).toEqual([])
-    await page.keyboard.press('Escape')
-    await expect(panel).toHaveCount(0)
-    await expect(help.locator('summary')).toBeFocused()
   })
 }
+
+for (const mode of ['vwan', 'hub-spoke', 'full']) for (const language of ['en', 'ja']) {
+  test(`${mode} ${language}: empty workspace visibly offers Windows and MCP`, async ({ page }, info) => {
+    const text = (en: string, ja: string) => language === 'ja' ? ja : en
+    await page.setViewportSize({ width: language === 'ja' ? 390 : 1440, height: 900 })
+    await page.addInitScript(language => {
+      localStorage.setItem('vwan-visual-topology:language:v1', language)
+      localStorage.setItem('aznet-theme', language === 'ja' ? 'dark' : 'light')
+    }, language)
+    await page.goto(`/?mode=${mode}`)
+    const platforms = page.getByRole('complementary', { name: text('Windows app and MCP server', 'Windows アプリと MCP サーバー'), exact: true })
+    await expect(platforms).toBeInViewport()
+    await expect(platforms.getByRole('link', { name: text('Windows app', 'Windows アプリ'), exact: true })).toBeVisible()
+    await expect(platforms.getByRole('link', { name: text('MCP server', 'MCP サーバー'), exact: true })).toBeVisible()
+    expect(await platforms.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
+    expect((await new AxeBuilder({ page }).include('.empty-workspace-platforms').analyze()).violations).toEqual([])
+    await page.screenshot({ path: info.outputPath('empty-platform-links.png') })
+    if (mode === 'full' && language === 'en') {
+      await openWorkspaceActions(page)
+      if (!await page.getByRole('complementary', { name: 'Workspace controls', exact: true }).isVisible()) {
+        await page.getByTitle('Workspace controls', { exact: true }).click()
+      }
+      await page.getByTestId('aznet-add-vnet-btn').click()
+      await expect(platforms).toHaveCount(0)
+      await page.keyboard.press('Escape')
+      await page.getByRole('button', { name: /Undo/ }).click()
+      await expect(platforms).toBeVisible()
+    }
+  })
+}
+
+test('desktop does not promote the Windows download or MCP client', async ({ page }) => {
+  await page.addInitScript(() => Object.defineProperty(window, 'desktopSimulator', { value: {} }))
+  await page.goto('/?mode=full')
+  await expect(page.getByTestId('aznet-app')).toBeVisible()
+  await expect(page.locator('.platform-link, .empty-workspace-platforms')).toHaveCount(0)
+})
 
 for (const mode of ['vwan', 'hub-spoke', 'full']) {
   test(`${mode}: AzNetSim brand fits wide and narrow headers`, async ({ page }) => {

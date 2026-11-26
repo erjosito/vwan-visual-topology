@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { t } from '../i18n'
 import { guidanceAnchor } from '../learning/guidance'
 import { InspectorSection } from '../WorkspacePresentation'
+import { AzureRegionSelect } from '../AzureRegionSelect'
 import type { AzSelectedEntity } from './AzureNetDiagram'
 import type { AzNetTopology, AzUdrTable, AzUdrNextHopType } from './model'
 import { resolveUdrRegion } from './udr-regions'
@@ -88,7 +89,7 @@ export default function UdrTableEditor({ topology, table, commit, onClone, onLib
       const region = String(new FormData(event.currentTarget).get('region')).trim()
       if (!update((target) => { target.region = region })) setError(t('Region change rejected. Dissociate incompatible subnets first; saved settings are unchanged.'))
     }} className="row" style={{ flexWrap: 'wrap' }}>
-      <label>{t('Route-table region')} <input type="text" name="region" className="aznet-input" required
+      <label>{t('Route-table region')} <AzureRegionSelect name="region" className="aznet-select" required
         defaultValue={table.region ?? resolveUdrRegion(topology, table) ?? ''} data-testid={`aznet-rt-region-${table.id}`}
         aria-label={t('Route-table region {0}', table.name)} /></label>
       <button type="submit" className="aznet-btn">{t('Apply region')}</button>

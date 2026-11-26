@@ -72,28 +72,7 @@ export interface ResilienceFinding {
   endpointIds: string[]
   occurrences: ResilienceGap[]
 }
-export function groupResilienceGaps(gaps: ResilienceGap[]): ResilienceFinding[] {
-  const groups = new Map<string, ResilienceFinding>()
-  for (const gap of gaps) {
-    const key = `${gap.category}:${gap.scenarioId}`
-    let group = groups.get(key)
-    if (!group) {
-      group = {
-        id: `resilience-root:${encodeURIComponent(key)}`, category: gap.category,
-        scenarioId: gap.scenarioId, fault: gap.fault, endpointIds: [], occurrences: [],
-      }
-      groups.set(key, group)
-    }
-    group.occurrences.push(gap)
-    group.endpointIds = [...new Set([...group.endpointIds, ...gap.endpointIds])]
-  }
-  return [...groups.values()]
-}
-export function resilienceMarkers(report?: ResilienceReport): Record<string, number> {
-  const markers: Record<string, number> = {}
-  for (const finding of groupResilienceGaps(report?.gaps ?? [])) for (const id of finding.endpointIds) markers[id] = (markers[id] ?? 0) + 1
-  return markers
-}
+export { groupResilienceGaps, resilienceMarkers } from './failures'
 function independentPathGuidance(fault: FailureDomain, attachments: { name: string; region?: string }[], locations: { id: string; name: string }[]): string {
   const surviving = attachments.filter((n) => regionKey(n.region) && (fault.kind !== 'region' || regionKey(n.region) !== fault.id))
   const targets = surviving.map((n) => `${n.name} (${n.region})`).join(', ') || 'none currently modeled; add an attachment in another assessed region'

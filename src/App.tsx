@@ -48,8 +48,8 @@ import { routingIntentConfiguration, routingIntentManaged } from './routing-inte
 import { applyRoutingIntentEdit } from './native-routing-intent'
 import { useDeleteShortcut } from './useDeleteShortcut'
 import './App.css'
-import { projectVwanFailures, regionKey, failureKey, failureLabel, type FailureDomain } from './failures'
-import { analyzeVwanResilience, resilienceMarkers, type ResilienceReport } from './failure-analysis'
+import { projectVwanFailures, regionKey, failureKey, failureLabel, resilienceMarkers, type FailureDomain } from './failures'
+import type { ResilienceReport } from './failure-analysis'
 import { FailurePanel } from './FailurePanel'
 import { pruneDeletedInventory } from './inventory'
 import { measureAzWork, useMeasuredRender } from './azure-net/performance'
@@ -723,7 +723,8 @@ function App() {
         destination, evidence: path.steps.join(' '), subnetIds: [] }))}
       onClose={() => setDetailOwner(undefined)} /></Suspense>}
     <FailurePanel faults={faults} unassessed={scenario.unassessed} onRestore={restoreFault} onRestoreAll={() => restoreFault()}
-      revision={baselineRevision} onReport={(report) => setResilience({ revision: baselineRevision, report })} focusEndpoint={resilience?.revision === baselineRevision ? resilienceEndpoint : undefined} onSimulate={addFault} analyze={() => {
+      revision={baselineRevision} onReport={(report) => setResilience({ revision: baselineRevision, report })} focusEndpoint={resilience?.revision === baselineRevision ? resilienceEndpoint : undefined} onSimulate={addFault} analyze={async () => {
+        const { analyzeVwanResilience } = await import('./failure-analysis')
         let intents: ReturnType<typeof validateDiagnosticsProfile>['intents'] = []
         try { const saved = workspaceStorage.getItem('vwan-visual-topology:diagnostics:v1'); if (saved) intents = validateDiagnosticsProfile(JSON.parse(saved)).intents }
         catch { const report = analyzeVwanResilience(topology, [], { maxPairs: 0 }); report.complete = false; report.limitations.push('Saved connectivity requirements could not be read; intent coverage is unassessed.'); return report }
@@ -843,6 +844,9 @@ function App() {
           {(panel === 'azure' || panel === 'comparison') && <Suspense fallback={<p role="status">{t('Loading workspace…')}</p>}><AzureFilesPanel key={pendingAzureImport?.revision ?? 'workspace'} topology={topology} pendingImport={pendingAzureImport?.topology} comparing={panel === 'comparison'} onFiles={() => setPanel('azure')} session={comparisonSession} onSession={setComparisonSession} onSelect={setSelection} onCapture={(session) => {
             setComparisonSession(session)
             finishCaptureImport(); setHighlighting(false); setTracing(false); setPanel('comparison')
+          }} onBundleImport={({ source }) => {
+            if (source.mode !== 'vwan') throw new Error('Expected a VWAN issue bundle.')
+            reset(source.topology); setComparisonSession(source.session); setPanel('comparison')
           }} onImportFile={() => importer.current?.click()} onCompare={() => { finishCaptureImport(); setHighlighting(false); setTracing(false); setPanel('comparison') }} onConfirmImport={() => { if (pendingAzureImport) { reset(validateTopology(pendingAzureImport.topology)); finishCaptureImport() } }} onCancelImport={() => { finishCaptureImport(); setPanel(undefined) }} onClose={() => { finishCaptureImport(); closePanel() }} /></Suspense>}
           <TopologyDiagram topology={topology} faults={scenario.affected} risks={risks} onRisk={setResilienceEndpoint} onClearSelection={() => setSelection(undefined)}
             canvasStatus={(highlighting || tracing || !!diagnosticPaths?.length || routingIssues.length > 0) && <div className="highlight-status" role="status">{(highlighting || tracing || !!diagnosticPaths?.length) ? (diagnosticPaths?.length ? t('Diagnostic path evidence') : tracing ? groupTrace ? `${groupSummary} · ${paths.length ? pathStatus : t("No matching sources or destination prefixes configured")}` : t('Path: {0} → {1} · {2} · {3}', sourceNode?.name ?? t('source'), targetNode?.name ?? destination, destinationPrefix || destination, pathStatus) : prefix ? t("Preferred routes to {0}", prefix) : t("Preferred routes · {0}", inspected?.name ?? t('Router'))) : t('{0} routing issues', routingIssues.length)}{tracing && <button onClick={() => setPanel('paths')}>{t("Path details")}</button>}{(highlighting || tracing || !!diagnosticPaths?.length) && <button onClick={() => { setDiagnosticHighlight(undefined); setHighlighting(false); setTracing(false); setPrefix('') }}>{t("Clear highlighting")}</button>}{routingIssues.length > 0 && <button onClick={clearHighlightsAndIcons}>{t("Clear highlights & icons")}</button>}</div>}

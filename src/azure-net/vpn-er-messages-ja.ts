@@ -1,6 +1,8 @@
 import { registerJapaneseMessages } from '../messages'
 
 registerJapaneseMessages({
+  'Instance-bound transports and BGP bindings are authored in native JSON. This editor preserves them; eligibility is not Established or verified SA continuity.': 'インスタンスに対応するトランスポートと BGP バインドはネイティブ JSON で設定します。このエディターでは設定を保持します。適格性は Established 状態や SA 継続性の検証を意味しません。',
+  'CPE static Azure prefixes (BGP disabled)': 'CPE の Azure 宛て静的プレフィックス (BGP 無効時)',
   'VPN over ER private peering': 'ER プライベート ピアリング経由の VPN',
   'ER underlay and private tunnel endpoints': 'ER アンダーレイとプライベート トンネル エンドポイント',
   'Classic active/standby RouteBased VPN gateway only. Static routing, active/active, NAT, NVA and Virtual WAN private overlays are not assessed. BGP is not an Azure prerequisite.': '従来型のアクティブ / スタンバイの RouteBased VPN ゲートウェイのみ対応します。静的ルーティング、アクティブ / アクティブ、NAT、NVA、Virtual WAN のプライベート オーバーレイは未評価です。Azure 自体では BGP は必須ではありません。',

@@ -9,14 +9,15 @@ import { PresentationGroup, PresentationToggle } from './WorkspacePresentation'
 import { CanvasStyleSettings, WorkspaceActionsToggle } from './CanvasPresentation'
 import { DocumentSaveStatus } from './cloud/DocumentSaveStatus'
 import { DocumentArtifactStatus } from './DocumentActions'
+import { PlatformLinks } from './PlatformLinks'
 
-const HelpDialog = lazy(() => import('./HelpDialog'))
+const FeedbackDialog = lazy(() => import('./FeedbackDialog').then(module => ({ default: module.FeedbackDialog })))
 
 export function WorkspaceMenu() {
   const session = useWorkspaceSession()
   const language = useLanguage()
-  const [helpDialog, setHelpDialog] = useState<'feedback' | 'platforms' | undefined>(() =>
-    !window.desktopSimulator && new URLSearchParams(location.search).get('feedback') === '1' ? 'feedback' : undefined)
+  const [feedbackOpen, setFeedbackOpen] = useState(() =>
+    !window.desktopSimulator && new URLSearchParams(location.search).get('feedback') === '1')
   return <>
     <WorkspaceActionsToggle />
     {session && <button type="button" data-testid="workspace-library-open" onClick={session.openLibrary}>{language === 'ja' ? 'ワークスペース' : 'Workspace'}</button>}
@@ -30,15 +31,13 @@ export function WorkspaceMenu() {
     </PresentationGroup>
     <PresentationGroup label={t('Help')} title={t('Help & feedback')}>
       {session?.presentationPreview && <button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t('Docs')}</button>}
-      <button disabled={!!window.desktopSimulator} onClick={() => setHelpDialog('feedback')}>{t('Feedback')}</button>
-      {!window.desktopSimulator && <button type="button" onClick={() => setHelpDialog('platforms')}>
-        {t('Use AzNetSim elsewhere')}
-      </button>}
+      <button disabled={!!window.desktopSimulator} onClick={() => setFeedbackOpen(true)}>{t('Feedback')}</button>
+      <PlatformLinks />
       <small className="muted" data-testid="app-version">AzNetSim {import.meta.env.VITE_APP_VERSION}</small>
     </PresentationGroup>
     {!session?.presentationPreview && <LearningStatus />}
     {!session?.presentationPreview && <CloudMenu />}
-    {helpDialog && <Suspense fallback={null}><HelpDialog kind={helpDialog} onClose={() => setHelpDialog(undefined)} /></Suspense>}
+    {feedbackOpen && <Suspense fallback={null}><FeedbackDialog onClose={() => setFeedbackOpen(false)} /></Suspense>}
   </>
 }
 

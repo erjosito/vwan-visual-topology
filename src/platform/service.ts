@@ -16,6 +16,8 @@ import { inspectAzBgp, inspectVwanBgp } from '../bgp-neighbors'
 import { routeCoverage } from './routing-coverage'
 import { unscopedRoutingLimitations } from '../routing-evidence'
 import { revisionOf } from './revision'
+import { vpnTunnelKey } from '../azure-net/vpn-sessions'
+import { compareVpnSnapshots } from '../azure-net/vpn-migration'
 export { revisionOf } from './revision'
 
 export function admitJson(input: unknown): string {
@@ -52,7 +54,7 @@ export function validateRequest(input: unknown): PlatformRequest {
     if (Object.keys(value).some((key) => !allowed.includes(key))) throw new Error('Unknown contract field; requirements must not be silently omitted.')
   }
   if (!request || typeof request !== 'object' || Array.isArray(request)) throw new Error('Request object required.')
-  keys(request, ['contractVersion', 'engineVersion', 'document', 'operation', 'locale', 'requirements', 'budget', 'packet', 'vpnPacket', 'application'])
+  keys(request, ['contractVersion', 'engineVersion', 'document', 'operation', 'locale', 'requirements', 'budget', 'packet', 'vpnPacket', 'vpnTransition', 'application'])
   if (!supportedContractVersions.includes(request.contractVersion) || (request.engineVersion !== undefined && request.engineVersion !== engineVersion)) throw new Error('Unsupported contract or engine version.')
   if (!platformOperations.includes(request.operation)) throw new Error('Unknown operation.')
   if (request.contractVersion === 1 && (request.operation === 'application' || request.application !== undefined
@@ -70,6 +72,17 @@ export function validateRequest(input: unknown): PlatformRequest {
     if (request.operation !== 'simulate' || request.document.mode === 'vwan') throw new Error('VPN NAT packet assessment requires simulate and the Azure/Full Hybrid native provider.')
     validateVpnNatPacketRequest(request.vpnPacket)
   }
+  if (request.vpnTransition !== undefined) {
+    const transition = request.vpnTransition
+    if (request.document.mode === 'vwan' || !['simulate', 'evaluate'].includes(request.operation)
+      || !transition || typeof transition !== 'object' || Array.isArray(transition)) throw new Error('VPN snapshot comparison requires a native Azure/Full Hybrid simulate/evaluate request.')
+    keys(transition, ['previousTopology', 'event'])
+    if (!transition.event || typeof transition.event !== 'object' || Array.isArray(transition.event)) throw new Error('Explicit VPN snapshot event required.')
+    keys(transition.event, ['id', 'description'])
+    if (typeof transition.event.id !== 'string' || !transition.event.id || transition.event.id.length > 120
+      || typeof transition.event.description !== 'string' || !transition.event.description || transition.event.description.length > 4096) throw new Error('Bounded VPN snapshot event ID and description required.')
+    normalize({ mode: request.document.mode, topology: transition.previousTopology })
+  }
   keys(request.document, ['mode', 'topology'])
   if (request.locale !== undefined && !['en', 'ja'].includes(request.locale)) throw new Error('Unsupported locale.')
   if (request.budget !== undefined && (!request.budget || typeof request.budget !== 'object' || Array.isArray(request.budget))) throw new Error('Budget object required.')
@@ -84,7 +97,24 @@ export function validateRequest(input: unknown): PlatformRequest {
   for (const requirement of request.requirements ?? []) {
     if (!requirement || typeof requirement.id !== 'string' || !requirement.id || requirement.id.length > 120 || ids.has(requirement.id)) throw new Error('Unique requirement IDs required.')
     ids.add(requirement.id)
-    if (!['flow', 'route', 'packet'].includes(requirement.kind)) throw new Error('Unsupported requirement kind.')
+    if (!['flow', 'route', 'packet', 'vpn-tunnel'].includes(requirement.kind)) throw new Error('Unsupported requirement kind.')
+    if (requirement.kind === 'vpn-tunnel') {
+      keys(requirement, ['id', 'kind', 'connectionId', 'tunnelId', 'expectation', 'binding', 'underlayState'])
+      if (![requirement.connectionId, requirement.tunnelId].every((id) => typeof id === 'string' && id.length > 0 && id.length <= 120)
+        || !['eligible', 'ineligible'].includes(requirement.expectation)
+        || requirement.underlayState !== undefined && !['available', 'unavailable'].includes(requirement.underlayState)) {
+        throw new Error('VPN tunnel assertion requires original connection/tunnel IDs and explicit eligibility/underlay expectations.')
+      }
+      if (requirement.binding !== undefined) {
+        if (!requirement.binding || typeof requirement.binding !== 'object' || Array.isArray(requirement.binding)) throw new Error('Explicit VPN BGP binding required.')
+        keys(requirement.binding, ['azureAddress', 'cpeAddress', 'gatewayInstanceId'])
+        if (ipv4(requirement.binding.azureAddress) === undefined || ipv4(requirement.binding.cpeAddress) === undefined
+          || typeof requirement.binding.gatewayInstanceId !== 'string' || !requirement.binding.gatewayInstanceId || requirement.binding.gatewayInstanceId.length > 120) {
+          throw new Error('VPN binding requires fixed IPv4 peer addresses and original gateway instance ID.')
+        }
+      }
+      continue
+    }
     keys(requirement, requirement.kind === 'packet' ? ['id', 'kind', 'packet', 'sourceAddress', 'destinationAddress', 'expectation', 'requiredBackend'] : requirement.kind === 'flow'
       ? ['id', 'kind', 'source', 'target', 'sourceAddress', 'destinationAddress', 'expectation', 'requiredFirewallHubId', 'requiredApplianceId', 'applianceChain', 'firewallPolicy']
       : ['id', 'kind', 'table', 'hubTableId', 'prefix', 'expectation'])
@@ -213,7 +243,8 @@ export function executePlatform(input: unknown): PlatformResult {
       result.limitations = simulation.warnings
       if (!simulation.converged) result.status = 'not assessed'
       for (const requirement of request.requirements ?? []) {
-        if (requirement.kind === 'packet') result.assessments.push(assessPacket(document.topology, simulation, requirement))
+        if (requirement.kind === 'vpn-tunnel') result.assessments.push(unknown(requirement, 'Instance-bound classic VPN assertions require the Azure/Full Hybrid native provider.'))
+        else if (requirement.kind === 'packet') result.assessments.push(assessPacket(document.topology, simulation, requirement))
         else if (requirement.kind === 'flow') result.assessments.push(vwanFlow(document, requirement))
         else {
           const tableId = requirement.hubTableId ?? 'defaultRouteTable'
@@ -230,6 +261,7 @@ export function executePlatform(input: unknown): PlatformResult {
       const simulation = simulateAzNet(document.topology)
       result.simulation = simulation
       result.bgpNeighbors = inspectAzBgp(document.topology, simulation)
+      if (request.vpnTransition) result.vpnTransition = compareVpnSnapshots(request.vpnTransition, document.topology, simulation)
       if (request.vpnPacket) result.vpnPacket = traceVpnNatPacket(document.topology, request.vpnPacket, simulation)
       if (simulation.controlPlaneComplete === false) result.status = 'not assessed'
       if (request.packet) result.packet = tracePacket(document.topology, request.packet, simulation)
@@ -238,6 +270,21 @@ export function executePlatform(input: unknown): PlatformResult {
       result.routingLimitations = unscopedRoutingLimitations(simulation.warnings, simulation.routingLimitations)
       const requestRevision = revisionOf(request.document)
       for (const requirement of request.requirements ?? []) {
+        if (requirement.kind === 'vpn-tunnel') {
+          const tunnel = simulation.vpnTunnels?.[vpnTunnelKey(requirement.connectionId, requirement.tunnelId)]
+          if (!tunnel || tunnel.state === 'not-assessed'
+            || requirement.binding && (!tunnel.bgp.azureAddress || !tunnel.bgp.cpeAddress)
+            || requirement.underlayState && (!tunnel.underlay || tunnel.underlay.state === 'not-assessed')) {
+            result.assessments.push(unknown(requirement, 'Missing or unassessed tunnel/binding/dependency evidence; eligibility is not Established.', tunnel))
+            continue
+          }
+          const binding = requirement.binding
+          const satisfied = (tunnel.state === 'available') === (requirement.expectation === 'eligible')
+            && (!binding || binding.azureAddress === tunnel.bgp.azureAddress && binding.cpeAddress === tunnel.bgp.cpeAddress && binding.gatewayInstanceId === tunnel.azureInstanceId)
+            && (!requirement.underlayState || requirement.underlayState === tunnel.underlay?.state)
+          result.assessments.push({ id: requirement.id, outcome: satisfied ? 'satisfied' : 'violated', evidence: tunnel, reasons: [tunnel.reason] })
+          continue
+        }
         if (requirement.kind === 'packet') {
           result.assessments.push(result.routingLimitations.some(record => record.completeness === 'not-assessed' && record.operations.includes('packet'))
             ? unknown(requirement, 'Unsupported packet routing coverage.', result.routingLimitations.filter(record => record.completeness === 'not-assessed' && record.operations.includes('packet')))
@@ -311,6 +358,7 @@ export function executePlatform(input: unknown): PlatformResult {
     result.errors = [{ code: 'INVALID_REQUEST_OR_TOPOLOGY', message: error instanceof Error ? error.message : 'Invalid request.' }]
     result.simulation = undefined
     result.document = undefined
+    result.vpnTransition = undefined
     result.assessments = []
   }
   return result

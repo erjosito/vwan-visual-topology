@@ -2,7 +2,7 @@
   "name": "vwan-visual-topology",
   "description": "Azure Network Simulator (AzNetSim): local-first topology design and explainable routing and packet-flow simulation for VNets, hub-and-spoke, Virtual WAN and hybrid networks.",
   "private": true,
-  "version": "0.9.1",
+  "version": "0.9.2",
   "license": "MIT",
   "type": "module",
   "main": "platform-dist/electron/main.cjs",
@@ -38,6 +38,7 @@
     "@azure/msal-browser": "5.29.1",
     "@azure/msal-node": "7.2.2",
     "@resvg/resvg-js": "2.6.2",
+    "fflate": "0.8.2",
     "gifenc": "1.0.3",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
