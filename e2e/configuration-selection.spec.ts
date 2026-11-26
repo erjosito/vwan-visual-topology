@@ -212,7 +212,7 @@ for (const profile of profiles) {
     await page.getByRole('menuitem', { name: profile.language === 'ja' ? '構成を編集' : 'Edit configuration', exact: true }).click()
     const editor = page.locator('.object-editor')
     const name = editor.locator('input[name="name"]')
-    const status = editor.locator('.configuration-edit-status')
+    const status = editor.locator('.configuration-edit-status:not(.configuration-section-status)')
     await expect(name).toHaveValue('Site A')
     await expect(status).toContainText(profile.language === 'ja' ? '未保存の構成編集はありません。' : 'No pending configuration edits.')
     await expect(status).toContainText(profile.language === 'ja' ? 'クラウドへの保存は別の操作です。' : 'Cloud saving is separate.')
