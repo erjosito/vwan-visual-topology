@@ -47,6 +47,10 @@ export function HybridConnectionEditor({ topology, connectionId, commit, simulat
         const staticPrefixes = prefixes(String(data.get('prefixes') ?? ''))
         const staticAzurePrefixes = instanceBound ? prefixes(String(data.get('azurePrefixes') ?? '')) : undefined
         const advertised = restrict ? prefixes(String(data.get('advertised') ?? '')) : undefined
+        const weight = er && er.targetKind !== 'site' ? Number(data.get('weight')) : undefined
+        if (weight !== undefined && (!Number.isInteger(weight) || weight < 0 || weight > 32000)) {
+          throw new Error(t('ER routing weight must be an integer from 0 to 32000.'))
+        }
         commit((draft) => {
           const target = draft.vpnConnections.find((connection) => connection.id === connectionId)
           if (target) {
@@ -88,7 +92,8 @@ export function HybridConnectionEditor({ topology, connectionId, commit, simulat
             const link = draft.erLinks.find((connection) => connection.id === connectionId)!
             link.name = String(data.get('name'))
             link.enabled = data.has('enabled')
-            link.prepend = inbound
+            if (link.targetKind !== 'vnet-gateway') link.prepend = inbound
+            if (weight !== undefined) link.weight = weight
             if (link.targetKind === 'site') {
               if (advertised === undefined) delete link.advertisedPrefixes
               else link.advertisedPrefixes = advertised
@@ -149,7 +154,14 @@ export function HybridConnectionEditor({ topology, connectionId, commit, simulat
           defaultValue={connection.advertisedPrefixes?.join('\n') ?? topology.sites.find((site) => site.id === (vpn?.siteId ?? er?.targetId))?.prefixes.join('\n') ?? ''} /></label>}
         <p className="muted">{t('Exact selection from site routes, before outbound route maps. Use separate endpoint and workload prefixes on the same logical site. Static VPN routing uses its static-prefix field instead.')}</p>
       </>}
-      <label className="field"><span>{t('Inbound AS-path prepend')}</span><input name="inbound" defaultValue={(vpn?.inboundPrepend ?? er?.prepend)?.join(' ') ?? ''} /></label>
+      {er && er.targetKind !== 'site' && <>
+        <label className="field"><span>{t('Azure connection routing weight')}</span><input name="weight" type="number" required min={0} max={32000} step={1} defaultValue={er.weight ?? 0} /></label>
+        <p className="muted">{t('Higher weight wins for the same prefix before AS-path length. This is local to Azure, not advertised to the site.')}</p>
+      </>}
+      {(vpn || er?.targetKind !== 'vnet-gateway') && <label className="field"><span>{t(er?.targetKind === 'site'
+        ? 'Site-to-Azure AS-path prepend' : 'Inbound AS-path prepend')}</span><input name="inbound" defaultValue={(vpn?.inboundPrepend ?? er?.prepend)?.join(' ') ?? ''} /></label>}
+      {er?.targetKind === 'site' && <p className="muted">{t('Applied to this circuit advertisement toward Azure. Private ASNs are retained on ExpressRoute private peering. Reverse selection uses site inbound policy.')}</p>}
+      {er?.targetKind === 'vnet-gateway' && <p className="muted">{t('Configure customer AS-path prepends on the site ER link. Imported Azure-link prepend values are preserved but not modeled for classic ER gateways.')}</p>}
       {vpn && <label className="field"><span>{t('Outbound AS-path prepend')}</span><input name="outbound" defaultValue={vpn.outboundPrepend?.join(' ') ?? ''} /></label>}
       {hub && <>
         <label><input type="checkbox" name="learn" defaultChecked={connection.learnSiteRoutes !== false} />{t('Learn branch routes')}</label>

@@ -36,6 +36,109 @@ import { AZNET_MAX_JSON_LENGTH, parseAzNetJson, parseAzNetTopology } from './adm
 import { AZNET_STORAGE_KEY, loadAzWorkspace } from './workspace'
 import { azDisplayResult, azRoutingInput } from './routing-input'
 import { analyzeAzResilience } from '../failure-analysis'
+import { dualExpressRouteTopology } from '../../tests/fixtures/dual-expressroute'
+
+describe('dual ExpressRoute private peering', () => {
+  const source = { kind: 'subnet', vnetId: 'azure', subnetId: 'workload' } as const
+  const prefix = '172.31.100.0/24'
+  const routes = (result: ReturnType<typeof simulateAzNet>) => result.gatewayRibs.gateway.filter((route) => route.prefix === prefix)
+  const assertCircuit = (topology: AzNetTopology, circuit: string) => {
+    const result = simulateAzNet(topology)
+    expect(routes(result).filter((route) => route.preferred).map((route) => route.connectionId)).toEqual([`azure-${circuit}`])
+    expect(lookupSubnetEffectiveRoute(result.subnetTables.workload, '172.31.100.1')?.connectionId).toBe(`azure-${circuit}`)
+    const flow = traceAzNetFlow(topology, result, source, '172.31.100.1')
+    expect(flow.status).toBe('delivered')
+    expect(flow.traversedEdgeIds).toEqual(expect.arrayContaining([`azure-${circuit}`, `site-${circuit}`]))
+    expect(flow.traversedEdgeIds).not.toContain(`azure-${circuit === 'a' ? 'b' : 'a'}`)
+    return result
+  }
+
+  it('retains equal-cost circuit identities through subnet evidence, tracing and save/import', () => {
+    const topology = parseAzNetJson(JSON.stringify(dualExpressRouteTopology()))
+    expect(validateAzNetTopology(topology)).toEqual([])
+    const result = simulateAzNet(topology)
+    expect(routes(result)).toHaveLength(2)
+    expect(new Set(routes(result).map((route) => route.id)).size).toBe(2)
+    expect(routes(result).every((route) => route.preferred && route.nextHopId === 'site')).toBe(true)
+    expect(routes(result).map((route) => route.connectionId)).toEqual(['azure-a', 'azure-b'])
+    expect(result.subnetTables.workload.routes.filter((route) => route.prefix === prefix && route.active)
+      .map((route) => route.connectionId)).toEqual(['azure-a', 'azure-b'])
+    const flow = traceAzNetFlow(topology, result, source, '172.31.100.1')
+    expect(flow.status).toBe('delivered')
+    expect(flow.traversedEdgeIds).toEqual(expect.arrayContaining(['azure-a', 'site-a']))
+    expect(flow.hops.some((hop) => hop.detail.includes('deterministic representative'))).toBe(true)
+  })
+
+  it.each([133937, 65010, 4200000010])('retains ASN %i prepends and applies Azure weight before path length', (asn) => {
+    const topology = dualExpressRouteTopology(asn)
+    topology.erLinks.find((link) => link.id === 'site-a')!.prepend = [asn, asn, asn]
+    let result = assertCircuit(topology, 'b')
+    expect(routes(result).find((route) => route.connectionId === 'azure-a')?.asPath).toEqual([12076, asn, asn, asn, asn])
+    expect(routes(result).find((route) => route.connectionId === 'azure-b')?.asPath).toEqual([12076, asn])
+    topology.erLinks.find((link) => link.id === 'azure-a')!.weight = 200
+    result = assertCircuit(parseAzNetJson(JSON.stringify(topology)), 'a')
+    expect(routes(result)).toHaveLength(2)
+    expect(result.siteRibs.site.filter((route) => route.prefix === '10.254.0.0/16' && route.preferred)
+      .map((route) => route.connectionId)).toEqual(['site-a', 'site-b'])
+    topology.routeMaps = [{
+      id: 'prefer-b', name: 'Site inbound preference', siteId: 'site',
+      rules: [{ id: 'prefer', prefixes: [], match: 'equals', action: 'permit', summaryPrefixes: [], prepend: [], nextStep: 'terminate', localPreference: 200 }],
+    }]
+    topology.sites[0].routeMapAssignments = [{ connectionId: 'site-b', inboundMapId: 'prefer-b' }]
+    result = assertCircuit(topology, 'a')
+    expect(result.siteRibs.site.filter((route) => route.prefix === '10.254.0.0/16' && route.preferred)
+      .map((route) => route.connectionId)).toEqual(['site-b'])
+    const reverse = traceAzNetFlow(topology, result, { kind: 'site', siteId: 'site' }, '10.254.1.4')
+    expect(reverse.status).toBe('delivered')
+    expect(reverse.traversedEdgeIds).toEqual(expect.arrayContaining(['site-b', 'azure-b']))
+  })
+
+  it.each(['azure', 'site', 'withdraw'])('falls back and restores after %s path removal', (kind) => {
+    const topology = dualExpressRouteTopology()
+    topology.erLinks.find((link) => link.id === 'azure-a')!.weight = 200
+    topology.erLinks.find((link) => link.id === 'site-b')!.prepend = [65010, 65010, 65010]
+    assertCircuit(topology, 'a')
+    const link = topology.erLinks.find((link) => link.id === (kind === 'azure' ? 'azure-a' : 'site-a'))!
+    if (kind === 'withdraw') link.advertisedPrefixes = []
+    else link.enabled = false
+    assertCircuit(topology, 'b')
+    delete link.advertisedPrefixes
+    link.enabled = true
+    assertCircuit(topology, 'a')
+  })
+
+  it('retains a mixed public/private outbound policy path as well as the circuit prepend', () => {
+    const topology = dualExpressRouteTopology()
+    topology.erLinks.find((link) => link.id === 'site-a')!.prepend = [65020]
+    topology.routeMaps = [{
+      id: 'outbound', name: 'Customer outbound policy', siteId: 'site',
+      rules: [{ id: 'prepend', prefixes: [], match: 'equals', action: 'prepend', summaryPrefixes: [], prepend: [64496], nextStep: 'terminate' }],
+    }]
+    topology.sites[0].routeMapAssignments = [{ connectionId: 'site-a', outboundMapId: 'outbound' }]
+    const result = assertCircuit(topology, 'b')
+    expect(routes(result).find((route) => route.connectionId === 'azure-a')?.asPath).toEqual([12076, 65020, 64496, 65010])
+  })
+
+  it('uses the more-specific circuit despite aggregate weight (model regression, not live LPM qualification)', () => {
+    const topology = dualExpressRouteTopology()
+    topology.sites[0].prefixes.push('172.31.100.128/25')
+    topology.erLinks.find((link) => link.id === 'azure-a')!.weight = 200
+    topology.erLinks.find((link) => link.id === 'site-a')!.advertisedPrefixes = [prefix]
+    const result = assertCircuit(topology, 'a')
+    expect(lookupSubnetEffectiveRoute(result.subnetTables.workload, '172.31.100.129')).toMatchObject({
+      prefix: '172.31.100.128/25', connectionId: 'azure-b',
+    })
+    const flow = traceAzNetFlow(topology, result, source, '172.31.100.129')
+    expect(flow.status).toBe('delivered')
+    expect(flow.traversedEdgeIds).toEqual(expect.arrayContaining(['azure-b', 'site-b']))
+  })
+
+  it.each([-1, 0.5, 32001])('rejects invalid connection weight %s', (weight) => {
+    const topology = dualExpressRouteTopology()
+    topology.erLinks[0].weight = weight
+    expect(() => parseAzNetTopology(topology)).toThrow('ER routing weight must be an integer from 0 to 32000')
+  })
+})
 
 describe('AzNetSim VNet Engine & Diagnostics', () => {
   function transitTopology(transport: 'ExpressRoute' | 'Vpn' = 'ExpressRoute'): AzNetTopology {

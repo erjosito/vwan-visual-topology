@@ -67,6 +67,7 @@ export interface AzEffectiveRoute {
   suppressedReason?: string
   privateEndpointRouteTableEnabled?: boolean
   weight?: number
+  connectionId?: string
 }
 
 export interface AzBgpRibEntry {
@@ -361,6 +362,7 @@ function chooseBgpWinners(
             ? `Won via shortest AS path (${minAsLen} hops)`
             : `Won via ${normalizedPref} routing preference (AS path len ${minAsLen})`
       }
+      if (isWinner && winners.size > 1 && c.originProtocol === 'ExpressRoute') explanation += '; equal-cost eligible, packet distribution is not simulated'
       if (c.advertisedSummaryFrom) explanation += ` · Advertised gateway summary from ${c.advertisedSummaryFrom}; not a local forwarding route`
       if (c.routeMapTrace?.length) explanation += ` · ${c.routeMapTrace.join('; ')}`
       output.push({ ...c, preferred: isWinner, explanation })
@@ -772,21 +774,19 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
         if (!site) continue
         const siteRoutes = sitePolicy(site.id, link.id, 'outbound', selectedAdvertisements((siteRibs[site.id] ?? []).filter((r) => r.preferred), link.advertisedPrefixes))
         for (const sr of siteRoutes) {
-          const stripped = stripPrivateAsnsForMsee(sr.asPath)
-          const prepended = stripPrivateAsnsForMsee(link.prepend ?? [])
           entries.push({
             ...sr,
             id: `erloc:${loc.id}:site:${link.id}:${sr.prefix}`,
             connectionId: link.id,
             prefix: sr.prefix,
-            asPath: [12076, ...prepended, ...(stripped.length ? stripped : [site.asn])],
+            asPath: [12076, ...(link.prepend ?? []), ...(sr.asPath.length ? sr.asPath : [site.asn])],
             nextHopName: `${site.name} (${link.name})`,
             nextHopKind: 'site',
             nextHopId: site.id,
             originProtocol: 'ExpressRoute',
             preferred: true,
             weight: link.weight ?? 0,
-            explanation: `Advertised by on-premises site ${site.name} to MSEE ${loc.name} (private ASNs stripped by MSEE)`,
+            explanation: `Advertised by on-premises site ${site.name} to MSEE ${loc.name}; private-peering customer AS path and prepends retained`,
           })
         }
       } else if (link.targetKind === 'vnet-gateway') {
@@ -1381,6 +1381,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
           originProtocol: 'ExpressRoute',
           preferred: false,
           explanation: `Learned from Azure over ExpressRoute circuit at ${loc.name}. ${lr.explanation}`,
+          weight: undefined,
           advertisedSummaryFrom: lr.advertisedSummaryFrom,
       }))
       learnedFromAzure.push(...sitePolicy(site.id, link.id, 'inbound', received))
@@ -1661,16 +1662,18 @@ function compileSingleSubnetEffectiveRoutes(
       const gwWinners = (isRemoteGatewayTransit && ars?.branchToBranchTraffic
         ? (routeServerOutbound[ars.id]?.[`vnet:${vnet.id}`] ?? []).filter((route) => route.nextHopKind === 'vnet-gateway' && route.nextHopId === gw.id)
         : gatewayRibs[gw.id] ?? []).filter((r) => r.preferred)
+      const existingGatewayPrefixes = new Set(rawBgpRoutes.filter((route) => route.nextHopResourceId === gw.id).map((route) => route.prefix))
       for (const r of gwWinners) {
         // ARS-learned NVA routes are already injected by the ARS loop above
         if (r.nextHopKind === 'appliance') {
           continue
         }
         // Avoid duplicating if ARS already injected a preferred route for the same gateway & prefix
-        if (rawBgpRoutes.some((existing) => existing.prefix === r.prefix && existing.nextHopResourceId === gw.id)) {
+        if (existingGatewayPrefixes.has(r.prefix)) {
           continue
         }
         const id = `bgp:gw:${subnet.id}:${gw.id}:${r.id}`
+        const erConnection = topology.erLinks.find((link) => link.id === r.connectionId)
         // Without ARS, coexisting ER wins identical prefixes before comparing AS-path lengths.
         if (!ars && gw.kind === 'Vpn' && erPrefixes.has(r.prefix)) vpnCoexistenceBackups.add(id)
         rawBgpRoutes.push({
@@ -1680,11 +1683,13 @@ function compileSingleSubnetEffectiveRoutes(
           nextHopType: 'VirtualNetworkGateway',
           nextHopResourceId: gw.id,
           nextHopName: `${gw.name} (${controlVnet.name})`,
-          originLabel: `BGP · ${scopeLabel} ${gw.kind} Gateway (${gw.name})`,
+          originLabel: `BGP · ${scopeLabel} ${gw.kind} Gateway (${gw.name})${erConnection ? ` via ${erConnection.name}` : ''}`,
           asPath: r.asPath,
           weight: r.weight,
+          connectionId: r.connectionId,
           active: true,
         })
+        if (gw.kind !== 'ExpressRoute') existingGatewayPrefixes.add(r.prefix)
       }
     }
   }
@@ -1836,10 +1841,12 @@ function compileSingleSubnetEffectiveRoutes(
     const topRanked = group.filter((r) => sourceRank(r) === minRank && !vpnCoexistenceBackups.has(r.id))
     const minAsPath = Math.min(...topRanked.map((r) => r.asPath.length || 999))
     const shortest = topRanked.filter((r) => (r.asPath.length || 999) === minAsPath)
-    // ARS installs all equal-cost NVA next hops; retain other sources' existing tie handling.
+    // Keep eligible ER circuits distinct even when they share one gateway next hop.
     const winners = shortest[0]?.source === 'RouteServer' && shortest[0].nextHopType === 'VirtualAppliance'
       ? shortest.filter((r) => r.source === 'RouteServer' && r.nextHopType === 'VirtualAppliance')
-      : shortest.slice(0, 1)
+      : shortest[0]?.source === 'VirtualNetworkGateway' && topology.erLinks.some((link) => link.id === shortest[0].connectionId)
+        ? shortest.filter((r) => r.connectionId && r.source === 'VirtualNetworkGateway' && r.nextHopResourceId === shortest[0].nextHopResourceId)
+        : shortest.slice(0, 1)
     const winnerIds = new Set(winners.map((r) => r.id))
     const winner = group.find((r) => winnerIds.has(r.id))!
     for (const r of group) {
@@ -3497,6 +3504,8 @@ function traceAzNetFlowCore(
           )
           if (erLink) {
             const loc = topology.erLocations.find((l) => l.id === erLink.locationId)
+            const equalCostConnections = new Set(gwRibMatches.filter((route) =>
+              route.prefix === selectedGatewayRoute?.prefix && route.originProtocol === 'ExpressRoute').map((route) => route.connectionId))
             pushHop({
               nodeKind: 'vnet-gateway',
               nodeId: gw.id,
@@ -3504,7 +3513,8 @@ function traceAzNetFlowCore(
               nodeName: gw.name,
               action: 'gateway-transit',
               edgeId: erLink.id,
-              detail: `${gw.name} transmits over ExpressRoute connection "${erLink.name}" to ${loc?.name ?? erLink.locationId}`,
+              detail: `${gw.name} transmits over ExpressRoute connection "${erLink.name}" to ${loc?.name ?? erLink.locationId}${equalCostConnections.size > 1
+                ? `. ${equalCostConnections.size} equal-cost connections are eligible; this trace follows one deterministic representative, not packet-level load balancing.` : ''}`,
             })
             cursor = { kind: 'er-location', locationId: erLink.locationId, fromTargetId: gw.id }
             continue

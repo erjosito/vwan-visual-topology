@@ -2319,7 +2319,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               })
             },
           },
-          {
+          ...(link.targetKind === 'site' ? [] : [{
             label: 'Set Routing Weight',
             children: [0, 10, 50, 100, 200].map((w) => ({
               label: `Weight ${w}${(link.weight ?? 0) === w ? ' (Current)' : ''}`,
@@ -2330,7 +2330,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 })
               },
             })),
-          },
+          }]),
           {
             label: `Configure ${label} (${loc?.name ?? link.locationId})`,
             onSelect: () => {

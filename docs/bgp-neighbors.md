@@ -58,6 +58,39 @@ they do not supply missing ER circuit/MSEE or physical-alias mappings.
 
 ## Identity and managed boundaries
 
+### Two ExpressRoute circuits to one classic gateway
+
+In Full Hybrid mode, use two independent ER location/circuit abstractions and
+four ER links: one site link and one Azure gateway connection per circuit.
+Reusing a site ID or gateway ID does not merge the circuit candidates.
+These abstractions do not identify the physical primary/secondary MSEE sessions.
+
+Open **Configure ER connection** to set **Azure connection routing weight**
+(integer 0-32000, default 0). For the same prefix, higher weight precedes
+shorter AS path. Weight stays local to Azure and does not influence the site's
+reverse-direction selection. Open the **site ER link** to set
+**Site-to-Azure AS-path prepend**. Customer private ASNs and their prepends
+are retained on private peering. Use site inbound route-map local preference
+for reverse-direction policy.
+
+Gateway evidence retains preferred and nonpreferred circuit candidates.
+Subnet effective routes retain equal-cost connection identities; route labels
+name the connections. Equal-cost eligibility does not simulate packet hashing
+or traffic distribution. A flow follows one deterministic eligible circuit
+and says so. Disable a connection/site link or select an empty advertised-prefix
+list for steady-state withdrawal. Destination lookup still uses longest prefix.
+
+These controls are shared by web and Electron. Full Hybrid VWAN hub connections
+keep their existing weight and inbound prepend behavior. Classic Azure-facing
+gateway prepend values from JSON are preserved but not modeled; configure the
+site link instead. Legacy site-link weights are preserved on edit but are not
+Azure connection weight controls. Standalone VWAN mode does not acquire Full
+Hybrid weight/prepend support. MED, physical-session ECMP distribution and
+convergence timing are not assessed. See the scoped
+[dual-ER lab findings](../verification/dual-er-private-peering.md).
+
+### Managed relationships
+
 Managed resources now have a default **Managed peer relationships** table,
 with the original peer name, known remote ASN, relationship type, connection
 ID and enabled configuration. VWAN hubs use ASN **65515**, ER/MSEE location
