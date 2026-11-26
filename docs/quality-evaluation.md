@@ -56,7 +56,7 @@ run directory. Local evidence stays local. CI runs the scorecard adapter tests
 and the real registered accessibility audit, retaining its raw automated reports
 for seven days. It does not upload study data or claim a full evaluation.
 
-The executable regression manifest is `scripts/quality-scorecard.mjs`, version 15.
+The executable regression manifest is `scripts/quality-scorecard.mjs`, version 16.
 Its registered files are authoritative for the current corpus; the adapter tests
 check this version statement against the executable manifest in CI. This version
 is independent of the platform contract, engine and native topology versions.

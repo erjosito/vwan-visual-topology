@@ -26,6 +26,11 @@ export function validateSubnetPeeringScopes(topology: AzNetTopology): string[] {
     if (peering.vnetAId === peering.vnetBId || pairs.has(pair)) errors.push(`Peering "${peering.name}": only one peering link per distinct VNet pair is allowed.`)
     pairs.add(pair)
     if (peering.scope?.type !== 'subnets') {
+      const left = topology.vnets.find((vnet) => vnet.id === peering.vnetAId)
+      const right = topology.vnets.find((vnet) => vnet.id === peering.vnetBId)
+      if (left && right) for (const prefix of left.prefixes) for (const remote of right.prefixes) {
+        if (overlaps(prefix, remote)) errors.push(`Peering "${peering.name}": VNet "${left.name}" (${prefix}) overlaps VNet "${right.name}" (${remote}); whole-VNet peering requires non-overlapping address spaces.`)
+      }
       for (const [localId, remoteId] of [[peering.vnetAId, peering.vnetBId], [peering.vnetBId, peering.vnetAId]]) {
         const seen = remoteSpaces.get(remoteId) ?? []
         seen.push(...(topology.vnets.find((vnet) => vnet.id === localId)?.prefixes ?? [])
