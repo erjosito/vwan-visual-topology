@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   buildDashboardSummary, persistDashboardSummary, isApprovedDashboardUser, dashboardResponse,
 } from '../functions/github-statistics/dashboard.mjs'
+import { cloudMetricsSource } from '../functions/github-statistics/cloud.mjs'
 
 const repository = 'owner/project'
 const now = new Date('2026-11-16T12:00:00Z')
@@ -64,6 +65,7 @@ test('missing traffic is not zero; empty and foreign archives are rejected', asy
   assert.deepEqual(result.traffic, { status: 'not_configured' })
   assert.deepEqual(result.trafficDays, [])
   assert.deepEqual(result.web, { status: 'not_configured', days: [] })
+  assert.deepEqual(result.cloud, { status: 'not_configured', days: [] })
   await assert.rejects(buildDashboardSummary([], { repository, now }), /No statistics/)
   await assert.rejects(buildDashboardSummary([{ ...data, repository: 'other/repository' }], { repository, now }), /Invalid/)
 })
@@ -141,6 +143,41 @@ test('summary rebuild excludes old history and retries conditional writes after 
     repository, now,
     container: { getBlockBlobClient() { return { async getProperties() { throw new Error('Storage unavailable') } } } },
   }), /Storage unavailable/)
+})
+
+test('cloud history deduplicates overlapping windows, preserves unavailable samples and never mixes resources or metric sources', async () => {
+  const first = snapshot('2026-11-15T04:17:00Z', [])
+  const latest = snapshot('2026-11-16T04:17:00Z', [])
+  const other = snapshot('2026-11-14T04:17:00Z', [])
+  const resourceId = '/subscriptions/id/resourceGroups/cloud/providers/Microsoft.Insights/components/cloud-api'
+  first.cloud = {
+    status: 'available', source: cloudMetricsSource, resourceId, collectedAt: first.collectedAt,
+    days: [{ date: '2026-11-14', requests: 20, throttled: 3, serverErrors: 1 }],
+  }
+  latest.cloud = {
+    ...first.cloud, resourceId: resourceId.toUpperCase(), collectedAt: latest.collectedAt,
+    days: [
+      { date: '2026-11-14', requests: 22, throttled: null, serverErrors: null, owner: 'omit-this' },
+      { date: '2026-11-15', requests: 0, throttled: 0, serverErrors: 0 },
+      { date: '2026-11-16', requests: 100 },
+      { date: '2020-01-01', requests: 100 },
+    ],
+  }
+  other.cloud = {
+    ...first.cloud, resourceId: `${resourceId}-other`, collectedAt: other.collectedAt,
+    days: [{ date: '2026-11-13', requests: 1000, throttled: 0, serverErrors: 0 }],
+  }
+  const result = await buildDashboardSummary([latest, first, other, latest], { repository, now })
+  assert.deepEqual(result.cloud.days, [
+    { date: '2026-11-14', requests: 22, throttled: null, serverErrors: null },
+    { date: '2026-11-15', requests: 0, throttled: 0, serverErrors: 0 },
+  ])
+  assert.equal(result.cloud.collectedAt, latest.collectedAt)
+  assert.equal(result.cloud.source, cloudMetricsSource)
+  assert.ok(!JSON.stringify(result.cloud).includes('omit-this'))
+  await assert.rejects(buildDashboardSummary([
+    { ...latest, cloud: { ...latest.cloud, source: 'sampled-log-rows' } },
+  ], { repository, now }), /Unsupported user-cloud/)
 })
 
 const tenantId = '11111111-1111-4111-8111-111111111111'

@@ -75,7 +75,66 @@ fails collection rather than publishing a misleading successful snapshot.
 MCP remains local stdio with no runtime reporting; release downloads are still
 only distribution evidence.
 
-Configure access once using an administrator with role-assignment permission:
+## Optional cloud operations metrics
+
+The same daily collector can archive the dedicated user-cloud service's existing
+Application Insights **standard** `requests/count` metric. It requests `Count`
+aggregates for the preceding 90 completed UTC days in 30-day windows, both
+overall and split by `request/resultCode`. The private dashboard adds
+range-scoped server-request, HTTP 429 and HTTP 5xx totals, charts and daily
+coverage. Overlapping snapshots replace observations rather than adding them;
+different Application Insights resources are never combined. Older schema-v1
+snapshots without the optional `cloud` section remain valid.
+
+These are preaggregated standard metrics, not counts of sampled request-log rows.
+See Microsoft's [metric types](https://learn.microsoft.com/en-us/azure/azure-monitor/app/metrics-overview)
+and [Application Insights metric reference](https://learn.microsoft.com/en-us/azure/azure-monitor/reference/supported-metrics/microsoft-insights-components-metrics).
+Only numerical daily aggregates are retained, not individual requests, URLs,
+owner identities, topology content or sharing capabilities. No new application
+instrumentation, monitoring workspace or database is introduced.
+
+Missing request samples stay unavailable. Status counts are shown only when the
+returned status-code buckets reconcile with an explicit overall count and have
+no positive unknown-code bucket. Thus a partial/missing breakdown cannot be
+mistaken for zero throttles or an error-free day. Only an explicit zero overall
+count establishes zero traffic without status buckets. Malformed/truncated
+responses, denied access and configured collection errors fail the invocation,
+without uploading a partial snapshot.
+
+The scope is the dedicated Application Insights component, not just anonymous
+sharing or unique users. HTTP 5xx does not include ordinary 401/403/404 responses.
+Telemetry coverage is not proof of all ingress traffic, billable executions or
+Azure spending. Sharing-specific breakdowns, subdaily peaks, latency, cost
+reporting and real-time alerts are not part of this first slice. Daily collection
+is not an abuse circuit breaker or a spending cap. The current sharing limits
+remain unchanged by the owner's 2026-11-26 decision under #473.
+
+Activation requires separate authorized configuration; merging does not activate
+the collector or grant access:
+
+1. Verify the **existing dedicated** user-cloud Application Insights component.
+   Grant the statistics runtime identity **Monitoring Reader**, scoped only to
+   that component. Do not grant subscription-wide access, topology Blob access
+   or permission to write monitoring settings. The collector uses the ARM metrics
+   API, not Log Analytics queries or an Application Insights API key.
+2. Set `AZURE_STATS_USER_CLOUD_INSIGHTS_RESOURCE_ID` in the protected
+   **github-statistics** GitHub environment to the full component resource ID.
+3. Explicitly promote the tested `statistics` candidate using the release
+   runbook. Release copies the optional variable into the existing Function's
+   setting of the same name. Allow for RBAC propagation, then use an approved
+   collection to verify coverage and freshness before relying on the panel.
+
+No live role assignment, monitoring inspection or deployment is implied by these
+instructions. Existing dashboard authorization and private Storage remain
+unchanged. To disable collection, remove both the Function app setting and the
+GitHub environment variable; an absent variable does not delete an existing app
+setting during release. Reapplying base infrastructure can replace app settings,
+so restore the approved configuration afterward. Without configuration/history
+the panel says not collected, not zero. Retained history shows its own collection
+timestamp and warns after 36 hours, independently of fresh GitHub/web snapshots.
+
+For the **Static Web App metrics** described above, configure access once using
+an administrator with role-assignment permission:
 
 ```powershell
 $swaId = az staticwebapp show --resource-group '<web-resource-group>' --name '<production-swa-name>' --query id --output tsv
@@ -243,7 +302,7 @@ does not include a separately provisioned alerting workspace.
 ## Local checks and manual collection
 
 ```powershell
-node --test scripts\collect-github-statistics.test.mjs scripts\github-statistics-function.test.mjs scripts\github-statistics-dashboard.test.mjs scripts\github-statistics-swa.test.mjs
+node --test scripts\collect-github-statistics.test.mjs scripts\github-statistics-function.test.mjs scripts\github-statistics-dashboard.test.mjs scripts\github-statistics-swa.test.mjs scripts\github-statistics-cloud.test.mjs
 $env:GITHUB_TOKEN = gh auth token
 # Optional: set GH_STATS_TRAFFIC_TOKEN using a suitably scoped token.
 node scripts\collect-github-statistics.mjs --repository erjosito/vwan-visual-topology --output test-artifacts\github-statistics.json

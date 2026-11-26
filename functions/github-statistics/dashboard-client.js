@@ -104,6 +104,27 @@ function renderHistory() {
   for (const entry of [...web].reverse()) {
     row('web-rows', [entry.date, webNumber(entry.hits), bytes(entry.bytesSent), webNumber(entry.errors)])
   }
+  const cloud = (summary.cloud?.days ?? []).filter(({ date }) => date >= cutoff)
+  for (const id of ['cloud-cards', 'cloud-rows']) element(id).replaceChildren()
+  for (const [key, title] of [
+    ['requests', 'Cloud server requests'], ['throttled', 'HTTP 429 responses'], ['serverErrors', 'HTTP 5xx responses'],
+  ]) {
+    const measured = cloud.filter((entry) => entry[key] !== null && entry[key] !== undefined)
+    card(title, measured.length ? measured.reduce((sum, entry) => sum + entry[key], 0) : null,
+      `${measured.length}/${element('range').value} UTC days measured; total of available samples`, 'cloud-cards', webNumber)
+  }
+  element('cloud-status').textContent = summary.cloud?.status === 'available'
+    ? `Source: ${summary.cloud.resourceName}. Last standard-metrics collection: ${utc(summary.cloud.collectedAt)}. Completed UTC days only.`
+    : 'User-cloud metrics have not been collected. Configure monitoring access and explicitly release the statistics collector.'
+  element('cloud-status').classList.toggle('warning', summary.cloud?.status === 'available'
+    && Date.now() - Date.parse(summary.cloud.collectedAt) > 36 * 3_600_000)
+  chart('cloud-requests-chart', cloud, [{ key: 'requests', color: '#8ecaff' }], 'Daily observed cloud server requests, not users or billed executions.')
+  chart('cloud-errors-chart', cloud, [
+    { key: 'throttled', color: '#8ecaff' }, { key: 'serverErrors', color: '#8de0c2' },
+  ], 'Daily cloud HTTP 429 and 5xx responses; unavailable counts are not zero.')
+  for (const entry of [...cloud].reverse()) {
+    row('cloud-rows', [entry.date, webNumber(entry.requests), webNumber(entry.throttled), webNumber(entry.serverErrors)])
+  }
   for (const id of ['traffic-rows', 'download-rows']) element(id).replaceChildren()
   chart('traffic-chart', traffic.map((entry) => ({ date: entry.date, views: entry.views?.count, clones: entry.clones?.count })), [
     { key: 'views', color: '#8ecaff' }, { key: 'clones', color: '#8de0c2' },
@@ -133,7 +154,7 @@ async function load() {
     if (response.status === 503) throw new Error((await response.json()).error)
     if (!response.ok) throw new Error('The statistics service is unavailable. Try again later.')
     summary = await response.json()
-    element('repository').textContent = `${summary.repository} - GitHub distribution and web hosting metrics`
+    element('repository').textContent = `${summary.repository} - GitHub distribution, web hosting and cloud operations`
     const age = Date.now() - Date.parse(summary.collectedAt)
     element('status').textContent = `Last successful collection: ${utc(summary.collectedAt)}${age > 36 * 3_600_000 ? ' - collection is overdue.' : ''}`
     element('status').classList.toggle('warning', age > 36 * 3_600_000)

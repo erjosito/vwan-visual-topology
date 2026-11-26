@@ -435,6 +435,14 @@ spending limit or an application rate limit. Monitor platform costs and configur
 budget alerts and abuse protection for the intended public audience.
 Private endpoints incur charges even when the Function scales to zero.
 
+The private statistics dashboard can optionally archive existing Application
+Insights standard request metrics, including daily HTTP 429 and 5xx totals.
+See [cloud operations metrics](github-statistics.md#optional-cloud-operations-metrics)
+for the separate resource-scoped monitoring permission and explicit statistics
+release needed to activate collection. It does not read user-cloud Blobs or
+sampled request logs, change sharing limits, report actual spending or replace
+real-time alerts.
+
 Blob and container soft deletion retain deleted data for 30 days. App deletion
 does not purge these recoverable copies immediately. Production operators must
 use their Azure administrative access for retention or permanent-erasure requests.

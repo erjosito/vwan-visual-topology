@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises'
 import { collectAndPersist } from './handler.mjs'
 import { dashboardResponse, persistDashboardSummary } from './dashboard.mjs'
 import { collectStaticWebAppMetrics } from './swa.mjs'
+import { collectUserCloudMetrics } from './cloud.mjs'
 
 const html = await readFile(new URL('./dashboard.html', import.meta.url), 'utf8')
 const script = await readFile(new URL('./dashboard-client.js', import.meta.url), 'utf8')
@@ -31,6 +32,10 @@ async function run(context) {
     container,
     collectWebMetrics: process.env.AZURE_STATS_SWA_RESOURCE_ID ? () => collectStaticWebAppMetrics({
       resourceId: process.env.AZURE_STATS_SWA_RESOURCE_ID,
+      credential: new ManagedIdentityCredential({ clientId: process.env.AZURE_STATS_RUNTIME_CLIENT_ID }),
+    }) : undefined,
+    collectCloudMetrics: process.env.AZURE_STATS_USER_CLOUD_INSIGHTS_RESOURCE_ID ? () => collectUserCloudMetrics({
+      resourceId: process.env.AZURE_STATS_USER_CLOUD_INSIGHTS_RESOURCE_ID,
       credential: new ManagedIdentityCredential({ clientId: process.env.AZURE_STATS_RUNTIME_CLIENT_ID }),
     }) : undefined,
     refreshSummary: () => persistDashboardSummary({ container, repository }),
