@@ -134,7 +134,7 @@ for (const language of ['en', 'ja']) for (const theme of ['light', 'dark']) {
 }
 
 for (const mode of ['vwan', 'hub-spoke', 'full']) for (const language of ['en', 'ja']) {
-  test(`${mode} ${language}: empty workspace visibly offers Windows and MCP`, async ({ page }, info) => {
+  test(`${mode} ${language}: platform downloads stay in Help without occupying the empty canvas`, async ({ page }) => {
     const text = (en: string, ja: string) => language === 'ja' ? ja : en
     await page.setViewportSize({ width: language === 'ja' ? 390 : 1440, height: 900 })
     await page.addInitScript(language => {
@@ -142,13 +142,19 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) for (const language of ['en', 
       localStorage.setItem('aznet-theme', language === 'ja' ? 'dark' : 'light')
     }, language)
     await page.goto(`/?mode=${mode}`)
-    const platforms = page.getByRole('complementary', { name: text('Windows app and MCP server', 'Windows アプリと MCP サーバー'), exact: true })
-    await expect(platforms).toBeInViewport()
-    await expect(platforms.getByRole('link', { name: text('Windows app', 'Windows アプリ'), exact: true })).toBeVisible()
-    await expect(platforms.getByRole('link', { name: text('MCP server', 'MCP サーバー'), exact: true })).toBeVisible()
-    expect(await platforms.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
-    expect((await new AxeBuilder({ page }).include('.empty-workspace-platforms').analyze()).violations).toEqual([])
-    await page.screenshot({ path: info.outputPath('empty-platform-links.png') })
+    await expect(page.getByTestId(mode === 'vwan' ? 'vwan-app' : 'aznet-app')).toBeVisible()
+    const platforms = page.locator('.empty-workspace-platforms')
+    await expect(platforms).toHaveCount(0)
+    await expect(page.locator('.platform-link:visible')).toHaveCount(0)
+    await openWorkspaceActions(page)
+    const help = page.locator('.presentation-group').filter({
+      has: page.locator('summary', { hasText: language === 'ja' ? /^ヘルプ$/ : /^Help$/ }),
+    })
+    await help.locator('summary').click()
+    await expect(help.getByRole('link', { name: text('Windows app', 'Windows アプリ'), exact: true })).toBeVisible()
+    await expect(help.getByRole('link', { name: text('MCP server', 'MCP サーバー'), exact: true })).toBeVisible()
+    await help.getByRole('button', { name: text('Close', '閉じる'), exact: true }).click()
+    await expect(page.locator('.platform-link:visible')).toHaveCount(0)
     if (mode === 'full' && language === 'en') {
       await openWorkspaceActions(page)
       if (!await page.getByRole('complementary', { name: 'Workspace controls', exact: true }).isVisible()) {
@@ -158,7 +164,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) for (const language of ['en', 
       await expect(platforms).toHaveCount(0)
       await page.keyboard.press('Escape')
       await page.getByRole('button', { name: /Undo/ }).click()
-      await expect(platforms).toBeVisible()
+      await expect(platforms).toHaveCount(0)
     }
   })
 }
