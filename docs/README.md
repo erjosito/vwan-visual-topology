@@ -45,10 +45,10 @@ Comma-separated prefix lists retain commas and spaces while you type; clearing a
 site's list withdraws its advertised prefixes. Names still update immediately.
 Legacy Virtual WAN configuration dialogs use **Save changes** instead.
 
-On the web, **Help > Windows app** opens the Windows installer releases, and
+On the web, **Help > Windows app** opens the [Microsoft Store listing](https://apps.microsoft.com/detail/9P76BP1MXWZ2), and
 **Help > MCP server** opens the local MCP setup guide. Both links are also
 visible on an empty canvas, open in a new tab, and leave the current design
-unchanged. The standalone Windows development installer is unsigned.
+unchanged.
 
 1. **Open a workspace**: New sessions start with an empty mixed-network design; **Workspace** opens saved designs or creates a new one. There is no architecture-mode selector. Classic VNets and Virtual WAN hubs can coexist. Legacy Virtual WAN files and samples open in their compatible native editor without lossy conversion.
 2. **Add Topology Objects**: Use the contextual workspace controls or right-click blank canvas to add Virtual WAN hubs, spoke/hub VNets, on-premises branch/datacenter sites, and ExpressRoute peering locations.

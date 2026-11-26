@@ -151,7 +151,7 @@ export const ja: Record<string, string> = {
   'Windows app': 'Windows アプリ',
   'MCP server': 'MCP サーバー',
   'Windows app and MCP server': 'Windows アプリと MCP サーバー',
-  'Windows x64 downloads (unsigned development installer)': 'Windows x64 のダウンロード（未署名の開発版インストーラー）',
+  'Get the Windows app from the Microsoft Store': 'Microsoft Store から Windows アプリを入手',
   'Local MCP setup for compatible AI clients (Node 22+)': '対応する AI クライアント向けのローカル MCP セットアップ（Node 22 以降）',
   'Use AzNetSim on Windows or from a compatible AI client. This browser and your design stay open.': 'Windows や対応する AI クライアントから AzNetSim を利用できます。このブラウザーとデザインは開いたままです。',
   'Routing checks': 'ルーティングの確認',
