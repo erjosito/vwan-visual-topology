@@ -5,6 +5,11 @@
 **Manifest version:** `0.5.0`. This snapshot also includes the subsequently merged warning-acknowledgement change, #369; it is not just the previously released artifact.  
 **Scope:** architecture assessment, recommendations and subsequent issue tracking only. No application changes or deployments.
 
+**Historical snapshot:** measurements, implementation status and recommendations
+below refer to the recorded source, not current main. See the
+[living contract map](../PLATFORM.md#living-contracts-and-sources) for current
+contracts and the linked GitHub issues for delivery status.
+
 ### Backlog tracking update - 2026-11-21
 
 The owner subsequently requested GitHub tracking: [epic #379](https://github.com/erjosito/vwan-visual-topology/issues/379). Tabs #364 and Save #374 are already being implemented, so **R6 is now the highest-priority integration item**, not deferred until later persistence work. Coordinate their existing implementations rather than starting a competing document abstraction or blocking them on the entire epic. Recommendation IDs below remain stable; section order is not the updated urgency order.

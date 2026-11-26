@@ -439,6 +439,57 @@ Blob and container soft deletion retain deleted data for 30 days. App deletion
 does not purge these recoverable copies immediately. Production operators must
 use their Azure administrative access for retention or permanent-erasure requests.
 
+## Operational evidence and follow-ups
+
+The following is a source inventory, not a live configuration inspection or a
+recovery guarantee. No Azure resource or user cloud data was accessed for this
+documentation update.
+
+| Question | What the repository establishes | What remains to decide or verify |
+| --- | --- | --- |
+| Is sharing throttled globally? | [`sharing.ts`](../functions/user-cloud/sharing.ts) keeps request, concurrency and per-owner issuance counters in the running handler's memory. The limits described under [read-only sharing](#read-only-sharing) are local, resettable controls, not aggregate or per-IP limits. | Approved inspection of the deployed ingress, worker/replica configuration and aggregate controls. Decide whether current exposure and demand justify a gateway rule or distributed enforcement; do not add infrastructure speculatively. |
+| How far can hosting scale? | [`user-cloud.bicep`](../infra/user-cloud.bicep) specifies a maximum of 40 Function instances. That is neither an observed replica count nor a global application request/cost ceiling. | Actual deployed settings, expected traffic and an operator-approved abuse/cost policy. Telemetry ingestion caps are not spending limits. |
+| Can deleted data be recovered? | The template enables 30-day Blob and container soft deletion. The API uses conditional writes and owner-scoped paths. | Effective retention, operator access and an isolated restore drill. Soft deletion alone does not establish recovery from overwrites/corruption or a complete backup. The template does not enable blob versioning or define a separate backup policy. |
+| What does app deletion promise? | Deletes remove active records; soft-deleted copies may remain. Share resolution also depends on the private index and source incarnation. | A retention/erasure policy and a restore procedure that does not revive revoked links, erased data or stale write authority. Local profile recovery and portable JSON exports remain separate from server recovery. |
+
+### Isolated restore verification procedure
+
+This is a procedure to approve and execute later, not a completed drill.
+
+1. Obtain explicit operator approval for the test account(s), isolated
+   container/environment, synthetic fixture IDs, allowed operations, retention
+   window and cleanup. Agree the desired recovery point and recovery time.
+   If safe isolation or approval is missing, record the blocker and stop.
+   Do not inspect or restore unrelated user records.
+2. Record the effective soft-delete, versioning/backup and access configuration
+   using approved administrative metadata only. Prepare synthetic native
+   topology and progress fixtures, preserving local originals for comparison.
+   Create test saves/shares through normal consent and conditional-write paths.
+   Include a second owned test account to check isolation if approved.
+3. Delete only the approved fixtures and verify the expected missing/revoked
+   behavior. Use the approved administrative recovery mechanism to recover only
+   those fixtures within the measured retention window. Treat overwrite recovery
+   as a separate case: if no version/backup is available, record it as unsupported
+   rather than treating a deleted-blob drill as proof.
+4. Verify native content against the originals, account isolation and rejection
+   of stale ETags after restoration. Check both share-index and source-incarnation
+   behavior. Restoring old share/index/source records can revive an unexpired
+   capability; do not restore revoked links or expose restored sharing records
+   without an explicitly reviewed revocation policy. Stop if deletion or sharing
+   expectations cannot be preserved.
+5. Record the date, tested source/deployment revision, approved scope,
+   configuration, elapsed recovery time, content hashes, outcomes and remaining
+   gaps. Do not retain topology bodies, owner paths, capability URLs, credentials
+   or tokens in reports/logs. Revoke test shares and clean up only the approved
+   fixtures under the agreed retention policy. Record retained soft-deleted
+   copies honestly; application cleanup is not immediate permanent erasure.
+
+Track the [aggregate sharing-limit decision (#473)](https://github.com/erjosito/vwan-visual-topology/issues/473)
+and [retention/recovery decision (#474)](https://github.com/erjosito/vwan-visual-topology/issues/474)
+separately under #382. Boundary-preservation requirements remain in the
+[platform host contract](../PLATFORM.md#clients-and-data-flow) and
+[document lifecycle](document-lifecycle.md); signing remains #146.
+
 ## Conflicts, offline use and privacy
 
 Account progress has a separate local cache per Microsoft home account ID.
