@@ -1,4 +1,4 @@
-import { inventoryOwners, namedEndpoints, sameInventoryOwner } from './inventory'
+import { inventoryOwners, namedEndpoints, ownsInventoryAddress, sameInventoryOwner } from './inventory'
 import type { InventoryOwner, InventoryTopology } from './inventory'
 import type { ApplicationReference } from './application'
 
@@ -6,17 +6,6 @@ export const applicationLimits = {
   maxServices: 32, maxDnsProfiles: 32, maxReferences: 64, maxFeatures: 32,
   maxListeners: 64, maxRules: 64, maxMembers: 64, maxDnsEndpoints: 64,
 } as const
-export const applicationCapabilities = {
-  inventoryVersion: 1,
-  requestVersion: 1,
-  minimumContractVersion: 2,
-  operations: ['application'],
-  providers: [] as string[],
-  scope: 'Identity and evidence contracts only. All application/DNS service providers are unavailable.',
-  limits: applicationLimits,
-  privacy: 'Offline declared configuration only; no DNS queries, probes, credentials, telemetry or origin fetches.',
-}
-
 export const fail = (reason: string): never => { throw new Error(`Application: ${reason}`) }
 export function object(value: unknown, fields: string[]): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) return fail('plain object required')
@@ -88,9 +77,10 @@ export function validateApplicationInventory(topology: InventoryTopology): void 
   const services = list(application.services, applicationLimits.maxServices)
   const profiles = list(application.dnsProfiles, applicationLimits.maxDnsProfiles)
   const ids = new Set<string>()
+  const proxyAllocations = new Set<string>()
   for (const [entries, kinds] of [[services, ['application-gateway', 'front-door']], [profiles, ['traffic-manager']]] as const) {
     for (const value of entries) {
-      const entry = object(value, entries === services ? ['id', 'name', 'kind', 'owner', 'references', 'unsupportedFeatures'] : ['id', 'name', 'kind', 'references', 'unsupportedFeatures'])
+      const entry = object(value, entries === services ? ['id', 'name', 'kind', 'owner', 'references', 'unsupportedFeatures', 'tcpProxy'] : ['id', 'name', 'kind', 'references', 'unsupportedFeatures'])
       const id = text(entry.id)
       if (ids.has(id)) fail(`duplicate original ID ${id}`)
       ids.add(id); text(entry.name)
@@ -102,6 +92,41 @@ export function validateApplicationInventory(topology: InventoryTopology): void 
       const refs = list(entry.references, applicationLimits.maxReferences).map(reference)
       if (new Set(refs.map(applicationReferenceKey)).size !== refs.length) fail('duplicate original references')
       for (const feature of list(entry.unsupportedFeatures, applicationLimits.maxFeatures)) text(feature, 256)
+      if (entry.tcpProxy !== undefined) {
+        const proxy = object(entry.tcpProxy, ['sku', 'subnetId', 'frontendAddress', 'instanceAddress', 'listenerId', 'ruleId', 'rulePriority', 'poolId',
+          'frontendPort', 'backendPort', 'backend', 'declaredHealth', 'provisioningState', 'proxyProtocol'])
+        if (topology.version !== 2 || entry.kind !== 'application-gateway' || entry.owner === undefined) fail('TCP proxy requires an original native-v2 Application Gateway owner')
+        const scope = owner(entry.owner), network = topology.version === 2 ? topology.vnets.find((vnet) => vnet.id === scope.id) : undefined
+        const subnet = network?.subnets.find((subnet) => subnet.id === proxy.subnetId)
+        if (scope.kind !== 'vnet' || !subnet || ['GatewaySubnet', 'RouteServerSubnet', 'AzureFirewallSubnet'].includes(subnet.name)) return fail('original dedicated Application Gateway subnet required')
+        if (network?.appliances.some((device) => device.subnetId === subnet.id)
+          || topology.inventory?.nics.some((nic) => sameInventoryOwner(nic.owner, scope) && nic.ipConfigurations.some((config) => config.subnetId === subnet.id))
+          || subnet.privateEndpoints?.length
+          || topology.inventory?.loadBalancers?.some((lb) => sameInventoryOwner(lb.owner, scope) && lb.frontends.some((frontend) => frontend.kind === 'private' && frontend.subnetId === subnet.id))
+          || topology.inventory?.privateLinkServices?.some((service) => sameInventoryOwner(service.owner, scope) && service.natIpConfigurations.some((config) => config.subnetId === subnet.id))) {
+          fail('Application Gateway subnet must not contain other modeled services or NICs')
+        }
+        if (typeof proxy.sku !== 'string' || !['Standard_v2', 'WAF_v2'].includes(proxy.sku)
+          || typeof proxy.provisioningState !== 'string' || !['succeeded', 'unknown'].includes(proxy.provisioningState)
+          || typeof proxy.declaredHealth !== 'string' || !['healthy', 'unhealthy', 'unknown'].includes(proxy.declaredHealth)
+          || typeof proxy.proxyProtocol !== 'boolean') fail('explicit TCP proxy SKU, provisioning, health and Proxy Protocol states required')
+        const configurationIds = ['listenerId', 'ruleId', 'poolId'].map((field) => text(proxy[field]))
+        if (new Set(configurationIds).size !== configurationIds.length) fail('distinct original listener, rule and pool IDs required')
+        if (typeof proxy.rulePriority !== 'number' || !Number.isInteger(proxy.rulePriority) || proxy.rulePriority < 1 || proxy.rulePriority > 20000) fail('original TCP rule priority 1-20000 required')
+        for (const field of ['frontendPort', 'backendPort']) {
+          const port = proxy[field]
+          if (typeof port !== 'number' || !Number.isInteger(port) || port < 1 || port > 65535) fail('TCP proxy ports 1-65535 required')
+        }
+        for (const field of ['frontendAddress', 'instanceAddress']) {
+          if (proxy[field] === undefined) continue
+          const address = text(proxy[field]), key = JSON.stringify([scope.id, address])
+          if (!ownsInventoryAddress(topology, scope, subnet.id, address) || proxyAllocations.has(key)) fail('TCP proxy address must be unique within its original gateway subnet')
+          proxyAllocations.add(key)
+        }
+        const backend = object(proxy.backend, ['workloadId', 'nicId', 'ipConfigurationId'])
+        const target = reference({ kind: 'workload', ...backend })
+        if (!applicationReferenceExists(topology, target)) fail('original TCP backend workload/NIC/IP binding required')
+      }
     }
   }
   for (const entry of [...topology.application.services, ...topology.application.dnsProfiles]) {

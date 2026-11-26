@@ -10,6 +10,75 @@ import { executePlatform } from '../src/platform/service'
 import { loadLanguage, translate } from '../src/messages'
 import '../src/application-messages-ja'
 import '../src/network-detail-messages-ja'
+import '../src/packet-messages-ja'
+import { applicationTcpTopology } from '../tests/fixtures/application-tcp'
+
+for (const locale of ['en', 'ja'] as const) {
+test(`private TCP authoring ${locale} exposes separate connection tuples and preserves them after reload`, async ({ page }) => {
+  await loadLanguage(locale)
+  const t = (message: string) => translate(locale, message)
+  const topology = applicationTcpTopology()
+  delete topology.application
+  await page.addInitScript(({ topology, locale }) => {
+    if (!localStorage.getItem('aznet-visual-topology:v1')) localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))
+    localStorage.setItem('vwan-visual-topology:language:v1', locale)
+  }, { topology, locale })
+  await page.setViewportSize({ width: locale === 'ja' ? 390 : 1600, height: 1000 })
+  await page.goto('/?mode=full')
+  const open = async () => {
+    await page.getByTestId('aznet-vnet-proxy').click()
+    await page.getByRole('button', { name: t('VNet detail'), exact: true }).click()
+    return page.getByTestId('network-detail-dialog')
+  }
+  const dialog = await open(), editor = dialog.getByTestId('tcp-proxy-editor')
+  await editor.locator('summary').click()
+  const form = editor.getByTestId('tcp-proxy-form')
+  await form.getByLabel(t('TCP gateway name'), { exact: true }).fill('Declared TCP gateway')
+  await form.getByLabel(t('Private frontend IPv4 (blank means unknown)'), { exact: true }).fill('10.92.1.10')
+  await form.getByLabel(t('Serving instance IPv4 (blank means unknown)'), { exact: true }).fill('10.92.1.4')
+  await form.getByLabel(t('Original TCP backend'), { exact: true }).selectOption({ label: 'backend VM / backend NIC / Primary (10.93.1.4)' })
+  await form.getByLabel(t('Backend TCP port'), { exact: true }).fill('15433')
+  await form.getByLabel(t('Declared default TCP probe health'), { exact: true }).selectOption('healthy')
+  await form.getByLabel(t('Declare successful service provisioning (unverified)'), { exact: true }).check()
+  await form.getByRole('button', { name: t('Save original TCP proxy'), exact: true }).click()
+  await expect(dialog.getByTestId('application-flow-panel')).toBeVisible()
+  const inspect = async () => {
+    const panel = page.getByTestId('application-flow-panel')
+    await panel.getByLabel(t('Application operation'), { exact: true }).selectOption('tcp')
+    await panel.getByLabel(t('Original client or resolver'), { exact: true }).selectOption({ label: 'client VM / client NIC / Primary (100.64.1.4) [Client / client]' })
+    await panel.getByRole('button', { name: t('Inspect application contract'), exact: true }).click()
+    const decisions = panel.getByTestId('application-decisions')
+    await expect(decisions.getByRole('heading', { name: `${t('Configuration')}: ${t('satisfied')} · ${t('Application availability')}: ${t('not-assessed')}`, exact: true })).toBeVisible()
+    for (const id of ['client-to-proxy', 'proxy-to-backend']) {
+      const connection = decisions.getByTestId(`application-connection-${id}`)
+      await connection.locator('summary').first().click()
+      await expect(connection.getByTestId('application-connection-tuple').first()).toHaveText(id === 'client-to-proxy'
+        ? '100.64.1.4:49152 -> 10.92.1.10:1433' : '10.92.1.4:49152 -> 10.93.1.4:15433')
+      await connection.locator('summary').last().click()
+      await expect(connection.getByTestId('application-connection-tuple')).toHaveCount(2)
+    }
+    expect((await new AxeBuilder({ page }).include('[data-testid="application-flow-panel"]').analyze()).violations).toEqual([])
+  }
+  await inspect()
+  const read = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
+  const saved = await read()
+  await page.reload()
+  await open()
+  await inspect()
+  expect(await read()).toEqual(saved)
+  expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+  await editor.locator('summary').click()
+  await editor.getByLabel(t('Original TCP gateway'), { exact: true }).selectOption(saved.application.services[0].id)
+  await editor.getByLabel(t('Declared default TCP probe health'), { exact: true }).selectOption('unknown')
+  await editor.getByRole('button', { name: t('Save original TCP proxy'), exact: true }).click()
+  await expect(page.getByTestId('application-decisions')).toHaveCount(0)
+  await page.getByRole('button', { name: t('Inspect application contract'), exact: true }).click()
+  await expect(page.getByTestId('application-decisions').getByRole('heading', {
+    name: `${t('Configuration')}: ${t('not-assessed')} · ${t('Application availability')}: ${t('not-assessed')}`, exact: true,
+  })).toBeVisible()
+  await expect(page.getByTestId('application-connection-proxy-to-backend')).toHaveCount(0)
+})
+}
 
 for (const mode of ['vwan', 'hub-spoke', 'full'] as const) {
   for (const locale of ['en', 'ja'] as const) {

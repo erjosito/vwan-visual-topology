@@ -1,8 +1,11 @@
 import { publicIpv4, sameInventoryOwner } from './inventory'
 import type { InventoryOwner, InventoryTopology, WorkloadIpReference } from './inventory'
-import type { FiveTuple, WorkloadEndpoint } from './packet-flow'
+import type { FiveTuple, PacketLeg, WorkloadEndpoint } from './packet-flow'
+import type { NsgAssessment } from './packet-security'
+import { evaluateTcpProxy } from './application-tcp'
 import { applicationReferenceExists, fail, object, reference, text, validateApplicationInventory } from './application-inventory'
-export { applicationLimits, applicationCapabilities, applicationReferenceKey, applicationReferenceExists, validateApplicationInventory } from './application-inventory'
+export { applicationLimits, applicationReferenceKey, applicationReferenceExists, validateApplicationInventory } from './application-inventory'
+export { applicationCapabilities } from './application-capabilities'
 
 export type ApplicationReference =
   | { kind: 'service'; id: string }
@@ -18,6 +21,23 @@ export interface ApplicationService {
   owner?: InventoryOwner
   references: ApplicationReference[]
   unsupportedFeatures: string[]
+  tcpProxy?: TcpProxyConfiguration
+}
+export interface TcpProxyConfiguration {
+  sku: 'Standard_v2' | 'WAF_v2'
+  subnetId: string
+  frontendAddress?: string
+  instanceAddress?: string
+  listenerId: string
+  ruleId: string
+  rulePriority: number
+  poolId: string
+  frontendPort: number
+  backendPort: number
+  backend: WorkloadIpReference
+  declaredHealth: 'healthy' | 'unhealthy' | 'unknown'
+  provisioningState: 'succeeded' | 'unknown'
+  proxyProtocol: boolean
 }
 export interface ApplicationDnsProfile {
   id: string
@@ -34,6 +54,7 @@ export interface ApplicationInventory {
 export type ApplicationClient = WorkloadEndpoint | { kind: 'external'; address: string }
 export type ApplicationRequest =
   | { version: 1; kind: 'http'; serviceId: string; client: ApplicationClient; scheme: 'http' | 'https'; host: string; port: number; path: string }
+  | { version: 1; kind: 'tcp'; serviceId: string; client: ApplicationClient; sourcePort: number; port: number }
   | { version: 1; kind: 'dns'; profileId: string; resolver: ApplicationClient; name: string; evaluatedAt: string; cache: 'fresh' }
 export type ApplicationOutcome = 'satisfied' | 'violated' | 'not-assessed'
 type Decision<K extends string, E> = {
@@ -47,18 +68,19 @@ type Decision<K extends string, E> = {
 }
 export type ApplicationDecision =
   | Decision<'dns-selection', { profileId: string; method: string | null; candidates: { endpointId: string; name: string; enabled: boolean | 'unknown'; health: 'healthy' | 'unhealthy' | 'unknown' }[]; ttl: number | null; cache: 'fresh'; evaluatedAt: string }>
-  | Decision<'listener-match', { serviceId: string; listenerId: string | null; ruleId: string | null; priority: number | null; scheme: 'http' | 'https'; host: string; port: number }>
+  | Decision<'listener-match', { serviceId: string; listenerId: string | null; ruleId: string | null; priority: number | null; scheme: 'http' | 'https' | 'tcp'; host: string | null; port: number }>
   | Decision<'request-route', { serviceId: string; path: string; poolId: string | null; candidates: ApplicationReference[]; unsupportedFeatures: string[] }>
-  | Decision<'network-leg', { leg: 'client-to-proxy' | 'proxy-to-backend'; source: ApplicationClient | ApplicationReference | null; target: ApplicationReference | null; before: (FiveTuple & { protocol: 'tcp' }) | null; after: (FiveTuple & { protocol: 'tcp' }) | null; packetEvidence: { section: 'packet'; direction: 'forward' | 'reply'; stepIndexes: number[] } | null }>
+  | Decision<'network-leg', { leg: 'client-to-proxy' | 'proxy-to-backend'; source: ApplicationClient | ApplicationReference | null; target: ApplicationReference | null; before: (FiveTuple & { protocol: 'tcp' }) | null; after: (FiveTuple & { protocol: 'tcp' }) | null; packetEvidence: { section: 'packet'; direction: 'forward' | 'reply'; stepIndexes: number[] } | { section: 'application-connections'; connectionId: string } | null }>
   | Decision<'response-assumption', { conditional: true; owner: ApplicationReference | null; httpAvailability: 'not-assessed'; tlsAvailability: 'not-assessed' }>
 export interface ApplicationResult {
   version: 1
-  kind: 'http' | 'dns'
+  kind: ApplicationRequest['kind']
   configuration: ApplicationOutcome
   availability: 'not-assessed'
   decisions: ApplicationDecision[]
   uncertainties: { decisionId: string; reasons: string[]; references: ApplicationReference[] }[]
   limitations: string[]
+  connections?: { id: 'client-to-proxy' | 'proxy-to-backend'; forward: PacketLeg; reply: PacketLeg; nsg: { forward: NsgAssessment; reply: NsgAssessment } }[]
 }
 export const applicationDecisionLabels: Record<ApplicationDecision['kind'], string> = {
   'dns-selection': 'DNS selection',
@@ -90,8 +112,14 @@ function client(value: unknown): ApplicationClient {
   return entry as unknown as ApplicationClient
 }
 export function validateApplicationRequest(value: unknown): ApplicationRequest {
-  const entry = object(value, ['version', 'kind', 'serviceId', 'client', 'scheme', 'host', 'port', 'path', 'profileId', 'resolver', 'name', 'evaluatedAt', 'cache'])
+  const entry = object(value, ['version', 'kind', 'serviceId', 'client', 'scheme', 'host', 'port', 'path', 'profileId', 'resolver', 'name', 'evaluatedAt', 'cache', 'sourcePort'])
   if (entry.version !== 1) fail('unsupported request version')
+  if (entry.kind === 'tcp') {
+    object(entry, ['version', 'kind', 'serviceId', 'client', 'sourcePort', 'port'])
+    const serviceId = text(entry.serviceId), source = client(entry.client)
+    if ([entry.port, entry.sourcePort].some((port) => typeof port !== 'number' || !Number.isInteger(port) || port < 1 || port > 65535)) fail('TCP ports 1-65535 required')
+    return { version: 1, kind: 'tcp', serviceId, client: source, port: entry.port as number, sourcePort: entry.sourcePort as number }
+  }
   if (entry.kind === 'http') {
     object(entry, ['version', 'kind', 'serviceId', 'client', 'scheme', 'host', 'port', 'path'])
     text(entry.serviceId); client(entry.client)
@@ -105,7 +133,7 @@ export function validateApplicationRequest(value: unknown): ApplicationRequest {
       || !Number.isFinite(Date.parse(entry.evaluatedAt)) || new Date(entry.evaluatedAt).toISOString() !== entry.evaluatedAt) fail('fresh resolver and explicit canonical UTC evaluation time required')
     return { ...entry, name: normalizeApplicationHost(entry.name) } as ApplicationRequest
   }
-  return fail('separate HTTP or DNS operation required')
+  return fail('separate TCP, HTTP or DNS operation required')
 }
 export function aggregateApplicationDecisions(kind: ApplicationRequest['kind'], decisions: readonly ApplicationDecision[]): ApplicationOutcome {
   if (decisions.some((entry) => entry.outcome === 'violated')) return 'violated'
@@ -128,17 +156,24 @@ export function aggregateApplicationDecisions(kind: ApplicationRequest['kind'], 
     || decisions.some((entry) => entry.kind === 'dns-selection')) return 'not-assessed'
   return 'satisfied'
 }
-export const applicationUnavailable = 'No application or DNS service provider is enabled. Configuration and availability are not assessed.'
+export const applicationUnavailable = 'This application or DNS operation has no enabled provider. Configuration and availability are not assessed.'
 export const applicationOffline = 'Declared configuration only. No live DNS, health, HTTP, TLS or origin requests are performed.'
 
 export function evaluateApplication(topology: InventoryTopology, input: ApplicationRequest): ApplicationResult {
   validateApplicationInventory(topology)
   const request = validateApplicationRequest(input)
-  const source = request.kind === 'http' ? request.client : request.resolver
+  const source = request.kind === 'dns' ? request.resolver : request.client
   if (source.kind === 'workload' && !applicationReferenceExists(topology, source)) fail('missing original client/resolver identity')
-  const entry = request.kind === 'http' ? topology.application?.services.find((service) => service.id === request.serviceId)
-    : topology.application?.dnsProfiles.find((profile) => profile.id === request.profileId)
+  const entry = request.kind === 'dns' ? topology.application?.dnsProfiles.find((profile) => profile.id === request.profileId)
+    : topology.application?.services.find((service) => service.id === request.serviceId)
   if (!entry) return fail('explicit original service/profile is missing')
+  if (request.kind === 'tcp' && entry.kind !== 'traffic-manager') {
+    const result = evaluateTcpProxy(topology, request, entry)
+    result.configuration = aggregateApplicationDecisions('tcp', result.decisions)
+    result.limitations.unshift(applicationOffline)
+    return result
+  }
+  if (request.kind === 'tcp') return fail('TCP requires an original application service')
   const selected: ApplicationReference = { kind: request.kind === 'http' ? 'service' : 'dns-profile', id: entry.id }
   const references = [selected, ...entry.references, ...(source.kind === 'workload' ? [source] : [])]
   const base = { outcome: 'not-assessed' as const, reasons: [applicationUnavailable], references, provenance: 'unsupported-provider' as const }

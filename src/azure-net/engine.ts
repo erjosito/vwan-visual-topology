@@ -2448,7 +2448,11 @@ function traceAzNetFlowCore(
       // Look up the Effective Route Table for this subnet
       const table = simulation.subnetTables[subnet.id]
       const matched = table ? lookupSubnetEffectiveRoute(table, destinationIp) : undefined
-      if (targetInfo.ambiguousVnetIds && matched?.nextHopType === 'VNetPeering') {
+      const ambiguousVnetIds = targetInfo.ambiguousVnetIds
+      if (ambiguousVnetIds && matched?.nextHopType === 'VNetPeering'
+        && new Set(table?.routes.filter((route) => route.nextHopType === 'VNetPeering'
+          && route.nextHopResourceId && ambiguousVnetIds.includes(route.nextHopResourceId)
+          && cidr(route.prefix) && contains(route.prefix, ipNum)).map((route) => route.nextHopResourceId)).size > 1) {
         return { source, destinationIp, destinationLabel: targetInfo.label, status: 'not-assessed',
           hops, traversedApplianceIds, traversedEdgeIds, traversedVnetIds,
           summaryReason: `${targetInfo.label}. Overlapping remote peering destinations require an unambiguous routing context; no first-match owner is selected.` }

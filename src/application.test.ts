@@ -7,6 +7,9 @@ import { executePlatform, validateRequest } from './platform/service'
 import { capabilities } from './platform/contract'
 import { simulate } from './routing'
 import { simulateAzNet } from './azure-net/engine'
+import { applicationTcpTopology, applicationTcpRequest } from '../tests/fixtures/application-tcp'
+import { tracePacket } from './packet-flow'
+import { generateAzNetBicep } from './azure-net/bicep-export'
 
 describe('optional application inventory admission', () => {
   it.each(['vwan', 'hub-spoke', 'full'] as const)('round trips original %s identities without changing native simulation or legacy saves', (mode) => {
@@ -85,9 +88,9 @@ describe('optional application inventory admission', () => {
 })
 
 describe('application negotiation and safe requests', () => {
-  it('requires explicit v2 negotiation and advertises no providers', () => {
+  it('requires explicit v2 negotiation and advertises only the qualified private TCP provider', () => {
     const input = applicationPlatformRequest()
-    expect(capabilities).toMatchObject({ contractVersion: 2, supportedContractVersions: [1, 2], application: { providers: [], minimumContractVersion: 2 } })
+    expect(capabilities).toMatchObject({ contractVersion: 2, supportedContractVersions: [1, 2], application: { providers: ['application-gateway-tcp'], minimumContractVersion: 2 } })
     expect(() => validateRequest({ ...input, contractVersion: 1 })).toThrow('contractVersion 2')
     expect(() => validateRequest({ ...input, contractVersion: 3 })).toThrow('version')
     const legacyEnvelope = { ...input, contractVersion: 1, operation: 'validate' }
@@ -97,6 +100,89 @@ describe('application negotiation and safe requests', () => {
     expect(() => validateRequest({ ...input, requirements: [] })).toThrow('separate')
     expect(() => validateApplicationRequest({ ...httpRequest(), version: 2 })).toThrow('version')
     expect(() => validateApplicationRequest({ ...httpRequest(), headers: { 'X-Forwarded-For': '10.1.1.4' } })).toThrow('field')
+  })
+
+  describe('original private Application Gateway TCP connections', () => {
+    it('starts a separately routed backend connection at the instance address without granting client transit', () => {
+      const topology = parseAzNetTopology(applicationTcpTopology()), original = structuredClone(topology)
+      const result = evaluateApplication(topology, applicationTcpRequest())
+      expect(result.configuration).toBe('satisfied')
+      expect(result).toMatchObject({ kind: 'tcp', availability: 'not-assessed' })
+      expect(result.connections?.map((connection) => [connection.id, connection.forward.tuple?.sourceAddress, connection.forward.tuple?.destinationAddress]))
+        .toEqual([['client-to-proxy', '100.64.1.4', '10.92.1.10'], ['proxy-to-backend', '10.92.1.4', '10.93.1.4']])
+      expect(result.connections?.every((connection) => connection.reply.session === 'conditional-response')).toBe(true)
+      expect(result.connections?.[1].nsg.forward.checks).toEqual(expect.arrayContaining([expect.objectContaining({
+        target: { kind: 'nic', id: 'backend-nic' }, tuple: expect.objectContaining({ sourceAddress: '10.92.1.4', destinationPort: 15433 }),
+        uncertainty: { sourcePorts: [1024, 65535] },
+      })]))
+      expect(evaluateApplication(topology, applicationTcpRequest('isolated')).configuration).toBe('violated')
+      expect(tracePacket(topology, { source: applicationTcpRequest().client,
+        target: { kind: 'workload', workloadId: 'backend-vm', nicId: 'backend-nic', ipConfigurationId: 'backend-ip' },
+        protocol: 'tcp', sourcePort: 49152, destinationPort: 15433 }).forward.routing).not.toBe('reachable')
+      expect(topology).toEqual(original)
+      expect(generateAzNetBicep(topology).warnings.join()).toContain('not an equivalent proxy deployment')
+    })
+
+    it('requires original listener, provisioning, allocation, health and supported payload configuration', () => {
+      for (const [edit, expected] of [
+        [(topology: ReturnType<typeof applicationTcpTopology>) => { topology.application!.services[0].tcpProxy!.frontendPort++ }, 'violated'],
+        [(topology: ReturnType<typeof applicationTcpTopology>) => { topology.application!.services[0].tcpProxy!.declaredHealth = 'unknown' }, 'not-assessed'],
+        [(topology: ReturnType<typeof applicationTcpTopology>) => { topology.application!.services[0].tcpProxy!.declaredHealth = 'unhealthy' }, 'violated'],
+        [(topology: ReturnType<typeof applicationTcpTopology>) => { topology.application!.services[0].tcpProxy!.provisioningState = 'unknown' }, 'not-assessed'],
+        [(topology: ReturnType<typeof applicationTcpTopology>) => { delete topology.application!.services[0].tcpProxy!.instanceAddress }, 'not-assessed'],
+        [(topology: ReturnType<typeof applicationTcpTopology>) => { topology.application!.services[0].tcpProxy!.proxyProtocol = true }, 'not-assessed'],
+        [(topology: ReturnType<typeof applicationTcpTopology>) => { topology.inventory!.capture = { version: 1, configurationComplete: false, resourceIds: {} } }, 'not-assessed'],
+      ] as const) {
+        const topology = applicationTcpTopology(); edit(topology)
+        const result = evaluateApplication(parseAzNetTopology(topology), applicationTcpRequest())
+        expect(result.configuration).toBe(expected)
+        expect(result.connections).toEqual([])
+        expect(result.availability).toBe('not-assessed')
+      }
+      expect(() => validateApplicationRequest({ ...applicationTcpRequest(), scheme: 'tls' })).toThrow('field')
+    })
+
+    it('checks both independent return paths and does not mistake an allowed client leg for an upstream response', () => {
+      for (const [subnetId, prefix, connectionId] of [
+        ['proxy-subnet', '100.64.1.0/24', 'client-to-proxy'],
+        ['backend-subnet', '10.92.1.0/24', 'proxy-to-backend'],
+      ]) {
+        const topology = applicationTcpTopology()
+        topology.vnets.find((vnet) => vnet.subnets.some((subnet) => subnet.id === subnetId))!.subnets[0].routeTableId = 'discard-return'
+        topology.udrTables.push({ id: 'discard-return', name: 'Discard proxy response', disableBgpRoutePropagation: false,
+          routes: [{ id: 'discard-proxy', name: 'DiscardProxy', prefix, nextHopType: 'None', enabled: true }] })
+        const result = evaluateApplication(parseAzNetTopology(topology), applicationTcpRequest())
+        expect(result.configuration).toBe('violated')
+        expect(result.connections?.find((connection) => connection.id === connectionId)).toMatchObject({
+          forward: { routing: 'reachable' }, reply: { routing: 'unreachable' },
+        })
+        expect(result.decisions.at(-1)?.outcome).not.toBe('satisfied')
+      }
+      const topology = applicationTcpTopology()
+      topology.inventory!.networkSecurityGroups![0].rules[0].sources = ['100.64.1.4']
+      const denied = evaluateApplication(topology, applicationTcpRequest())
+      expect(denied.configuration).toBe('violated')
+      expect(denied.connections?.[1].nsg.forward.outcome).toBe('denied')
+      expect(denied.connections?.[1].reply.session).toBeUndefined()
+      topology.inventory!.networkSecurityGroups![0].rules[0].sources = ['10.92.1.4']
+      topology.inventory!.networkSecurityGroups![0].rules[0].sourcePorts = ['49152']
+      expect(evaluateApplication(topology, applicationTcpRequest()).configuration).toBe('not-assessed')
+    })
+
+    it('rejects fabricated original bindings, shared instance/frontend addresses and mixed-service gateway subnets', () => {
+      for (const edit of [
+        (topology: ReturnType<typeof applicationTcpTopology>) => { topology.application!.services[0].tcpProxy!.backend.nicId = 'missing' },
+        (topology: ReturnType<typeof applicationTcpTopology>) => { topology.application!.services[0].tcpProxy!.instanceAddress = '10.92.1.10' },
+        (topology: ReturnType<typeof applicationTcpTopology>) => { topology.application!.services[0].tcpProxy!.subnetId = 'backend-subnet' },
+        (topology: ReturnType<typeof applicationTcpTopology>) => { topology.application!.services[0].tcpProxy!.rulePriority = 0 },
+        (topology: ReturnType<typeof applicationTcpTopology>) => { Object.assign(topology.application!.services[0].tcpProxy!, { sku: ['Standard_v2'] }) },
+        (topology: ReturnType<typeof applicationTcpTopology>) => { Object.assign(topology.application!.services[0].tcpProxy!, { provisioningState: ['succeeded'] }) },
+        (topology: ReturnType<typeof applicationTcpTopology>) => { topology.application!.services[0].kind = 'front-door' },
+      ]) {
+        const topology = applicationTcpTopology(); edit(topology)
+        expect(() => parseAzNetTopology(topology)).toThrow('Application:')
+      }
+    })
   })
   it('normalizes only explicit safe hostname and absolute-path syntax without URL resolution', () => {
     expect(normalizeApplicationHost('APP.Example.test.')).toBe('app.example.test')

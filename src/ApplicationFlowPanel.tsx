@@ -15,7 +15,7 @@ export function ApplicationFlowPanel({ topology, owner, result, onResult }: {
   result?: ApplicationResult
   onResult: (result: ApplicationResult | undefined) => void
 }) {
-  const [kind, setKind] = useState<'http' | 'dns'>('http')
+  const [kind, setKind] = useState<ApplicationRequest['kind']>('http')
   const [running, setRunning] = useState(false)
   const [error, setError] = useState('')
   const controlId = useId()
@@ -30,10 +30,10 @@ export function ApplicationFlowPanel({ topology, owner, result, onResult }: {
     : ref.kind === 'load-balancer-frontend' || ref.kind === 'load-balancer-pool' ? `${ref.loadBalancerId} / ${ref.id}` : ref.id
   return <section className="packet-panel" aria-label={t('Application and DNS contracts')} data-testid="application-flow-panel">
     <h3>{t('Application and DNS contracts')}</h3>
-    <p>{t(applicationUnavailable)}</p><p>{t(applicationOffline)}</p>
-    <p>{t('Imported identities only; no service authoring or provider is enabled. DNS answers, HTTP matches and IPv4 TCP legs are separate decisions.')}</p>
+    {!services.some((service) => service.tcpProxy) && <p>{t(applicationUnavailable)}</p>}<p>{t(applicationOffline)}</p>
+    <p>{t('TCP provider configuration is separate from HTTP matching and DNS selection. Unimplemented operations remain not assessed.')}</p>
     <ul>{[...services, ...profiles].map((entry) => <li key={entry.id}>
-      <strong>{entry.name}</strong>{' · '}<code>{entry.id}</code>{' · '}{t('Provider unavailable')}
+      <strong>{entry.name}</strong>{' · '}<code>{entry.id}</code>{' · '}{t('tcpProxy' in entry && entry.tcpProxy ? 'Declared private TCP provider' : 'Provider unavailable')}
       {entry.unsupportedFeatures.length > 0 && <p>{t('Unsupported declarations')}: {entry.unsupportedFeatures.join(', ')}</p>}
     </li>)}</ul>
     <form onChange={() => { job.current?.abort(); job.current = null; setRunning(false); setError(''); onResult(undefined) }} onSubmit={async (event) => {
@@ -45,7 +45,9 @@ export function ApplicationFlowPanel({ topology, owner, result, onResult }: {
       const sourceKey = String(form.get('source'))
       const source = sources.find((entry) => entry.key === sourceKey)?.ref
         ?? { kind: 'external' as const, address: String(form.get('address')) }
-      const application: ApplicationRequest = kind === 'http'
+      const application: ApplicationRequest = kind === 'tcp'
+        ? { version: 1, kind, serviceId: String(form.get('service')), client: source, sourcePort: Number(form.get('sourcePort')), port: Number(form.get('port')) }
+        : kind === 'http'
         ? { version: 1, kind, serviceId: String(form.get('service')), client: source, scheme: String(form.get('scheme')) as 'http' | 'https',
           host: String(form.get('host')), port: Number(form.get('port')), path: String(form.get('path')) }
         : { version: 1, kind, profileId: String(form.get('profile')), resolver: source, name: String(form.get('name')),
@@ -65,27 +67,33 @@ export function ApplicationFlowPanel({ topology, owner, result, onResult }: {
         if (job.current === controller) { job.current = null; setRunning(false) }
       }
     }}>
-      <label htmlFor={`${controlId}-operation`}>{t('Application operation')}</label><select id={`${controlId}-operation`} value={kind} onChange={(event) => setKind(event.target.value as 'http' | 'dns')}>
+      <label htmlFor={`${controlId}-operation`}>{t('Application operation')}</label><select id={`${controlId}-operation`} value={kind} onChange={(event) => setKind(event.target.value as ApplicationRequest['kind'])}>
         <option value="http">{t('HTTP request matching')}</option><option value="dns">{t('DNS answer selection')}</option>
+        <option value="tcp">{t('TCP proxy connections')}</option>
       </select>
       <label htmlFor={`${controlId}-source`}>{t('Original client or resolver')}</label><select id={`${controlId}-source`} name="source">
         <option value="external">{t('Explicit external IPv4')}</option>
         {sources.map((entry) => <option key={entry.key} value={entry.key}>{entry.label}</option>)}
       </select>
       <label>{t('External client or resolver IPv4')}<input name="address" defaultValue="198.51.100.10" maxLength={15} /></label>
-      {kind === 'http' ? <>
+      {kind !== 'dns' ? <>
         <label htmlFor={`${controlId}-service`}>{t('Original application service')}</label><select id={`${controlId}-service`} name="service" required>{services.map((entry) => <option key={entry.id} value={entry.id}>{entry.name} ({entry.id})</option>)}</select>
+        {kind === 'http' ? <>
         <label htmlFor={`${controlId}-scheme`}>{t('Request scheme')}</label><select id={`${controlId}-scheme`} name="scheme"><option value="https">HTTPS</option><option value="http">HTTP</option></select>
         <label>{t('Request host')}<input name="host" required maxLength={253} defaultValue="app.example.test" /></label>
         <label>{t('Request port')}<input name="port" type="number" min={1} max={65535} required defaultValue={443} /></label>
         <label>{t('Absolute request path')}<input name="path" required maxLength={2048} defaultValue="/" /></label>
+        </> : <>
+          <label key="tcp-source-port">{t('TCP source port')}<input name="sourcePort" type="number" min={1} max={65535} required defaultValue={49152} /></label>
+          <label key="tcp-listener-port">{t('TCP listener port')}<input name="port" type="number" min={1} max={65535} required defaultValue={1433} /></label>
+        </>}
       </> : <>
         <label htmlFor={`${controlId}-profile`}>{t('Original DNS profile')}</label><select id={`${controlId}-profile`} name="profile" required>{profiles.map((entry) => <option key={entry.id} value={entry.id}>{entry.name} ({entry.id})</option>)}</select>
         <label>{t('DNS query name')}<input name="name" required maxLength={253} defaultValue="app.example.test" /></label>
         <label>{t('Evaluation time (UTC)')}<input name="time" required maxLength={24} placeholder="2026-11-16T00:00:00.000Z" /></label>
         <p>{t('Fresh resolver only; no cached answer or failover timing is inferred.')}</p>
       </>}
-      <button type="submit" disabled={running || (kind === 'http' ? !services.length : !profiles.length)}>{t('Inspect application contract')}</button>
+      <button type="submit" disabled={running || (kind !== 'dns' ? !services.length : !profiles.length)}>{t('Inspect application contract')}</button>
       {running && <button type="button" onClick={() => { job.current?.abort(); job.current = null; setRunning(false); onResult(undefined); setError('Application inspection cancelled; no decisions are verified.') }}>{t('Cancel application inspection')}</button>}
     </form>
     {error && <p role="alert">{t(error)}</p>}
@@ -97,6 +105,19 @@ export function ApplicationFlowPanel({ topology, owner, result, onResult }: {
         {decision.reasons.map((reason) => <p key={reason}>{t(reason)}</p>)}
         <ul>{decision.references.map((ref, index) => <li key={index}><code>{originalId(ref)}</code></li>)}</ul>
       </li>)}</ol>
+      {result.connections?.map((connection) => <section key={connection.id} aria-label={t(connection.id)} data-testid={`application-connection-${connection.id}`}>
+        <h4>{t(connection.id)}</h4>
+        <p>{t('Separate TCP connection; conditional response only, not a NAT inverse or live session.')}</p>
+        {[connection.forward, connection.reply].map((leg) => <details key={leg.direction}>
+          <summary>{t(leg.direction)}: {t(leg.routing)}</summary>
+          {leg.tuple && <code data-testid="application-connection-tuple">{leg.tuple.sourceAddress}:{leg.tuple.sourcePort} -&gt; {leg.tuple.destinationAddress}:{leg.tuple.destinationPort}</code>}
+          {leg.reasons.map((reason) => <p key={reason}>{t(reason)}</p>)}
+          <ol>{leg.steps.slice(0, 100).map((step, index) => <li key={index}><code>{step.entity.kind} / {step.entity.id}</code> {t(step.evidence)}</li>)}</ol>
+        </details>)}
+        <p>{t('Forward NSG permission')}: {t(connection.nsg.forward.outcome)}; {t('Conditional response permission')}: {t(connection.nsg.reply.outcome)}</p>
+        {connection.nsg.forward.checks.map((check, index) => <p key={index}><code>{check.target.id}: {check.tuple.sourceAddress}:{check.tuple.sourcePort} -&gt; {check.tuple.destinationAddress}:{check.tuple.destinationPort}</code> {t(check.outcome)}{check.uncertainty && ` (${t('Illustrative source port')})`}</p>)}
+      </section>)}
+      {result.limitations.map((limitation) => <p key={limitation}>{t(limitation)}</p>)}
     </div>}
     <a href="https://learn.microsoft.com/en-us/azure/architecture/guide/technology-choices/load-balancing-overview" target="_blank" rel="noreferrer">{t('Application and DNS service boundaries (Microsoft Learn)')}</a>
   </section>
