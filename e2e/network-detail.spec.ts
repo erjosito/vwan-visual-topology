@@ -6,6 +6,97 @@ import { executePlatform } from '../src/platform/service'
 import type { PlatformRequest } from '../src/platform/contract'
 import { validateTopology } from '../src/validation'
 import { overlappingVnets } from '../tests/fixtures/overlapping-vnets'
+import { composedNat } from '../tests/fixtures/composed-nat'
+import { privateLinkTopology } from '../tests/fixtures/private-link'
+
+test('Private Link authoring binds overlapping consumers to an original provider and survives reopening', async ({ page }) => {
+  const topology = privateLinkTopology()
+  topology.inventory!.privateLinkServices = []
+  topology.inventory!.privateEndpointConnections = []
+  delete topology.vnets[2].subnets[0].privateLinkServiceNetworkPolicies
+  await page.addInitScript((topology) => {
+    if (!localStorage.getItem('aznet-visual-topology:v1')) localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))
+  }, topology)
+  await page.setViewportSize({ width: 1600, height: 1000 })
+  await page.goto('/?mode=full')
+  const open = async (id: string) => {
+    await page.getByTestId(`aznet-vnet-${id}`).click()
+    await page.getByRole('button', { name: 'VNet detail', exact: true }).click()
+    const dialog = page.getByTestId('network-detail-dialog')
+    await dialog.getByTestId('private-link-editor').locator('summary').click()
+    return dialog
+  }
+  let dialog = await open('provider')
+  const form = dialog.getByTestId('create-private-link-service')
+  await form.getByLabel('Service name', { exact: true }).fill('Declared private service')
+  await form.getByLabel('Provider NAT subnet', { exact: true }).selectOption('provider-nat')
+  await form.getByLabel('Provider NAT IPv4', { exact: true }).fill('10.91.1.4')
+  await form.getByLabel('Explicitly disable Private Link Service network policies on this NAT subnet', { exact: true }).check()
+  await form.getByLabel('Declare successful service provisioning (unverified)', { exact: true }).check()
+  await form.getByRole('button', { name: 'Add original service binding', exact: true }).click()
+  await expect(dialog.getByTestId('private-link-editor').getByText('Declared private service', { exact: true })).toBeVisible()
+  await dialog.getByRole('button', { name: 'Close VNet detail', exact: true }).click()
+  for (const id of ['a', 'b']) {
+    dialog = await open(id)
+    const binding = dialog.getByTestId(`private-endpoint-binding-${id}-pe`)
+    await binding.getByLabel('Original provider service', { exact: true }).selectOption({ label: 'Declared private service / provider' })
+    await binding.getByLabel('Declared connection approval', { exact: true }).selectOption('approved')
+    await binding.getByRole('button', { name: 'Save Private Endpoint binding', exact: true }).click()
+    await dialog.getByRole('button', { name: 'Close VNet detail', exact: true }).click()
+  }
+  const probe = async (id: string) => {
+    const dialog = await open(id), packet = dialog.getByTestId('packet-flow-panel')
+    await packet.getByLabel('Packet source', { exact: true }).selectOption({ label: `client ${id.toUpperCase()} / client NIC / Primary (100.64.1.4) [Network ${id.toUpperCase()} / ${id}]` })
+    await packet.getByLabel('Packet destination', { exact: true }).selectOption(JSON.stringify(['private-endpoint', `${id}-pe`]))
+    await packet.getByRole('button', { name: 'Trace packet routing', exact: true }).click()
+    await expect(packet.getByText('Private Link ingress: configured', { exact: true })).toBeVisible()
+    await expect(packet.getByRole('heading', { name: 'Forward routing: reachable', exact: true })).toBeVisible()
+    await expect(packet.getByRole('heading', { name: 'Reply routing: reachable', exact: true })).toBeVisible()
+    for (const name of ['Forward routing', 'Reply routing']) {
+      const leg = packet.getByRole('region', { name, exact: true })
+      await leg.getByText(/^Routing evidence \(/).click()
+      await expect(leg.getByTestId('packet-step-tuples')).toHaveCount(2)
+    }
+    await dialog.getByRole('button', { name: 'Close VNet detail', exact: true }).click()
+  }
+  await probe('a')
+  await probe('b')
+  const read = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
+  const saved = await read()
+  expect(saved.inventory.privateEndpointConnections).toHaveLength(2)
+  await page.reload()
+  await probe('b')
+  expect(await read()).toEqual(saved)
+})
+
+test('composed private NVA SNAT shows both boundaries and conditional inverses after reopening', async ({ page }) => {
+  const topology = composedNat()
+  await page.addInitScript((topology) => {
+    if (!localStorage.getItem('aznet-visual-topology:v1')) localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))
+  }, topology)
+  await page.goto('/?mode=full')
+  const probe = async () => {
+    await page.getByTestId('aznet-vnet-network').click()
+    await page.getByRole('button', { name: 'VNet detail', exact: true }).click()
+    const packet = page.getByTestId('network-detail-dialog').getByTestId('packet-flow-panel')
+    await packet.getByLabel('Packet source', { exact: true }).selectOption({ label: 'client / client NIC / Primary (10.90.1.4)' })
+    await packet.getByLabel('Packet destination', { exact: true }).selectOption({ label: 'server / server NIC / Primary (10.90.4.4)' })
+    await packet.getByRole('button', { name: 'Trace packet routing', exact: true }).click()
+    await expect(packet.getByRole('heading', { name: 'Forward routing: reachable', exact: true })).toBeVisible()
+    await expect(packet.getByRole('heading', { name: 'Reply routing: reachable', exact: true })).toBeVisible()
+    for (const name of ['Forward routing', 'Reply routing']) {
+      const leg = packet.getByRole('region', { name, exact: true })
+      await leg.getByText(/^Routing evidence \(/).click()
+      await expect(leg.getByTestId('packet-step-tuples')).toHaveCount(2)
+    }
+    await expect(packet.getByText('Explicit original NVA guest SNAT policy matches the tuple at this boundary.', { exact: false })).toHaveCount(2)
+    await expect(packet.getByText('Inverse SNAT for this exact conditional response at its original NVA,', { exact: false })).toHaveCount(2)
+  }
+  await probe()
+  await page.reload()
+  await probe()
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)).toEqual(topology)
+})
 
 test('isolated overlapping VNets retain distinct endpoint choices, local routing and persistence', async ({ page }) => {
   const topology = overlappingVnets()

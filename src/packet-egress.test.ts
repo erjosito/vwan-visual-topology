@@ -10,6 +10,7 @@ import { importAzNetCapture } from './azure-net/azure-import'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import type { Topology } from './model'
+import { composedNat, composedNatRequest } from '../tests/fixtures/composed-nat'
 
 function network() {
   const topology = createEmptyAzNetTopology()
@@ -34,6 +35,64 @@ const request: PacketRequest = {
 }
 
 describe('explicit route-first Internet egress', () => {
+  it('qualifies the four-NVA bound and leaves a fifth translating waypoint unassessed', () => {
+    const qualified = tracePacket(parseAzNetTopology(composedNat(4)), composedNatRequest)
+    expect(qualified).toMatchObject({ translation: 'snat', reply: { routing: 'reachable' } })
+    expect(qualified.forward.steps.filter((step) => step.after && step.before.sourceAddress !== step.after.sourceAddress)).toHaveLength(4)
+    expect(qualified.reply.steps.filter((step) => step.after && step.before.destinationAddress !== step.after.destinationAddress)).toHaveLength(4)
+    const unqualified = tracePacket(parseAzNetTopology(composedNat(5)), composedNatRequest)
+    expect(unqualified).toMatchObject({ translation: 'not-assessed', reply: { routing: 'not-assessed' } })
+    expect(unqualified.reply.session).toBeUndefined()
+  })
+  it.each(['tcp', 'udp'] as const)('composes private %s NVA SNAT policies using each visible tuple and reverses only after routing to each owner', (protocol) => {
+    const topology = parseAzNetTopology(composedNat()), original = structuredClone(topology)
+    const result = tracePacket(topology, { ...composedNatRequest, protocol })
+    expect(result).toMatchObject({ translation: 'snat', forward: { routing: 'reachable' }, reply: { routing: 'reachable', session: 'conditional-response' },
+      nsg: { forward: { outcome: 'allowed' }, reply: { outcome: 'allowed' } } })
+    const mappings = result.forward.steps.filter((step) => step.after && step.before.sourceAddress !== step.after.sourceAddress)
+    expect(mappings.map((step) => [step.entity.id, step.before.sourceAddress, step.after!.sourceAddress]))
+      .toEqual([['first', '10.90.1.4', '10.90.2.4'], ['second', '10.90.2.4', '10.90.3.4']])
+    const inverses = result.reply.steps.filter((step) => step.after && step.before.destinationAddress !== step.after.destinationAddress)
+    expect(inverses.map((step) => [step.entity.id, step.before.destinationAddress, step.after!.destinationAddress]))
+      .toEqual([['second', '10.90.3.4', '10.90.2.4'], ['first', '10.90.2.4', '10.90.1.4']])
+    expect(result.nsg!.forward.checks.filter((check) => check.target.kind === 'nic' && check.direction === 'inbound')
+      .map((check) => [check.target.id, check.tuple.sourceAddress]))
+      .toEqual([['first-nic', '10.90.1.4'], ['second-nic', '10.90.2.4'], ['server-nic', '10.90.3.4']])
+    expect(topology).toEqual(original)
+  })
+
+  it('does not reverse composed mappings after a missing route, wrong router, loop or missing declaration', () => {
+    const topology = composedNat()
+    topology.vnets[0].appliances[1].staticRoutes.push({ id: 'discard-return', prefix: '10.90.2.0/24', nextHopKind: 'drop', enabled: true })
+    let result = tracePacket(parseAzNetTopology(topology), composedNatRequest)
+    expect(result.reply.routing).toBe('unreachable')
+    expect(result.reply.steps.some((step) => step.entity.id === 'first' && step.evidence.startsWith('Inverse'))).toBe(false)
+    topology.vnets[0].appliances[1].staticRoutes[0] = { id: 'wrong-return', prefix: '10.90.2.0/24', nextHopKind: 'appliance', nextHopIp: '10.90.2.5', enabled: true }
+    topology.vnets[0].appliances.push({ id: 'wrong', name: 'Wrong NVA', kind: 'nva-vm', subnetId: 'first-subnet', privateIp: '10.90.2.5', enableIpForwarding: true, staticRoutes: [] })
+    result = tracePacket(parseAzNetTopology(topology), composedNatRequest)
+    expect(result.reply.routing).toBe('not-assessed')
+    expect(result.reply.steps.at(-1)?.after).toBeNull()
+    topology.vnets[0].appliances[1].staticRoutes = []
+    topology.inventory!.routerSnatPolicies!.pop()
+    expect(tracePacket(parseAzNetTopology(topology), composedNatRequest).translation).toBe('not-assessed')
+    topology.udrTables[1].routes[0].nextHopIp = '10.90.2.4'
+    expect(tracePacket(parseAzNetTopology(topology), composedNatRequest).forward.routing).toBe('unreachable')
+  })
+
+  it('filters composed NVA traffic at the translated boundary instead of the original source', () => {
+    const topology = composedNat()
+    topology.inventory!.networkSecurityGroups = [{ id: 'deny-translated', name: 'Deny translated', rules: [{
+      id: 'deny-first', name: 'DenyFirst', priority: 100, direction: 'inbound', action: 'deny', protocol: 'any',
+      sources: ['10.90.2.4'], destinations: ['*'], sourcePorts: ['*'], destinationPorts: ['*'],
+    }] }]
+    topology.inventory!.nsgAssociations = [{ owner: { kind: 'vnet', id: 'network' }, target: { kind: 'nic', id: 'second-nic' }, nsgId: 'deny-translated' }]
+    const result = tracePacket(parseAzNetTopology(topology), composedNatRequest)
+    expect(result.security).toBe('denied')
+    expect(result.forward.steps.at(-1)?.before.sourceAddress).toBe('10.90.2.4')
+    expect(result.forward.steps.some((step) => step.entity.id === 'server-vm')).toBe(false)
+    expect(result.reply.session).toBeUndefined()
+    expect(result.reply.steps).toEqual([])
+  })
   function throughRouter(kind: 'azure-firewall' | 'nva-vm') {
     const topology = network()
     topology.vnets[0].subnets[0].routeTableId = 'steering'

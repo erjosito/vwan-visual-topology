@@ -43,6 +43,7 @@ export interface AzSubnet {
   defaultOutboundAccess?: boolean
   internetEgressStatus?: 'unknown'
   privateEndpointNetworkPolicies?: AzPrivateEndpointPolicy
+  privateLinkServiceNetworkPolicies?: 'Disabled' | 'Enabled'
   privateEndpoints?: AzPrivateEndpoint[]
 }
 

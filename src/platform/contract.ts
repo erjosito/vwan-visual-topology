@@ -9,7 +9,7 @@ import type { VpnNatPacketRequest, VpnNatPacketResult } from '../vpn-nat-packet'
 import { VPN_NAT_CAPABILITIES } from '../vpn-nat'
 import { workspaceCapabilities, workspaceCapabilityLimits } from '../workspace-capabilities'
 import { flowExportLimits } from '../flow-export-options'
-import { applicationCapabilities } from '../application-inventory'
+import { applicationCapabilities } from '../application-capabilities'
 import type { ApplicationRequest, ApplicationResult } from '../application'
 import type { BgpInspection } from '../bgp-neighbors'
 import type { RoutingEvidenceEnvelope, RoutingLimitation } from '../routing-evidence'
@@ -157,6 +157,22 @@ export const capabilities = {
     validation: 'Ordinary directly peered VNets require non-overlapping address spaces. Selected-subnet peering retains its separate participating-address-space restrictions.',
     evidence: 'Local forward/reply paths and original single-service public/NAT mappings retain VNet context. Duplicate workload IP choices include the original network name and ID.',
     excluded: ['unresolved overlapping shared-transit destinations', 'Private Link Service and proxy forwarding', 'arbitrary multi-stage NAT composition', 'HA-ports overlap qualification', 'legacy standalone VWAN overlap qualification'],
+  },
+  composedNat: {
+    modes: ['hub-spoke', 'full'], topologyVersion: 2,
+    scope: 'IPv4 TCP/UDP workload-to-workload chains of two to four original NVAs with explicit nva-snat declarations. Policies match the translated tuple at each waypoint; no destination identity supplies routing.',
+    evidence: 'Ordered before/after tuples at original owners, independent routes to each inverse translator and the original source, and subnet/NIC NSGs at the visible tuple boundaries. Responses are conditional, not reverse initiations. Ports are illustrative.',
+    compatibility: 'Existing single-router SNAT, public DNAT, VPN NAT and classic Firewall private handoff to its own subnet NAT Gateway retain their separate scopes.',
+    excluded: ['arbitrary DNAT or public multi-router chains', 'managed-hub/gateway/VPN NAT composition', 'HA-ports steering', 'live guest/session state'],
+    maxNvas: 4,
+  },
+  privateLink: {
+    modes: ['hub-spoke', 'full'], topologyVersion: 2,
+    destination: '{kind:private-endpoint,privateEndpointId:originalId}',
+    configuration: 'inventory.privateLinkServices[] declares original provider owner, loadBalancerId/frontendId, natIpConfigurations, provisioningState and proxyProtocol; privateEndpointConnections[] binds privateEndpointId/serviceId with explicit approval state.',
+    scope: 'Declared approved IPv4 TCP/UDP Private Endpoint to Standard internal NIC-backed Load Balancer. One original NAT configuration with Private Link Service network policies explicitly disabled. Separate original consumer and provider networks, filtering and conditional responses; no VNet transit.',
+    evidence: 'Consumer endpoint/connection, provider service/NAT configuration and LB/backend identities; translated tuples, declared health and independent provider/consumer return routing. No live provisioning, allocation, session or application verification.',
+    excluded: ['Proxy Protocol v2', 'multiple NAT configurations', 'intermediate router/translation composition', 'Direct Connect preview', 'Application Gateway private connectivity', 'inferred capture associations'],
   },
   subnetPeering: {
     modes: ['hub-spoke', 'full'], topologyVersion: 2,

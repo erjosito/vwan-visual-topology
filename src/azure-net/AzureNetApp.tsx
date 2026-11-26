@@ -27,6 +27,7 @@ import { WorkspaceCanvasTabs, WorkspaceTabPanel } from '../WorkspaceTabs'
 import type { ContextAction } from '../TopologyContextMenu'
 import type { DetailTarget } from '../network-detail-projection'
 import { WorkspaceTools } from '../WorkspaceTools'
+import { CanvasStartActions } from '../CanvasPresentation'
 import { azWorkspaceIdentity, azWorkspaceObjects, workspaceIdentityKey } from '../workspace-objects'
 import { udrAssociationError } from './udr-regions'
 import type { UdrManagerRequest } from './UdrTableManager'
@@ -83,6 +84,7 @@ interface AzureNetAppProps {
 }
 
 const NetworkDetail = lazy(() => import('../NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
+const CanvasSelectionActions = lazy(() => import('../CanvasSelectionActions').then(module => ({ default: module.CanvasSelectionActions })))
 const AzurePanel = lazy(() => import('./AzurePanel').then((module) => ({ default: module.AzurePanel })))
 const Explain = lazy(() => import('../learning/Explain').then((module) => ({ default: module.Explain })))
 const WarningAcknowledgement = lazy(() => import('../WarningAcknowledgement').then((module) => ({ default: module.WarningAcknowledgement })))
@@ -1129,6 +1131,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       })),
       {
         label: 'Open path explorer',
+        selectionAction: 'trace',
         previewPrimary: true,
         disabled: anchors.length === 0,
         onSelect: () => {
@@ -1275,9 +1278,10 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           ...(vnet.vwanHubAttachment ? [{
             label: t('Configure virtual hub connection'),
             previewPrimary: true,
+            selectionAction: 'connect' as const,
             onSelect: () => openVnetConnection(vnet.id),
           }] : [{
-            label: t('Connect to virtual hub'), previewPrimary: true, allowDisabledChildren: true,
+            label: t('Connect to virtual hub'), previewPrimary: true, selectionAction: 'connect' as const, allowDisabledChildren: true,
             children: topology.vwanHubs.length ? topology.vwanHubs.map((hub) => ({
               label: hub.name,
               onSelect: () => { attachVnetToHub(vnet.id, hub.id); openHubConnections(hub.id) },
@@ -1288,6 +1292,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           {
             label: 'Inspect Effective Routes',
             previewPrimary: true,
+            selectionAction: 'inspect',
             disabled: !firstSub,
             onSelect: () => {
               if (!firstSub) return
@@ -1396,6 +1401,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           {
             label: 'Peer with VNet',
             previewPrimary: true,
+            selectionAction: 'peer',
             guidanceAnchor: guidanceAnchor('peer-menu', vnet.id),
             disabled: peerableVnets.length === 0,
             children: peerableVnets.map((other) => ({
@@ -1433,6 +1439,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           {
             label: 'Configure VNet & Elements',
             previewPrimary: true,
+            selectionAction: 'configure',
             onSelect: () => {
               setSelected({ kind: 'vnet', vnetId: vnet.id })
               setActiveTab('editor')
@@ -1462,6 +1469,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           {
             label: 'Configure Subnet (Name, Prefix, Route Table, PE Policies)...',
             previewPrimary: true,
+            selectionAction: 'configure',
             onSelect: () => {
               setSelected({ kind: 'subnet', vnetId: vnet.id, subnetId: subnet.id })
               setActiveTab('editor')
@@ -1470,6 +1478,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           {
             label: 'Inspect Subnet Effective Routes',
             previewPrimary: true,
+            selectionAction: 'inspect',
             onSelect: () => {
               inspectRoutes({ kind: 'subnet', vnetId: vnet.id, subnetId: subnet.id })
             },
@@ -2893,6 +2902,13 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
 
           <WorkspaceCanvasTabs />
           <AzureNetDiagram
+            selectionActions={canvasSelection && (() => {
+              const spec = getContextMenuSpec(canvasSelection, true)
+              return spec && <Suspense fallback={null}><CanvasSelectionActions key={JSON.stringify(canvasSelection)} title={spec.title} actions={spec.actions}
+                onRun={() => { setContextMenu(null); setToolsDismissRequest(request => request + 1) }}
+                onAll={() => setToolsOpenRequest(request => request + 1)} /></Suspense>
+            })()}
+            emptyActions={<CanvasStartActions onAdd={() => setToolsOpenRequest(request => request + 1)} onExamples={() => setSampleGalleryOpen(true)} />}
             frameRequest={frameRequest}
             topology={topology}
             vpnUnderlays={simulation.vpnUnderlays}

@@ -19,6 +19,22 @@ export interface NatGateway {
   publicIpPrefixIds?: string[]
 }
 export interface RouterSnatOwner { kind: 'appliance' | 'hub'; id: string }
+export interface PrivateLinkService {
+  id: string
+  name: string
+  owner: InventoryOwner
+  loadBalancerId: string
+  frontendId: string
+  natIpConfigurations: { id: string; subnetId: string; privateIp: string }[]
+  provisioningState: 'succeeded' | 'unknown'
+  proxyProtocol: boolean
+}
+export interface PrivateEndpointConnection {
+  id: string
+  privateEndpointId: string
+  serviceId: string
+  state: 'approved' | 'pending' | 'rejected' | 'disconnected' | 'unknown'
+}
 export interface WorkloadIpReference { workloadId: string; nicId: string; ipConfigurationId: string }
 export type LoadBalancerFrontend = { id: string; name: string } & (
   { kind: 'public'; publicIpId: string } | { kind: 'private'; subnetId: string; privateIp?: string })
@@ -142,6 +158,8 @@ export interface NetworkInventory {
   natGateways?: NatGateway[]
   routerSnatPolicies?: RouterSnatPolicy[]
   routerDnatPolicies?: RouterDnatPolicy[]
+  privateLinkServices?: PrivateLinkService[]
+  privateEndpointConnections?: PrivateEndpointConnection[]
   loadBalancers?: NetworkLoadBalancer[]
   networkSecurityGroups?: NetworkSecurityGroup[]
   nsgAssociations?: NsgAssociation[]
@@ -224,7 +242,8 @@ export function validateInventory(topology: InventoryTopology): void {
   }
   const ids = new Set<string>(topology.version === 1
     ? [...topology.hubs, ...topology.spokes, ...topology.sites, ...topology.connections].map((entry) => entry.id)
-    : [...topology.vnets, ...topology.sites, ...topology.vwanHubs, ...topology.vnets.flatMap((vnet) => [...vnet.gateways, ...vnet.appliances, ...vnet.subnets])].map((entry) => entry.id))
+    : [...topology.vnets, ...topology.sites, ...topology.vwanHubs, ...topology.vnets.flatMap((vnet) =>
+      [...vnet.gateways, ...vnet.appliances, ...vnet.subnets, ...vnet.subnets.flatMap((subnet) => subnet.privateEndpoints ?? [])])].map((entry) => entry.id))
   const named = (entry: unknown, label: string) => {
     const row = object(entry), id = text(row.id, `${label} ID`, true)
     text(row.name, `${label} name`)
@@ -694,6 +713,47 @@ export function validateInventory(topology: InventoryTopology): void {
       }
     }
   }
+  const serviceIds = new Set<string>(), connections = new Set<string>(), allocations = new Set<string>()
+  for (const value of list(inventory.privateLinkServices ?? [], 'Private Link services')) {
+    const service = named(value, 'Private Link service'), owner = object(service.owner)
+    if (topology.version !== 2 || owner.kind !== 'vnet'
+      || Object.keys(service).some((key) => !['id', 'name', 'owner', 'loadBalancerId', 'frontendId', 'natIpConfigurations', 'provisioningState', 'proxyProtocol'].includes(key))
+      || Object.keys(owner).some((key) => !['kind', 'id'].includes(key))) fail('unsupported Private Link service declaration')
+    const lb = topology.inventory.loadBalancers?.find((lb) => lb.id === service.loadBalancerId)
+    if (!lb || lb.owner.kind !== owner.kind || lb.owner.id !== owner.id
+      || !lb.frontends.some((frontend) => frontend.id === service.frontendId && frontend.kind === 'private')) fail('Private Link service requires an original owned internal Standard LB frontend')
+    if (!['succeeded', 'unknown'].includes(String(service.provisioningState)) || typeof service.proxyProtocol !== 'boolean') fail('explicit Private Link provisioning and proxy protocol states required')
+    const configurations = list(service.natIpConfigurations, 'Private Link NAT configurations')
+    if (!configurations.length || configurations.length > 8) fail('Private Link service requires 1-8 original NAT configurations')
+    const scope = owner as unknown as InventoryOwner
+    for (const value of configurations) {
+      const config = object(value), id = text(config.id, 'Private Link NAT configuration ID', true)
+      const subnetId = text(config.subnetId, 'Private Link NAT subnet', true), address = text(config.privateIp, 'Private Link NAT address')
+      if (Object.keys(config).some((key) => !['id', 'subnetId', 'privateIp'].includes(key)) || ids.has(id)) fail('invalid or duplicate Private Link NAT configuration')
+      ids.add(id)
+      if (!ownsInventoryAddress(topology, scope, subnetId, address)) fail('Private Link NAT address must belong to its original provider subnet')
+      const key = JSON.stringify([owner.id, address])
+      const network = topology.version === 2 ? topology.vnets.find((vnet) => vnet.id === owner.id) : undefined
+      if (allocations.has(key) || network?.appliances.some((device) => device.privateIp === address)
+        || network?.subnets.some((subnet) => subnet.privateEndpoints?.some((endpoint) => endpoint.ipAddress === address))
+        || topology.inventory.nics.some((nic) => sameInventoryOwner(nic.owner, scope)
+        && nic.ipConfigurations.some((config) => config.privateIp === address))
+        || topology.inventory.loadBalancers?.some((lb) => sameInventoryOwner(lb.owner, scope)
+          && lb.frontends.some((frontend) => frontend.kind === 'private' && frontend.privateIp === address))) fail('Private Link NAT address conflicts with another original allocation')
+      allocations.add(key)
+    }
+    serviceIds.add(String(service.id))
+  }
+  for (const value of list(inventory.privateEndpointConnections ?? [], 'Private Endpoint connections')) {
+    const connection = object(value), id = text(connection.id, 'Private Endpoint connection ID', true)
+    const endpointId = text(connection.privateEndpointId, 'original Private Endpoint ID', true)
+    if (topology.version !== 2 || ids.has(id) || connections.has(endpointId)
+      || Object.keys(connection).some((key) => !['id', 'privateEndpointId', 'serviceId', 'state'].includes(key))
+      || !topology.vnets.some((vnet) => vnet.subnets.some((subnet) => subnet.privateEndpoints?.some((endpoint) => endpoint.id === endpointId)))
+      || !serviceIds.has(text(connection.serviceId, 'original Private Link service ID', true))
+      || !['approved', 'pending', 'rejected', 'disconnected', 'unknown'].includes(String(connection.state))) fail('invalid original Private Endpoint service connection')
+    ids.add(id); connections.add(endpointId)
+  }
 }
 
 export interface NamedEndpoint {
@@ -827,4 +887,24 @@ export function pruneDeletedInventory(next: InventoryTopology, previous: Invento
     })
     return true
   })
+  if (next.inventory.privateLinkServices) next.inventory.privateLinkServices = next.inventory.privateLinkServices.filter((service) => {
+    const oldOwner = before.find((owner) => sameInventoryOwner(owner, service.owner))
+    const newOwner = after.find((owner) => sameInventoryOwner(owner, service.owner))
+    if (oldOwner && !newOwner) return false
+    const oldLb = previous.inventory!.loadBalancers?.find((lb) => lb.id === service.loadBalancerId)
+    const newLb = next.inventory!.loadBalancers?.find((lb) => lb.id === service.loadBalancerId)
+    if (oldLb && !newLb || oldLb?.frontends.some((frontend) => frontend.id === service.frontendId)
+      && !newLb?.frontends.some((frontend) => frontend.id === service.frontendId)) return false
+    const hadConfigurations = service.natIpConfigurations.length > 0
+    service.natIpConfigurations = service.natIpConfigurations.filter((config) =>
+      !oldOwner?.subnets.some((subnet) => subnet.id === config.subnetId) || newOwner?.subnets.some((subnet) => subnet.id === config.subnetId))
+    return !hadConfigurations || service.natIpConfigurations.length > 0
+  })
+  const endpointIds = (topology: InventoryTopology) => new Set(topology.version === 2
+    ? topology.vnets.flatMap((vnet) => vnet.subnets.flatMap((subnet) => (subnet.privateEndpoints ?? []).map((endpoint) => endpoint.id))) : [])
+  const oldEndpoints = endpointIds(previous), newEndpoints = endpointIds(next)
+  if (next.inventory.privateEndpointConnections) next.inventory.privateEndpointConnections = next.inventory.privateEndpointConnections.filter((connection) =>
+    (!oldEndpoints.has(connection.privateEndpointId) || newEndpoints.has(connection.privateEndpointId))
+    && (!previous.inventory!.privateLinkServices?.some((service) => service.id === connection.serviceId)
+      || next.inventory!.privateLinkServices?.some((service) => service.id === connection.serviceId)))
 }

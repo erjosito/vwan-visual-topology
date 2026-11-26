@@ -66,6 +66,33 @@ export function DocumentArtifactStatus() {
   </details>
 }
 
+export function DocumentRecoveryNotice({ blocked }: { blocked: boolean }) {
+  const session = useWorkspaceSession(), language = useLanguage(), cloud = useCloudSession()
+  const text = (en: string, ja: string) => language === 'ja' ? ja : en
+  const commands = session?.artifactCommands
+  const state = useSyncExternalStore(commands?.subscribe ?? noSubscribe, commands?.getSnapshot ?? noSnapshot)
+  const [target, setTarget] = useState<'file' | 'cloud'>()
+  return <section className="document-recovery-notice" aria-label={text('Workspace recovery', 'ワークスペースの復元')} data-testid="workspace-recovery-notice">
+    <p role="status">{blocked
+      ? text('Another window owns profile storage. Changes in this window are temporary.',
+        '別のウィンドウがプロファイルを使用中です。このウィンドウでの変更は一時的です。')
+      : text('Profile recovery is unavailable. Changes in this window are temporary.',
+        'プロファイルの復元用コピーを利用できません。このウィンドウでの変更は一時的です。')}
+      {' '}{text('Save each changed tab before closing. Confirmed file and cloud saves are unaffected.',
+        '閉じる前に変更した各タブを保存してください。確認済みのファイルとクラウドの保存には影響しません。')}</p>
+    <div>
+      <button type="button" disabled={!commands || state?.operation === 'saving'} onClick={() => setTarget('file')}>{text('Save a file', 'ファイルに保存')}</button>
+      <button type="button" disabled={!commands || state?.operation === 'saving' || !cloud?.configured}
+        title={!cloud?.configured ? text('Cloud saving is not configured in this environment.', 'この環境ではクラウド保存を利用できません。') : undefined}
+        onClick={() => setTarget('cloud')}>{text('Save to cloud', 'クラウドに保存')}</button>
+    </div>
+    {target && commands && <DocumentDialogBoundary onClose={() => setTarget(undefined)} language={language}>
+      <Suspense fallback={null}><DestinationDialog commands={commands} initialTarget={target}
+        name={session?.getEditorHistory?.()?.topology.name ?? 'Topology'} onClose={() => setTarget(undefined)} /></Suspense>
+    </DocumentDialogBoundary>}
+  </section>
+}
+
 export function DocumentActions() {
   const session = useWorkspaceSession(), language = useLanguage()
   const text = (en: string, ja: string) => language === 'ja' ? ja : en

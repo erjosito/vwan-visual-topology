@@ -26,13 +26,23 @@ export default defineConfig({
     rollupOptions: {
       input: { main: resolve('index.html'), 'auth-redirect': resolve('auth-redirect.html') },
       output: {
-        manualChunks(id) {
-          const normalized = id.replace(/\\/g, '/')
-          if (/\/node_modules\/@azure\/msal-/.test(normalized)) return 'microsoft-auth'
-          if (normalized.includes('/node_modules/gifenc/')) return 'flow-gif-codec'
-          if (normalized.includes('/node_modules/fflate/')) return 'discrepancy-codec'
-          if (normalized.includes('/node_modules/zod/')) return 'schema-validation'
-          if (normalized.includes('node_modules')) return 'vendor'
+        codeSplitting: {
+          groups: [{
+            name: 'azure-net-schema',
+            test: /[\\/]src[\\/]azure-net[\\/](?:model|admission|addressing|subnet-peering|ars-route-maps)\.ts$/,
+            // Shared dependencies must not pull the native schema into VWAN startup.
+            includeDependenciesRecursively: false,
+          }, {
+            debugName: 'vendor-boundaries',
+            name(id) {
+              const normalized = id.replace(/\\/g, '/')
+              if (/\/node_modules\/@azure\/msal-/.test(normalized)) return 'microsoft-auth'
+              if (normalized.includes('/node_modules/gifenc/')) return 'flow-gif-codec'
+              if (normalized.includes('/node_modules/fflate/')) return 'discrepancy-codec'
+              if (normalized.includes('/node_modules/zod/')) return 'schema-validation'
+              if (normalized.includes('node_modules')) return 'vendor'
+            },
+          }],
         },
       },
     },

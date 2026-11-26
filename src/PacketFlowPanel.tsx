@@ -37,9 +37,15 @@ export function PacketFlowPanel({ topology, simulation, onHighlight, guidanceVne
     .map((frontend) => ({ key: JSON.stringify(['lb', lb.id, frontend.id]), ref: { kind: 'load-balancer' as const, loadBalancerId: lb.id, frontendId: frontend.id },
       label: `${t('Internal LB frontend')}: ${lb.name} / ${frontend.name} (${frontend.kind === 'private' ? frontend.privateIp ?? t('Address unknown') : ''})` })))
   const visibleLbs = lbOptions.filter((option) => option.label.toLocaleLowerCase().includes(search.toLocaleLowerCase())).slice(0, 100)
+  const peOptions = topology.version === 2 ? topology.vnets.flatMap((vnet) => vnet.subnets.flatMap((subnet) => (subnet.privateEndpoints ?? [])
+    .map((endpoint) => ({ key: JSON.stringify(['private-endpoint', endpoint.id]),
+      ref: { kind: 'private-endpoint' as const, privateEndpointId: endpoint.id },
+      label: `${t('Private Endpoint')}: ${endpoint.name} (${endpoint.ipAddress}) [${vnet.name} / ${vnet.id}]` })))) : []
+  const visiblePes = peOptions.filter((option) => option.label.toLocaleLowerCase().includes(search.toLocaleLowerCase())).slice(0, 100)
   const resolve = (key: string): PacketEndpoint | undefined => key === 'external'
     ? { kind: 'external', address: externalAddress } : key.startsWith('public:')
-      ? { kind: 'public-ip', publicIpId: key.slice('public:'.length) } : lbOptions.find((option) => option.key === key)?.ref ?? options.find((option) => option.key === key)?.ref
+      ? { kind: 'public-ip', publicIpId: key.slice('public:'.length) } : peOptions.find((option) => option.key === key)?.ref
+        ?? lbOptions.find((option) => option.key === key)?.ref ?? options.find((option) => option.key === key)?.ref
   const select = (kind: 'source' | 'target', value: string, change: (value: string) => void) => <label>
     {t(kind === 'source' ? 'Packet source' : 'Packet destination')}
     <select value={value} onChange={(event) => change(event.target.value)} aria-label={t(kind === 'source' ? 'Packet source' : 'Packet destination')}>
@@ -51,6 +57,9 @@ export function PacketFlowPanel({ topology, simulation, onHighlight, guidanceVne
       {kind === 'target' && lbOptions.find((option) => option.key === value) && !visibleLbs.some((option) => option.key === value)
         && <option value={value}>{lbOptions.find((option) => option.key === value)!.label}</option>}
       {kind === 'target' && visibleLbs.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
+      {kind === 'target' && peOptions.find((option) => option.key === value) && !visiblePes.some((option) => option.key === value)
+        && <option value={value}>{peOptions.find((option) => option.key === value)!.label}</option>}
+      {kind === 'target' && visiblePes.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
       {value && !visible.some((option) => option.key === value) && options.find((option) => option.key === value) && <option value={value}>{options.find((option) => option.key === value)!.label}</option>}
       {visible.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
     </select>
@@ -109,7 +118,7 @@ export function PacketFlowPanel({ topology, simulation, onHighlight, guidanceVne
           </article>)}
         </div>)}
       </section>}
-      {result.ingress && <p><strong>{t(result.loadBalancer ? 'Load Balancer ingress' : 'Public ingress')}: {t(result.ingress)}</strong></p>}
+      {result.ingress && <p><strong>{t(result.target.kind === 'private-endpoint' ? 'Private Link ingress' : result.loadBalancer ? 'Load Balancer ingress' : 'Public ingress')}: {t(result.ingress)}</strong></p>}
       {result.loadBalancer && <section data-testid="packet-lb-result" aria-label={t('Load Balancer selection')}>
         <h4>{t('Load Balancer selection')}: <code>{result.loadBalancer.id} · {result.loadBalancer.ruleId}</code></h4>
         <p>{t('Illustrative new-flow selection, not an observed Azure hash or session. Unknown health stays unknown; client data rules are evaluated separately.')}</p>

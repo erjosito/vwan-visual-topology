@@ -66,10 +66,113 @@ destinations reached through shared transit or conflicting remote peering routes
 are explicitly not assessed rather than assigned to the first matching VNet.
 
 Existing single-service public mappings and qualified NAT Gateway/Firewall
-behavior retain original network context. This does not add Private Link Service
-forwarding, proxy behavior, general multi-stage NAT, or overlap qualification for
+behavior retain original network context. Bounded Private Link Service forwarding
+is described below. This does not add proxy behavior, general multi-stage NAT, or overlap qualification for
 the legacy standalone VWAN provider. Bounded HA-ports steering retains its
 separately documented ownership restrictions.
+
+### Composed private SNAT
+
+H&S and Full Hybrid also support TCP/UDP workload-to-workload paths through
+two to four original NVA VMs with explicit `nva-snat` declarations. Use the
+existing original NVA SNAT editor for each waypoint. Each rule matches the
+tuple visible there, including source translation from the preceding NVA.
+The packet panel and MCP expose both mappings and their conditional inverses.
+Each inverse requires an independently checked route to the exact original
+translator, followed by its return route. A different router, missing route or
+loop does not establish a response mapping. Subnet and NIC filtering uses the
+tuple visible at each boundary; source ports remain illustrative.
+
+This slice does not qualify arbitrary public or DNAT chains, managed hubs,
+VPN/gateway composition or HA-ports steering. Existing single-service NAT and
+classic Firewall-to-NAT-Gateway support are unchanged. No live guest NAT rules,
+session state or application delivery are verified.
+
+### Private Endpoint to provider forwarding
+
+H&S and Full Hybrid can trace an explicitly approved original Private Endpoint
+connection to an original Private Link Service and Standard internal Load
+Balancer. Two unpeered consumers can reuse the same addresses, including provider
+addresses. The service binding does not create general provider VNet transit or
+access to another consumer.
+
+Open **VNet detail > Private Link services and connections** in the provider VNet
+to declare its original LB frontend, provider NAT subnet/address and provisioning
+state. Disabling Private Link Service network policies is an explicit subnet
+change. Bind each consumer's original Private Endpoint to that service and
+declare the connection approval. Select the Private Endpoint as the packet
+destination. Existing LB authoring controls its original backend pool, ordinary
+TCP/UDP rules, declared health and probe filtering.
+
+Native version-2 inventory stores `privateLinkServices[]` with `owner`,
+`loadBalancerId`, `frontendId`, `natIpConfigurations[]` (`id`, `subnetId`,
+`privateIp`), `provisioningState` (`succeeded` or `unknown`) and `proxyProtocol`.
+`privateEndpointConnections[]` stores `id`, `privateEndpointId`, `serviceId` and
+`state` (`approved`, `pending`, `rejected`, `disconnected` or `unknown`).
+The provider subnet uses `privateLinkServiceNetworkPolicies: "Disabled"`.
+Original associations survive native JSON, history, storage and shared
+web/Electron/CLI/MCP execution. The Bicep starter warns that it omits these
+service resources and bindings. Captured or retained unknown fields alone do not
+establish a service binding or approval.
+
+Evidence separates the original consumer and provider networks, the PLS
+source/destination mapping, LB destination mapping, visible filtering tuples and
+independently checked return routes. Provider SNAT uses the declared NAT address,
+not the consumer address. Port allocation and backend selection are illustrative.
+Conditional responses are not unsolicited reverse connections or live sessions.
+Source filtering, enabled PE subnet filtering, backend data filtering and health
+probe filtering remain separate.
+
+This qualified configuration slice requires one provider NAT configuration,
+declared successful provisioning, an approved connection, ordinary non-floating
+NIC-backed LB rules and no additional routers. Multiple NAT configurations,
+Proxy Protocol v2, HA ports, inbound-NAT-only bindings, Direct Connect preview and
+Application Gateway private connectivity remain not assessed. Missing capture
+relationships, unknown approval and unknown backend health cannot pass.
+
+The provider model follows Microsoft's
+[Private Link Service overview](https://learn.microsoft.com/en-us/azure/private-link/private-link-service-overview),
+including provider source NAT, approval, supported protocols and Standard LB
+integration. Qualification here is synthetic configuration testing, not live
+Azure service, provisioning, allocation or application validation.
+
+### Application Gateway private TCP proxy
+
+The separately negotiated application contract (`contractVersion: 2`,
+`operation: "application"`) also accepts
+`{version: 1, kind: "tcp", serviceId, client, sourcePort, port}`. The client is
+an original workload/NIC/IP binding. Open **VNet detail > Application Gateway
+private TCP proxy** to declare one private Standard_v2/WAF_v2 gateway, its
+dedicated subnet, distinct frontend and serving-instance addresses, original
+listener/rule/pool IDs and rule priority, one original workload backend and
+its port. Missing addresses, unknown provisioning or unknown default TCP probe
+health remain not assessed. Declared healthy is unverified.
+
+The **TCP proxy connections** application operation shows the client/frontend
+connection separately from the instance/backend connection. Backend NSGs see
+the instance's private source, with an illustrative ephemeral port. Each
+connection has independent forward and return routing, filtering and conditional
+response evidence. A reachable frontend does not imply a reachable backend.
+The client needs no direct backend route, and the proxy grants no arbitrary VNet
+transit. An unrelated unpeered duplicate address does not make an otherwise
+unique original peering route ambiguous; competing remote peering owners and
+unresolved shared transit remain unassessed.
+
+Native `application.services[].tcpProxy` persists the explicit configuration;
+the shared worker and MCP return the two connections in
+`application.connections[]`. Unsupported operations and unknown capture
+relationships do not gain coverage merely from retaining those fields. This
+slice does not qualify public frontends, multiple serving instances, TLS
+termination, Proxy Protocol, HTTP/WAF, autoscale/failover, additional translating
+routers, Private Link composition or live listener/application readiness.
+The Bicep starter is not an equivalent gateway deployment.
+
+References: Microsoft's
+[TCP/TLS proxy configuration](https://learn.microsoft.com/en-us/azure/application-gateway/how-to-tcp-tls-proxy),
+[Layer 4 client IP behavior](https://learn.microsoft.com/en-us/azure/application-gateway/proxy-protocol-header)
+and [gateway connection/source-address behavior](https://learn.microsoft.com/en-us/azure/application-gateway/how-application-gateway-works).
+These support a bounded synthetic configuration model, not a live Azure
+qualification claim.
 
 ## Supported boundaries
 
