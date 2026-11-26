@@ -1,0 +1,6 @@
+.canvas-selection-actions { position: absolute; z-index: 3; left: 12px; top: 12px; max-width: min(660px, calc(100% - 24px)); padding: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.canvas-selection-actions > span { display: inline-block; vertical-align: middle; max-width: calc(100% - 44px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px; font-size: 12px; }
+.canvas-selection-actions > button { float: right; width: 44px; margin-bottom: 4px; }
+.canvas-selection-actions > div { clear: both; }
+.canvas-selection-actions > div:not(.context-menu-tree) { display: flex; flex-wrap: wrap; gap: 6px; }
+.canvas-selection-actions button { min-height: 44px; padding: 6px 10px; font-size: 12px; }

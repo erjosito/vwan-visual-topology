@@ -4,6 +4,7 @@ import { contextActionDisabled } from './context-actions'
 import type { ContextAction } from './TopologyContextMenu'
 import { useWorkspaceSession } from './workspace-context'
 import { useCanvasPresentation } from './useCanvasPresentation'
+import './CanvasSelectionActions.css'
 
 const labels = { configure: 'Configure', connect: 'Hub connection', peer: 'Peer', inspect: 'Inspect routes', trace: 'Trace path' }
 const TopologyContextMenu = lazy(() => import('./TopologyContextMenu').then(module => ({ default: module.TopologyContextMenu })))

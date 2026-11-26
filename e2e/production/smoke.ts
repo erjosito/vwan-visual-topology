@@ -146,6 +146,8 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
       .map(({ path }) => readFile(resolve('dist', `.${path}`), 'utf8')))
     expect(startupCss.some((css) => /\.learning-belt-progress\b|\.belt-achievement-dialog\b/.test(css)),
       'Optional belt styles must stay out of normal startup').toBe(false)
+    expect(startupCss.some(css => /\.canvas-selection-actions\b/.test(css)),
+      'Selection-only styles must stay out of normal startup').toBe(false)
     expect(graph.localGzipBytes).toBeLessThanOrEqual(300_000)
     expect(graph.rawBytes).toBeLessThanOrEqual(1_200_000)
     expect(graph.files.some(({ path }: { path: string }) => /\/packet-flow-/.test(path))).toBe(false)
