@@ -166,7 +166,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
       expect(graph.files.some(({ path }: { path: string }) => /\/CloudDocumentSaveStatus-/.test(path))).toBe(false)
     }
     expect(graph.files.some(({ path }: { path: string }) => /\/(?:LearningDialog|task-guidance|LearningStatusDetails|TrackOverview|tracks|concept-bodies|belt-stages)-/.test(path))).toBe(false)
-    expect(graph.files.some(({ path }: { path: string }) => mode === 'vwan' ? /\/AzureNetApp-/.test(path) : /\/App-/.test(path))).toBe(false)
+    expect(graph.files.some(({ path }: { path: string }) => mode === 'vwan' ? /\/(?:AzureNetApp|azure-net-schema)-/.test(path) : /\/App-/.test(path))).toBe(false)
     await page.getByTestId('learning-status').click()
     await expect(page.getByTestId('learning-status-details')).toContainText('Saved locally')
     const trackOverview = page.getByTestId('learning-status-details').getByTestId('learning-tracks')
