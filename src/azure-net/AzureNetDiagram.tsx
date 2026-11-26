@@ -3,7 +3,6 @@ import { useWorkspaceEditorState } from '../workspace-context'
 import { diagramCurve } from '../diagram-layout'
 import { t } from '../i18n'
 import { CanvasBackground, CanvasControls, CanvasEdgeSelection } from '../CanvasPresentation'
-import { EmptyWorkspacePlatforms } from '../PlatformLinks'
 import { centerOfBox, connectionBend, fitDiagram, reverseCurve } from '../connection-geometry'
 import { NetworkNodeIcon } from '../NetworkNodeIcon'
 import { DiagramNodeBadge, DiagramNodeText } from '../DiagramNodeLabels'
@@ -758,7 +757,6 @@ export function AzureNetDiagram({
 
   return (
     <div ref={shellRef} className="aznet-canvas-shell" data-testid="aznet-canvas-shell">
-      {!readOnly && !topology.vnets.length && !topology.vwanHubs.length && !topology.sites.length && !topology.erLocations.length && <EmptyWorkspacePlatforms />}
       <svg
         ref={svgRef}
         className="aznet-diagram-svg"

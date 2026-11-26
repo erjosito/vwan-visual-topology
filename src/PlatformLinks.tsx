@@ -10,12 +10,3 @@ export function PlatformLinks() {
       title={t('Local MCP setup for compatible AI clients (Node 22+)')}>{t('MCP server')}</a>
   </>
 }
-
-export function EmptyWorkspacePlatforms() {
-  if (window.desktopSimulator) return null
-  return <aside className="empty-workspace-platforms" aria-label={t('Windows app and MCP server')}>
-    <h2>{t('Windows app and MCP server')}</h2>
-    <p>{t('Use AzNetSim on Windows or from a compatible AI client. This browser and your design stay open.')}</p>
-    <div><PlatformLinks /></div>
-  </aside>
-}
