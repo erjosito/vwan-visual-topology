@@ -28,6 +28,7 @@ const WorkspaceLibrary = lazy(() => import('./WorkspaceLibrary').then((module) =
 const PracticeWorkspaceBar = lazy(() => import('./learning/PracticeWorkspaceBar').then((module) => ({ default: module.PracticeWorkspaceBar })))
 const SharedTopology = lazy(() => import('./cloud/SharedTopology'))
 const CloseDocumentsDialog = lazy(() => import('./CloseDocumentsDialog').then(module => ({ default: module.CloseDocumentsDialog })))
+const DocumentRecoveryNotice = lazy(() => import('./DocumentActions').then(module => ({ default: module.DocumentRecoveryNotice })))
 const selectionFailure = 'Workspace could not be selected or preserved. Originals have not been intentionally replaced. Export your design before freeing browser storage.'
 
 class WorkspaceBoundary extends Component<{ children: ReactNode; onRecover: () => void }, { failed: boolean }> {
@@ -369,8 +370,7 @@ function Workspace({ visible = true }: { visible?: boolean }) {
         try { rootStorage.setItem(workspaceStorageKeys[provider], raw) } catch {}
       }
       setActive((current) => ({ id: tab.id, provider, revision: (current?.revision ?? 0) + 1 }))
-      setLibraryOpen(false); setNotice(ownership.current.current !== 'owned'
-        ? 'Workspace storage is unavailable. Save a file or cloud copy before closing this session.' : '')
+      setLibraryOpen(false); setNotice('')
       syncProviderUrl(provider, preserveQuery)
       return true
     } catch {
@@ -749,7 +749,6 @@ function Workspace({ visible = true }: { visible?: boolean }) {
       const button = id ? document.getElementById(`workspace-tab-${id}`) : undefined
       if (button) { button.focus(); tabFocusRequest.current = undefined }
     }, navigation: practiceReady && !practicing && tabs.tabs.length > 0 ? <WorkspaceTabsNavigation tabs={tabs.tabs} activeId={active?.id}
-        temporary={ownership.status !== 'owned'}
         getSave={tab => documents.get(tab).save}
         getCommands={tab => documents.get(tab).commands}
         onActivate={tab => { if (tab.id !== active?.id && activateTab(tab)) tabFocusRequest.current = tab.id }}
@@ -757,6 +756,8 @@ function Workspace({ visible = true }: { visible?: boolean }) {
     <div className={`simulator-shell${maximized ? ' canvas-maximized' : ''}`} data-canvas-style={style} data-ui-preview={presentationPreview || undefined}
       data-header-actions={headerActionsOpen || undefined}>
       {notice && !libraryOpen && <p role="alert">{t(notice)}</p>}
+      {practiceReady && active && !practicing && !libraryOpen && (ownership.status === 'blocked' || ownership.status === 'memory')
+        && <Suspense fallback={null}><DocumentRecoveryNotice blocked={ownership.status === 'blocked'} /></Suspense>}
       <CanvasMaximizeButton />
       {(practice || practiceNotice) && <Suspense fallback={null}><PracticeWorkspaceBar active={practicing}
         notice={practiceNotice} onReturn={leavePractice} onResume={practice ? resumePractice : undefined} onDiscard={discardPractice} /></Suspense>}

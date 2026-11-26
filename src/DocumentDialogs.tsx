@@ -8,8 +8,9 @@ import type { createDocumentCommands, CommandResult } from './document-commands'
 
 const CloudSavePicker = lazy(() => import('./cloud/CloudSavePicker'))
 
-export function DestinationDialog({ commands, name: initialName, onClose, onResult }: {
+export function DestinationDialog({ commands, name: initialName, onClose, onResult, initialTarget = 'file' }: {
   commands: ReturnType<typeof createDocumentCommands>; name: string; onClose: () => void; onResult?: (result: CommandResult) => void
+  initialTarget?: 'file' | 'cloud'
 }) {
   const language = useLanguage(), cloud = useCloudSession()
   const text = (en: string, ja: string) => language === 'ja' ? ja : en
@@ -19,7 +20,7 @@ export function DestinationDialog({ commands, name: initialName, onClose, onResu
   const [description, setDescription] = useState('')
   const descriptionId = useId()
   const [selection, setSelection] = useState<CloudSaveSelection>()
-  const [target, setTarget] = useState<'file' | 'cloud' | 'download'>('file')
+  const [target, setTarget] = useState<'file' | 'cloud' | 'download'>(initialTarget)
   const state = useSyncExternalStore(commands.subscribe, commands.getSnapshot)
   const validCloud = !!selection && selection.accountId === cloud?.account?.id && selection.api === cloud?.api
     && (!!selection.entry || !selection.full)
