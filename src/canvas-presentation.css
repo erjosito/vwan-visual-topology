@@ -53,6 +53,12 @@
 .canvas-maximize-icon { display: none; }
 .canvas-start-actions { position: absolute; z-index: 3; top: 20px; left: 50%; transform: translateX(-50%); display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: max-content; max-width: calc(100% - 24px); }
 .canvas-start-actions button { min-height: 44px; padding: 8px 12px; }
+.canvas-selection-actions { position: absolute; z-index: 3; left: 12px; top: 12px; max-width: min(660px, calc(100% - 24px)); padding: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.canvas-selection-actions > span { display: inline-block; vertical-align: middle; max-width: calc(100% - 44px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px; font-size: 12px; }
+.canvas-selection-actions > button { float: right; width: 44px; margin-bottom: 4px; }
+.canvas-selection-actions > div { clear: both; }
+.canvas-selection-actions > div:not(.context-menu-tree) { display: flex; flex-wrap: wrap; gap: 6px; }
+.canvas-selection-actions button { min-height: 44px; padding: 6px 10px; font-size: 12px; }
 @media (max-width: 900px) {
   .simulator-shell[data-ui-preview] .canvas-app .canvas-toolbar { max-height: min(80px, 10dvh); overflow-y: auto; }
   .simulator-shell[data-ui-preview] .canvas-app .legend { flex-shrink: 0; max-height: min(48px, 6dvh); overflow-y: auto; }
