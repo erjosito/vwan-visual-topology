@@ -34,7 +34,7 @@ export default defineConfig({
             includeDependenciesRecursively: false,
           }, {
             name: 'shared-network-core',
-            test: /[\\/]src[\\/](?:model|er-locations-catalog|hub-route-selection|warning-acknowledgements|ipv4|routing-intent|hub-routing|inventory|application-inventory|topology-limits|validation|bgp|vnet-communities|random-id|workspace-capabilities)\.ts$/,
+            test: /[\\/]src[\\/](?:model|er-locations-catalog|hub-route-selection|warning-acknowledgements|ipv4|routing-intent|hub-routing|inventory|application-inventory|topology-limits|validation|bgp|vnet-communities|random-id|workspace-capabilities|workspace-tabs|cloud[\\/](?:document-state|progress-status))\.ts$/,
             // These shared modules already load in every mode; keep optional dependencies lazy.
             includeDependenciesRecursively: false,
           }, {

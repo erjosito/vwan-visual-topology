@@ -80,11 +80,14 @@ export interface ApplicationInventory {
   dnsProfiles: ApplicationDnsProfile[]
 }
 export type ApplicationClient = WorkloadEndpoint | { kind: 'external'; address: string }
+type FirewallProxyRequest = {
+  version: 1; kind: 'firewall-proxy'; serviceId: string; client: ApplicationClient;
+  sourcePort: number; scheme: 'http' | 'https'; host: string; port: number
+} & ({ mode: 'explicit'; proxyPort: number } | { mode: 'transparent'; destinationAddress: string })
 export type ApplicationRequest =
   | { version: 1; kind: 'http'; serviceId: string; client: ApplicationClient; scheme: 'http' | 'https'; host: string; port: number; path: string }
   | { version: 1; kind: 'tcp'; serviceId: string; client: ApplicationClient; sourcePort: number; port: number }
-  | { version: 1; kind: 'firewall-proxy'; serviceId: string; client: ApplicationClient; mode: 'explicit' | 'transparent';
-      sourcePort: number; proxyPort: number; scheme: 'http' | 'https'; host: string; port: number; destinationAddress?: string }
+  | FirewallProxyRequest
   | { version: 1; kind: 'dns'; profileId: string; resolver: ApplicationClient; name: string; evaluatedAt: string; cache: 'fresh' }
 export type ApplicationOutcome = 'satisfied' | 'violated' | 'not-assessed'
 type Decision<K extends string, E> = {
@@ -145,11 +148,16 @@ export function validateApplicationRequest(value: unknown): ApplicationRequest {
   if (entry.kind === 'firewall-proxy') {
     object(entry, ['version', 'kind', 'serviceId', 'client', 'mode', 'sourcePort', 'proxyPort', 'scheme', 'host', 'port', 'destinationAddress'])
     if ((entry.mode !== 'explicit' && entry.mode !== 'transparent') || (entry.scheme !== 'http' && entry.scheme !== 'https')) return fail('explicit/transparent mode and HTTP/HTTPS scheme required')
-    if ([entry.port, entry.sourcePort, entry.proxyPort].some((port) => typeof port !== 'number' || !Number.isInteger(port) || port < 1 || port > 65535)) fail('proxy TCP ports 1-65535 required')
-    if (entry.mode === 'transparent' ? typeof entry.destinationAddress !== 'string' || ipv4(entry.destinationAddress) === undefined : entry.destinationAddress !== undefined) fail('only transparent proxy requests require an original destination IPv4')
-    return { version: 1, kind: 'firewall-proxy', serviceId: text(entry.serviceId), client: client(entry.client), mode: entry.mode,
-      sourcePort: entry.sourcePort as number, proxyPort: entry.proxyPort as number, scheme: entry.scheme, host: normalizeApplicationHost(entry.host),
-      port: entry.port as number, ...(typeof entry.destinationAddress === 'string' ? { destinationAddress: entry.destinationAddress } : {}) }
+    if ([entry.port, entry.sourcePort, ...(entry.mode === 'explicit' ? [entry.proxyPort] : [])].some((port) =>
+      typeof port !== 'number' || !Number.isInteger(port) || port < 1 || port > 65535)) return fail('proxy TCP ports 1-65535 required')
+    const common: Omit<FirewallProxyRequest, 'mode'> = { version: 1, kind: 'firewall-proxy', serviceId: text(entry.serviceId), client: client(entry.client),
+      sourcePort: entry.sourcePort as number, scheme: entry.scheme, host: normalizeApplicationHost(entry.host), port: entry.port as number }
+    if (entry.mode === 'explicit') {
+      if (entry.destinationAddress !== undefined) return fail('explicit proxy has no original destination IPv4')
+      return { ...common, mode: 'explicit', proxyPort: entry.proxyPort as number }
+    }
+    if (typeof entry.destinationAddress !== 'string' || ipv4(entry.destinationAddress) === undefined || entry.proxyPort !== undefined) return fail('transparent proxy requires an original destination IPv4 and no explicit proxy port')
+    return { ...common, mode: 'transparent', destinationAddress: entry.destinationAddress }
   }
   if (entry.kind === 'tcp') {
     object(entry, ['version', 'kind', 'serviceId', 'client', 'sourcePort', 'port'])

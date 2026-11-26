@@ -7,10 +7,27 @@ import { applicationPlatformRequest } from '../tests/fixtures/application'
 import { executePlatform } from '../src/platform/service'
 import { PlatformJobs } from './jobs'
 import { applicationTcpTopology, applicationTcpRequest } from '../tests/fixtures/application-tcp'
-import { applicationFirewallTopology, applicationFirewallRequest } from '../tests/fixtures/application-firewall'
+import { applicationFirewallTopology, applicationFirewallRequest, applicationFirewallTransparentTopology, applicationFirewallTransparentRequest } from '../tests/fixtures/application-firewall'
 
 const compiled = createRequire(import.meta.url)('../platform-dist/service.cjs') as { executePlatform: typeof executePlatform }
 describe('shared application headless contracts', () => {
+  it('preserves actual transparent interception rather than native backend delivery across source, compiled and worker execution', async () => {
+    const request = { contractVersion: 2 as const, operation: 'application' as const,
+      document: { mode: 'full' as const, topology: applicationFirewallTransparentTopology() }, application: applicationFirewallTransparentRequest() }
+    const expected = executePlatform(request), jobs = new PlatformJobs(resolve('platform-dist', 'worker.cjs'))
+    try {
+      expect(expected.errors).toEqual([])
+      expect(expected.application?.configuration).toBe('satisfied')
+      expect(expected.application?.connections?.[0].forward.native).toMatchObject({ status: 'proxy-intercepted' })
+      expect(compiled.executePlatform(request)).toEqual(expected)
+      expect(await jobs.run(request)).toEqual(expected)
+      request.document.topology.vnetPeerings[0].enabled = false
+      const blocked = executePlatform(request)
+      expect(blocked.application?.configuration).toBe('violated')
+      expect(compiled.executePlatform(request)).toEqual(blocked)
+      expect(await jobs.run(request)).toEqual(blocked)
+    } finally { jobs.close() }
+  })
   it('preserves original Firewall policy, uncertain-instance returns and deny evidence in source, compiled and worker execution', async () => {
     const topology = applicationFirewallTopology()
     const request = { contractVersion: 2 as const, operation: 'application' as const, document: { mode: 'full' as const, topology }, application: applicationFirewallRequest() }
@@ -75,7 +92,7 @@ describe('shared application headless contracts', () => {
     const call = async (name: string, args: Record<string, unknown> = {}) => client.callTool({ name, arguments: args })
     try {
       const capabilities = await call('get_capabilities')
-      expect(capabilities.structuredContent).toMatchObject({ contractVersion: 2, supportedContractVersions: [1, 2], application: { providers: ['application-gateway-tcp', 'azure-firewall-explicit-proxy'] } })
+      expect(capabilities.structuredContent).toMatchObject({ contractVersion: 2, supportedContractVersions: [1, 2], application: { providers: ['application-gateway-tcp', 'azure-firewall-explicit-proxy', 'azure-firewall-application-proxy'] } })
       const request = applicationPlatformRequest()
       for (const invalid of [{ ...request, contractVersion: 1 }, { ...request, contractVersion: 3 }, { ...request, application: { ...request.application, ignored: true } }]) {
         expect((await call('start_simulation', { request: invalid })).isError).toBe(true)
@@ -84,7 +101,9 @@ describe('shared application headless contracts', () => {
         document: { mode: 'full' as const, topology: applicationTcpTopology() }, application: applicationTcpRequest() }
       const firewall = { contractVersion: 2 as const, operation: 'application' as const,
         document: { mode: 'full' as const, topology: applicationFirewallTopology() }, application: applicationFirewallRequest() }
-      for (const input of [request, tcp, firewall]) {
+      const transparent = { contractVersion: 2 as const, operation: 'application' as const,
+        document: { mode: 'full' as const, topology: applicationFirewallTransparentTopology() }, application: applicationFirewallTransparentRequest() }
+      for (const input of [request, tcp, firewall, transparent]) {
         const expected = executePlatform(input)
         const started = (await call('start_simulation', { request: input })).structuredContent as { handle: string }
         let completed: Record<string, unknown> | undefined

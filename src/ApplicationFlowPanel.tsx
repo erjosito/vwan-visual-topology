@@ -16,6 +16,7 @@ export function ApplicationFlowPanel({ topology, owner, result, onResult }: {
   onResult: (result: ApplicationResult | undefined) => void
 }) {
   const [kind, setKind] = useState<ApplicationRequest['kind']>('http')
+  const [proxyMode, setProxyMode] = useState<'explicit' | 'transparent'>('explicit')
   const [running, setRunning] = useState(false)
   const [error, setError] = useState('')
   const controlId = useId()
@@ -49,9 +50,11 @@ export function ApplicationFlowPanel({ topology, owner, result, onResult }: {
       const application: ApplicationRequest = kind === 'tcp'
         ? { version: 1, kind, serviceId: String(form.get('service')), client: source, sourcePort: Number(form.get('sourcePort')), port: Number(form.get('port')) }
         : kind === 'firewall-proxy'
-        ? { version: 1, kind, serviceId: String(form.get('service')), client: source, mode: 'explicit',
-          sourcePort: Number(form.get('sourcePort')), proxyPort: Number(form.get('proxyPort')), scheme: form.get('scheme') === 'http' ? 'http' : 'https',
-          host: String(form.get('host')), port: Number(form.get('port')) }
+        ? { version: 1, kind, serviceId: String(form.get('service')), client: source,
+          sourcePort: Number(form.get('sourcePort')), scheme: form.get('scheme') === 'http' ? 'http' : 'https',
+          host: String(form.get('host')), port: Number(form.get('port')),
+          ...(proxyMode === 'explicit' ? { mode: 'explicit', proxyPort: Number(form.get('proxyPort')) }
+            : { mode: 'transparent', destinationAddress: String(form.get('destinationAddress')) }) }
         : kind === 'http'
         ? { version: 1, kind, serviceId: String(form.get('service')), client: source, scheme: String(form.get('scheme')) as 'http' | 'https',
           host: String(form.get('host')), port: Number(form.get('port')), path: String(form.get('path')) }
@@ -75,7 +78,7 @@ export function ApplicationFlowPanel({ topology, owner, result, onResult }: {
       <label htmlFor={`${controlId}-operation`}>{t('Application operation')}</label><select id={`${controlId}-operation`} value={kind} onChange={(event) => setKind(event.target.value as ApplicationRequest['kind'])}>
         <option value="http">{t('HTTP request matching')}</option><option value="dns">{t('DNS answer selection')}</option>
         <option value="tcp">{t('TCP proxy connections')}</option>
-        <option value="firewall-proxy">{t('Firewall explicit proxy')}</option>
+        <option value="firewall-proxy">{t('Firewall application proxy')}</option>
       </select>
       <label htmlFor={`${controlId}-source`}>{t('Original client or resolver')}</label><select id={`${controlId}-source`} name="source">
         <option value="external">{t('Explicit external IPv4')}</option>
@@ -84,13 +87,18 @@ export function ApplicationFlowPanel({ topology, owner, result, onResult }: {
       <label>{t('External client or resolver IPv4')}<input name="address" defaultValue="198.51.100.10" maxLength={15} /></label>
       {kind !== 'dns' ? <>
         <label htmlFor={`${controlId}-service`}>{t('Original application service')}</label><select id={`${controlId}-service`} name="service" required>{services.map((entry) => <option key={entry.id} value={entry.id}>{entry.name} ({entry.id})</option>)}</select>
+        {kind === 'firewall-proxy' && <label>{t('Firewall proxy mode')}<select aria-label={t('Firewall proxy mode')} value={proxyMode}
+          onChange={(event) => setProxyMode(event.target.value === 'transparent' ? 'transparent' : 'explicit')}>
+          <option value="explicit">{t('Explicit HTTP/HTTPS CONNECT')}</option><option value="transparent">{t('Transparent application rule')}</option>
+        </select></label>}
         {kind === 'http' || kind === 'firewall-proxy' ? <>
         <label htmlFor={`${controlId}-scheme`}>{t('Request scheme')}</label><select id={`${controlId}-scheme`} name="scheme"><option value="https">HTTPS</option><option value="http">HTTP</option></select>
-        <label>{t('Request host')}<input name="host" required maxLength={253} defaultValue="app.example.test" /></label>
+        <label>{t(kind === 'firewall-proxy' && proxyMode === 'transparent' ? 'HTTP Host or HTTPS SNI' : 'Request host')}<input name="host" required maxLength={253} defaultValue="app.example.test" /></label>
         <label>{t('Request port')}<input name="port" type="number" min={1} max={65535} required defaultValue={443} /></label>
         {kind === 'http' ? <label>{t('Absolute request path')}<input name="path" required maxLength={2048} defaultValue="/" /></label> : <>
           <label>{t('TCP source port')}<input name="sourcePort" type="number" min={1} max={65535} required defaultValue={49152} /></label>
-          <label>{t('Firewall proxy port')}<input name="proxyPort" type="number" min={1} max={65535} required defaultValue={3128} /></label>
+          {proxyMode === 'explicit' ? <label key="explicit-proxy-port">{t('Firewall proxy port')}<input name="proxyPort" type="number" min={1} max={65535} required defaultValue={3128} /></label>
+            : <label key="transparent-destination">{t('Original destination IPv4')}<input name="destinationAddress" required maxLength={15} defaultValue="10.93.1.4" /></label>}
         </>}
         </> : <>
           <label key="tcp-source-port">{t('TCP source port')}<input name="sourcePort" type="number" min={1} max={65535} required defaultValue={49152} /></label>
@@ -119,6 +127,7 @@ export function ApplicationFlowPanel({ topology, owner, result, onResult }: {
         <p>{t('Separate TCP connection; conditional response only, not a NAT inverse or live session.')}</p>
         {[connection.forward, connection.reply].map((leg) => <details key={leg.direction}>
           <summary>{t(leg.direction)}: {t(leg.routing)}</summary>
+          {leg.native && !Array.isArray(leg.native) && <p>{t('Native trace status')}: <code data-testid="application-native-status">{leg.native.status}</code></p>}
           {leg.tuple && <code data-testid="application-connection-tuple">{leg.tuple.sourceAddress}:{leg.tuple.sourcePort} -&gt; {leg.tuple.destinationAddress}:{leg.tuple.destinationPort}</code>}
           {leg.reasons.map((reason) => <p key={reason}>{t(reason)}</p>)}
           <ol>{leg.steps.slice(0, 100).map((step, index) => <li key={index}><code>{step.entity.kind} / {step.entity.id}</code> {t(step.evidence)}</li>)}</ol>

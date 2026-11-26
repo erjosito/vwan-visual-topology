@@ -20,8 +20,9 @@ type Point = { owner: InventoryOwner; subnetId: string; endpoint?: WorkloadEndpo
 type Connection = NonNullable<ApplicationResult['connections']>[number]
 
 function connection(topology: InventoryTopology, simulation: AzSimulationResult, id: Connection['id'], tuple: FiveTuple,
-  from: Point, to: Point, firewallId: string, uncertainty?: TupleUncertainty): Connection {
-  const forward = traceInventoryPacketLeg(topology, simulation, from.owner, from.subnetId, tuple, 'forward', to, from.appliance?.id, from.appliance?.privateIp)
+  from: Point, to: Point, firewallId: string, uncertainty?: TupleUncertainty, applicationProxyId?: string): Connection {
+  const forward = traceInventoryPacketLeg(topology, simulation, from.owner, from.subnetId, tuple, 'forward', to,
+    from.appliance?.id, from.appliance?.privateIp, false, applicationProxyId)
   const reply = traceInventoryPacketLeg(topology, simulation, to.owner, to.subnetId, reverse(tuple), 'reply', from, to.appliance?.id, to.appliance?.privateIp)
   if (otherRouter(forward, firewallId)) forward.routing = 'not-assessed'
   if (otherRouter(reply, firewallId)) reply.routing = 'not-assessed'
@@ -82,8 +83,8 @@ export function evaluateFirewallProxy(topology: InventoryTopology, request: Extr
     provenance: 'declared-configuration', evidence: { conditional: true, owner: selected, httpAvailability: 'not-assessed', tlsAvailability: 'not-assessed' } }]
   const result: ApplicationResult = { version: 1, kind: 'firewall-proxy', configuration: 'not-assessed', availability: 'not-assessed',
     decisions, connections: [], uncertainties: [], limitations: [
-      'Original native-v2 Standard/Premium Firewall policy, explicit HTTP or HTTPS CONNECT, and one declared DNS-bound private workload backend. No live DNS, TLS, authentication, health or application availability is verified.',
-      'Inheritance, DNAT composition, threat intelligence, IDPS, TLS inspection, public upstreams, extra routers and Private Link composition are not qualified. Transparent application rules are not enabled by this provider.',
+      'Original native-v2 Standard/Premium Firewall policy and one declared DNS-bound private workload. Explicit HTTP/HTTPS CONNECT or natively intercepted HTTP/non-inspected HTTPS only; no live DNS, TLS, authentication, health or application availability is verified.',
+      'Inheritance, DNAT composition, threat intelligence, IDPS, TLS inspection, public upstreams, extra routers and Private Link composition are not qualified. Transparent requests require native interception by the original Firewall.',
       'Firewall upstream source addresses are uncertain within AzureFirewallSubnet; the VIP and ephemeral port are representative, not a serving-instance allocation. Every usable return address is checked within the bounded /24-/26 subnet slice.',
     ] }
   const finish = (reason: string) => {
@@ -92,7 +93,7 @@ export function evaluateFirewallProxy(topology: InventoryTopology, request: Extr
     return result
   }
   if (topology.version !== 2 || service.kind !== 'azure-firewall' || !config || service.owner?.kind !== 'vnet'
-    || request.client.kind !== 'workload' || service.unsupportedFeatures.length || request.mode !== 'explicit'
+    || request.client.kind !== 'workload' || service.unsupportedFeatures.length
     || config.configuration !== 'complete' || config.parentPolicy !== 'none' || config.dnat !== 'none'
     || config.threatIntelligence !== 'off' || config.idps !== 'off' || config.tlsInspection !== 'off'
     || config.provisioningState !== 'succeeded' || topology.inventory?.capture?.configurationComplete === false
@@ -103,7 +104,7 @@ export function evaluateFirewallProxy(topology: InventoryTopology, request: Extr
   const firewall = vnet.appliances.find((entry) => entry.id === config.applianceId)!
   const subnet = vnet.subnets.find((entry) => entry.id === firewall.subnetId)!, range = cidr(subnet.prefix)!
   if (range.length < 24 || range.length > 26) return finish('Firewall instance-address return coverage is bounded to AzureFirewallSubnet /24 through /26; other sizes remain not assessed.')
-  if (!config.explicitProxy.enabled || config.explicitProxy.httpPort !== request.proxyPort) {
+  if (request.mode === 'explicit' && (!config.explicitProxy.enabled || config.explicitProxy.httpPort !== request.proxyPort)) {
     policy.outcome = 'violated'
     return finish('The original Firewall policy must enable explicit proxy and its single HTTP port must match the client proxy setting for both HTTP and HTTPS CONNECT.')
   }
@@ -127,19 +128,26 @@ export function evaluateFirewallProxy(topology: InventoryTopology, request: Extr
   for (const collection of ordered) {
     const rule = collection.type === 'network' ? collection.rules.find((rule) => rule.protocol !== 'udp'
       && rule.sourcePrefixes.some((prefix) => contains(prefix, ipv4(clientIp)!))
-      && rule.destinationPrefixes.some((prefix) => contains(prefix, ipv4(backendIp)!))
+      && rule.destinationPrefixes.some((prefix) => contains(prefix, ipv4(request.mode === 'transparent' ? request.destinationAddress : backendIp)!))
       && rule.destinationPorts.some((port) => port === '*' || port === request.port))
       : collection.rules.find((rule) => rule.protocol === request.scheme && rule.port === request.port
         && rule.sourcePrefixes.some((prefix) => contains(prefix, ipv4(clientIp)!))
         && rule.targetFqdns.some((host) => host === '*' || host === request.host))
     if (!rule) continue
     Object.assign(policy.evidence, { groupId: collection.groupId, collectionId: collection.id, ruleId: rule.id, ruleType: collection.type, action: collection.action })
-    if (collection.type === 'network') return finish('A network rule takes precedence. It cannot be relabeled as an application-rule proxy or granted application-rule SNAT by this provider.')
+    if (collection.type === 'network') {
+      if (request.mode === 'transparent' && collection.action === 'deny') policy.outcome = 'violated'
+      return finish('A network rule takes precedence. It cannot be relabeled as an application-rule proxy or granted application-rule SNAT by this provider.')
+    }
     policy.outcome = collection.action === 'allow' ? 'satisfied' : 'violated'
     break
   }
   if (policy.outcome !== 'satisfied') return finish(policy.outcome === 'violated' ? 'The first matching original application collection denies this request.'
     : 'No declared application rule selected this request. Built-in infrastructure rules are not inventoried, so unmatched requests remain not assessed.')
+  if (request.mode === 'transparent' && request.scheme === 'https' && backendIp !== request.destinationAddress) {
+    policy.outcome = 'not-assessed'
+    return finish('Non-inspected HTTPS matches declared SNI but retains the original destination. A different Firewall DNS answer cannot substitute a new upstream address.')
+  }
   policy.reasons = ['Declared original policy selection only: network rules precede application rules, then group priority, collection priority and original rule order. DNS is declared, not queried.']
   const simulation = simulateAzNet(topology)
   const gateway: Point = { owner, subnetId: subnet.id, appliance: firewall }
@@ -148,10 +156,12 @@ export function evaluateFirewallProxy(topology: InventoryTopology, request: Extr
   for (const id of ['client-to-proxy', 'proxy-to-backend'] as const) {
     const first = id === 'client-to-proxy'
     const tuple: FiveTuple & { protocol: 'tcp' } = { protocol: 'tcp', sourceAddress: first ? clientIp : firewall.privateIp,
-      destinationAddress: first ? firewall.privateIp : backendIp, sourcePort: first ? request.sourcePort : 49152,
-      destinationPort: first ? request.proxyPort : request.port }
+      destinationAddress: first ? request.mode === 'transparent' ? request.destinationAddress : firewall.privateIp : backendIp,
+      sourcePort: first ? request.sourcePort : 49152,
+      destinationPort: first && request.mode === 'explicit' ? request.proxyPort : request.port }
     const value = connection(topology, simulation, id, tuple, first ? clientPoint : gateway, first ? gateway : backendPoint,
-      firewall.id, first ? undefined : { sourceAddressPrefixes: [subnet.prefix], sourcePorts: [1024, 65535] })
+      firewall.id, first ? undefined : { sourceAddressPrefixes: [subnet.prefix], sourcePorts: [1024, 65535] },
+      first && request.mode === 'transparent' ? firewall.id : undefined)
     result.connections!.push(value)
     const decision = decisions.find((entry) => entry.kind === 'network-leg' && entry.evidence.leg === id)!
     decision.outcome = value.nsg.forward.outcome === 'denied' || value.forward.routing === 'unreachable' || value.reply.routing === 'unreachable' ? 'violated'
