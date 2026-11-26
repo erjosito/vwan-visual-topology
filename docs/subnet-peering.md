@@ -213,8 +213,9 @@ possible instances work. Mixed returns remain unassessed.
 
 Declare complete policy, successful provisioning, no inheritance or DNAT
 composition, and disabled threat intelligence, IDPS and TLS inspection.
-Unknown controls, public upstreams, additional routers, Private Link composition
-and transparent application rules remain unassessed. DNS bindings are explicit
+Unknown controls, public upstreams, additional routers and Private Link
+composition remain unassessed. Transparent interception has its separate proof
+described below. DNS bindings are explicit
 configuration, not live resolution. Application, TLS and listener availability
 remain unverified. The Bicep starter omits these policy and DNS declarations and
 is not an equivalent deployment.
@@ -222,6 +223,39 @@ is not an equivalent deployment.
 References: Microsoft's [explicit proxy](https://learn.microsoft.com/en-us/azure/firewall/explicit-proxy),
 [rule processing](https://learn.microsoft.com/en-us/azure/firewall/rule-processing)
 and [private-range SNAT](https://learn.microsoft.com/en-us/azure/firewall/snat-private-range).
+
+### Firewall transparent application rules
+
+The same original Firewall policy also supports
+`{version: 1, kind: "firewall-proxy", mode: "transparent", serviceId, client,
+sourcePort, destinationAddress, scheme, host, port}`. Do not supply `proxyPort`.
+Choose **Firewall application proxy > Transparent application rule** in the
+application panel and declare the original destination plus HTTP Host or HTTPS
+SNI. Explicit proxy need not be enabled for transparent rules.
+
+The original native route must actually reach the selected original Firewall,
+for example through the client's UDR. The unmodified native witness stops with
+`status: "proxy-intercepted"` at that appliance. It does not report backend
+delivery, infer a direct client/backend connection or turn a bypass into proxy
+evidence. Upstream routing and its response are assessed independently.
+Original client traffic sent to a peered Firewall is not classified as traffic
+forwarded from a third VNet merely because its next hop is an appliance.
+
+Network rules match the original destination and precede application rules
+regardless of numeric application priority. A matching transparent network deny
+is a violation; a matching network allow remains outside this application
+proxy provider. HTTP Host may select the declared Firewall DNS-bound backend,
+even when it differs from the original client destination. Without TLS
+inspection, HTTPS uses declared SNI for matching but cannot substitute a
+different DNS answer for the original destination. Such a mismatch stays
+unassessed.
+
+Both proxy connections retain conditional replies. The client-facing reply
+preserves the original destination identity; this does not create an
+end-to-end NAT inverse or live session. Application-rule source translation
+still applies independently of network-rule private SNAT exclusions. The same
+instance-address uncertainty, exhaustive bounded return witnesses, original
+identities and unsupported controls described above apply.
 
 ## Supported boundaries
 

@@ -1,6 +1,17 @@
 import { registerJapaneseMessages } from './messages'
 
 registerJapaneseMessages({
+  'Firewall application proxy': 'Firewall アプリケーション プロキシ',
+  'Firewall proxy mode': 'Firewall プロキシ モード',
+  'Explicit HTTP/HTTPS CONNECT': '明示的 HTTP/HTTPS CONNECT',
+  'Transparent application rule': '透過的アプリケーション ルール',
+  'HTTP Host or HTTPS SNI': 'HTTP Host または HTTPS SNI',
+  'Original destination IPv4': '元の宛先 IPv4',
+  'Native trace status': 'ネイティブ トレースの状態',
+  'Original Firewall reached through native forwarding. Client routing stops at the application proxy; no onward backend delivery is inferred.': 'ネイティブ転送で元の Firewall に到達しました。クライアントのルーティングはアプリケーション プロキシで停止し、その先のバックエンドへの配信は推定しません。',
+  'Non-inspected HTTPS matches declared SNI but retains the original destination. A different Firewall DNS answer cannot substitute a new upstream address.': '検査しない HTTPS は宣言された SNI と照合し、元の宛先を保持します。異なる Firewall DNS 応答を新しい上流アドレスとして代入しません。',
+  'Original native-v2 Standard/Premium Firewall policy and one declared DNS-bound private workload. Explicit HTTP/HTTPS CONNECT or natively intercepted HTTP/non-inspected HTTPS only; no live DNS, TLS, authentication, health or application availability is verified.': '元の native-v2 Standard/Premium Firewall ポリシーと宣言された DNS バインドを持つ一つのプライベート バックエンドが対象です。明示的 HTTP/HTTPS CONNECT、またはネイティブに捕捉された HTTP/検査なし HTTPS のみを扱います。実際の DNS、TLS、認証、正常性、アプリケーション可用性は検証しません。',
+  'Inheritance, DNAT composition, threat intelligence, IDPS, TLS inspection, public upstreams, extra routers and Private Link composition are not qualified. Transparent requests require native interception by the original Firewall.': '継承、DNAT との組み合わせ、脅威インテリジェンス、IDPS、TLS 検査、パブリック接続先、追加ルーター、Private Link との組み合わせは対象外です。透過的要求には元の Firewall によるネイティブな捕捉が必要です。',
   'Original Firewall proxy policy': '元の Firewall プロキシ ポリシー',
   'Use an existing Firewall appliance and original policy, collection, rule and DNS binding IDs. JSON edits are validated before saving. No resources, DNS answers or serving-instance IPs are discovered.': '既存の Firewall と元のポリシー、コレクション、ルール、DNS バインド ID を使用します。JSON は保存前に検証します。リソース、DNS 応答、処理インスタンス IP は検出しません。',
   'Original Firewall service': '元の Firewall サービス',

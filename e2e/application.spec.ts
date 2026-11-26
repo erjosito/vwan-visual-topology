@@ -12,7 +12,7 @@ import '../src/application-messages-ja'
 import '../src/network-detail-messages-ja'
 import '../src/packet-messages-ja'
 import { applicationTcpTopology } from '../tests/fixtures/application-tcp'
-import { applicationFirewallTopology } from '../tests/fixtures/application-firewall'
+import { applicationFirewallTopology, applicationFirewallTransparentTopology } from '../tests/fixtures/application-firewall'
 
 for (const locale of ['en', 'ja'] as const) {
 test(`Firewall explicit proxy authoring ${locale} preserves original policy and conditional connections after reload`, async ({ page }) => {
@@ -77,6 +77,55 @@ test(`Firewall explicit proxy authoring ${locale} preserves original policy and 
   await inspect('violated')
   await expect(page.getByTestId('application-connection-proxy-to-backend')).toHaveCount(0)
   expect((await read()).application.services[0].firewallProxy.dnsBindings).toEqual(config.dnsBindings)
+})
+
+test(`Firewall transparent proxy ${locale} preserves native interception and original destination semantics`, async ({ page }) => {
+  await loadLanguage(locale)
+  const t = (message: string) => translate(locale, message), topology = applicationFirewallTransparentTopology()
+  await page.addInitScript(({ topology, locale }) => {
+    if (!localStorage.getItem('aznet-visual-topology:v1')) localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))
+    localStorage.setItem('vwan-visual-topology:language:v1', locale)
+  }, { topology, locale })
+  await page.setViewportSize({ width: locale === 'ja' ? 390 : 1600, height: 1000 })
+  await page.goto(`/?mode=${locale === 'ja' ? 'hub-spoke' : 'full'}`)
+  const open = async () => {
+    await page.getByTestId('aznet-vnet-proxy').click()
+    await page.getByRole('button', { name: t('VNet detail'), exact: true }).click()
+  }
+  const inspect = async () => {
+    const panel = page.getByTestId('application-flow-panel')
+    await panel.getByLabel(t('Application operation'), { exact: true }).selectOption('firewall-proxy')
+    await panel.getByLabel(t('Firewall proxy mode'), { exact: true }).selectOption('transparent')
+    await expect(panel.getByLabel(t('Original destination IPv4'), { exact: true })).toHaveValue('10.93.1.4')
+    await panel.getByLabel(t('Original client or resolver'), { exact: true }).selectOption({ label: 'client VM / client NIC / Primary (100.64.1.4) [Client / client]' })
+    await panel.getByRole('button', { name: t('Inspect application contract'), exact: true }).click()
+    await expect(panel.getByTestId('application-decisions').getByRole('heading', {
+      name: `${t('Configuration')}: ${t('satisfied')} · ${t('Application availability')}: ${t('not-assessed')}`, exact: true,
+    })).toBeVisible()
+    const client = panel.getByTestId('application-connection-client-to-proxy')
+    await client.locator('summary').first().click()
+    await expect(client.getByTestId('application-native-status').first()).toHaveText('proxy-intercepted')
+    await expect(client.getByTestId('application-connection-tuple').first()).toHaveText('100.64.1.4:49152 -> 10.93.1.4:443')
+    await expect(panel.getByTestId('application-connection-proxy-to-backend')).toBeVisible()
+    await expect(panel.getByLabel(t('HTTP Host or HTTPS SNI'), { exact: true })).toHaveValue('app.example.test')
+    return panel
+  }
+  await open()
+  await inspect()
+  const read = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
+  const saved = await read()
+  await page.reload()
+  await open()
+  const panel = await inspect()
+  expect(await read()).toEqual(saved)
+  expect((await new AxeBuilder({ page }).include('[data-testid="application-flow-panel"]').analyze()).violations).toEqual([])
+  await panel.getByLabel(t('Original destination IPv4'), { exact: true }).fill('198.51.100.40')
+  await expect(panel.getByTestId('application-decisions')).toHaveCount(0)
+  await panel.getByRole('button', { name: t('Inspect application contract'), exact: true }).click()
+  await expect(panel.getByTestId('application-decisions').getByRole('heading', {
+    name: `${t('Configuration')}: ${t('not-assessed')} · ${t('Application availability')}: ${t('not-assessed')}`, exact: true,
+  })).toBeVisible()
+  await expect(panel.getByTestId('application-connection-proxy-to-backend')).toHaveCount(0)
 })
 
 test(`private TCP authoring ${locale} exposes separate connection tuples and preserves them after reload`, async ({ page }) => {

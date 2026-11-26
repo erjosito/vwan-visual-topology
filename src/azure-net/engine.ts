@@ -212,6 +212,7 @@ export interface AzTraceHop {
 
 export type AzTraceStatus =
   | 'delivered'
+  | 'proxy-intercepted'
   | 'dropped-blackhole'
   | 'dropped-no-route'
   | 'dropped-no-outbound-access'
@@ -2110,7 +2111,7 @@ function traceAzNetFlowCore(
   simulation: AzSimulationResult,
   source: AzEndpointRef,
   destinationIp: string,
-  options?: { sourceAddress?: string; sourceApplianceId?: string
+  options?: { sourceAddress?: string; sourceApplianceId?: string; applicationProxyId?: string
     vpnTranslation?: (connectionId: string, direction: 'ingress' | 'egress', destinationAddress: string) =>
       { destinationAddress: string; detail: string; blocked?: string } },
 ): AzFlowTrace {
@@ -2349,6 +2350,18 @@ function traceAzNetFlowCore(
     const stepCursor = cursor as Cursor
     if (stepCursor.kind !== 'site' || stepCursor.siteId !== vpnSiteDelivery?.siteId) {
       targetInfo = locateDestinationIp(topology, destinationIp, 'vnetId' in stepCursor ? stepCursor.vnetId : undefined)
+    }
+    if (stepCursor.kind === 'appliance' && options?.applicationProxyId === stepCursor.applianceId) {
+      const owner = topology.vnets.find((entry) => entry.id === stepCursor.vnetId)!
+      const appliance = owner.appliances.find((entry) => entry.id === stepCursor.applianceId)!
+      if (appliance.kind === 'azure-firewall' && appliance.enableIpForwarding) {
+        const reason = 'Original Firewall reached through native forwarding. Client routing stops at the application proxy; no onward backend delivery is inferred.'
+        pushHop({ nodeKind: 'appliance', nodeId: appliance.id, nodeName: appliance.name, vnetId: owner.id,
+          subnetId: appliance.subnetId, action: 'inspect-firewall', detail: reason })
+        traversedApplianceIds.push(appliance.id)
+        return { source, destinationIp, destinationLabel: targetInfo.label, status: 'proxy-intercepted',
+          hops, traversedApplianceIds, traversedEdgeIds, traversedVnetIds, summaryReason: reason }
+      }
     }
     if (targetInfo.ambiguousVnetIds && stepCursor.kind === 'appliance' && options?.sourceApplianceId === stepCursor.applianceId) {
       const appliance = topology.vnets.find((vnet) => vnet.id === stepCursor.vnetId)?.appliances.find((entry) => entry.id === stepCursor.applianceId)
@@ -2719,7 +2732,7 @@ function traceAzNetFlowCore(
         // If appliance is in another VNet, it MUST be directly peered (1-hop rule) and pass peering gates
         if (found.vnet.id !== vnet.id) {
           const involvesVnra = stepCursor.viaVnra || found.appliance.kind === 'vnra'
-          const check = validatePeeringTransition(vnet, found.vnet, true, involvesVnra)
+          const check = validatePeeringTransition(vnet, found.vnet, originVnetId !== vnet.id, involvesVnra)
           if (!check.ok) {
             pushHop({
               nodeKind: 'subnet',

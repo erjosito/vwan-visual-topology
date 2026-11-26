@@ -24,7 +24,21 @@ export function applicationFirewallTopology() {
   }] }
   return topology
 }
-export const applicationFirewallRequest = (): Extract<ApplicationRequest, { kind: 'firewall-proxy' }> => ({
+export const applicationFirewallRequest = (): Extract<ApplicationRequest, { kind: 'firewall-proxy'; mode: 'explicit' }> => ({
   version: 1, kind: 'firewall-proxy', serviceId: 'firewall-service', mode: 'explicit', proxyPort: 3128, scheme: 'https', host: 'app.example.test',
   sourcePort: 49152, port: 443, client: { kind: 'workload', workloadId: 'client-vm', nicId: 'client-nic', ipConfigurationId: 'client-ip' },
+})
+
+export function applicationFirewallTransparentTopology() {
+  const topology = applicationFirewallTopology()
+  topology.application!.services[0].firewallProxy!.explicitProxy.enabled = false
+  topology.udrTables.push({ id: 'client-steering', name: 'Client application interception', disableBgpRoutePropagation: false,
+    routes: [{ id: 'original-firewall-route', name: 'Original Firewall', prefix: '0.0.0.0/0', nextHopType: 'VirtualAppliance', nextHopIp: '10.92.1.4', enabled: true }] })
+  topology.vnets.find((entry) => entry.id === 'client')!.subnets[0].routeTableId = 'client-steering'
+  return topology
+}
+export const applicationFirewallTransparentRequest = (): Extract<ApplicationRequest, { kind: 'firewall-proxy'; mode: 'transparent' }> => ({
+  version: 1, kind: 'firewall-proxy', serviceId: 'firewall-service', mode: 'transparent', scheme: 'https', host: 'app.example.test',
+  sourcePort: 49152, port: 443, destinationAddress: '10.93.1.4',
+  client: { kind: 'workload', workloadId: 'client-vm', nicId: 'client-nic', ipConfigurationId: 'client-ip' },
 })
