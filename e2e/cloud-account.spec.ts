@@ -339,7 +339,11 @@ for (const mode of ['vwan', 'full'] as const) {
         if (target !== page) {
           service = await setup(target)
           await target.goto(`/?mode=${mode}`)
-          await expect(target.getByText('Temporary', { exact: true })).toBeVisible()
+          await expect(target.getByTestId('workspace-recovery-notice')).toContainText('Another window owns profile storage.')
+          await target.getByTestId('workspace-recovery-notice').getByRole('button', { name: 'Save to cloud', exact: true }).click()
+          const destination = target.getByRole('dialog', { name: 'Save As', exact: true })
+          await expect(destination.getByRole('combobox', { name: 'Destination', exact: true })).toHaveValue('cloud')
+          await destination.getByRole('button', { name: 'Cancel', exact: true }).click()
         } else {
           await target.evaluate(() => {
             const set = Storage.prototype.setItem

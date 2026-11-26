@@ -57,10 +57,9 @@ function TabButton({ tab, selected, save, commands, onActivate }: {
   </button><small id={`workspace-tab-state-${tab.id}`} title={tooltip}>{status}</small></>
 }
 
-export function WorkspaceTabs({ tabs, activeId, temporary, getSave, getCommands, onActivate, onNew, onClose }: {
+export function WorkspaceTabs({ tabs, activeId, getSave, getCommands, onActivate, onNew, onClose }: {
   tabs: WorkspaceTab[]
   activeId?: string
-  temporary?: boolean
   getSave: (tab: WorkspaceTab) => DocumentSaveState
   getCommands?: (tab: WorkspaceTab) => ReturnType<typeof createDocumentCommands> | undefined
   onActivate: (tab: WorkspaceTab) => void
@@ -71,9 +70,6 @@ export function WorkspaceTabs({ tabs, activeId, temporary, getSave, getCommands,
   const text = (en: string, ja: string) => language === 'ja' ? ja : en
   const list = useRef<HTMLDivElement>(null)
   return <nav className="workspace-tabs" aria-label={text('Open topologies', '開いているトポロジ')}>
-    {temporary && <span role="status" title={text('Temporary copies: profile storage is unavailable or another window owns it. Save a file or cloud copy before closing. Reload after the other window closes to restore profile editing.',
-      '一時コピー: プロファイルを利用できないか、別のウィンドウが使用中です。閉じる前にファイルまたはクラウドに保存してください。別のウィンドウを閉じて再読み込みすると、プロファイルの編集を再開できます。')}>
-      {text('Temporary', '一時コピー')}</span>}
     <div ref={list} className="workspace-tabs-list"
       onKeyDown={event => {
         if (!(event.target instanceof HTMLElement) || event.target.getAttribute('role') !== 'tab') return
