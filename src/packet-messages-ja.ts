@@ -15,6 +15,8 @@ registerJapaneseMessages({
   'Trace packet routing': 'パケット ルーティングを追跡',
   'Select both packet endpoints.': '両方のパケット エンドポイントを選択してください。',
   'Packet probe failed.': 'パケット プローブに失敗しました。',
+  'The selected private address does not have a unique subnet in its original network.': '選択したプライベート アドレスのサブネットを元のネットワーク内で一意に特定できません。',
+  'Routing reaches a different network than the selected endpoint; the endpoint identity does not override forwarding.': '経路は選択したエンドポイントとは別のネットワークに到達します。エンドポイントの識別情報は転送経路を変更しません。',
   'Showing up to 100 matching IP configurations. Search to narrow the list.': '一致する IP 構成を最大 100 件表示します。検索して絞り込んでください。',
   'The topology or probe changed. Run the probe again for current evidence.': 'トポロジまたはプローブが変更されました。最新の結果を得るには、プローブを再実行してください。',
   'Post-boundary tuple unknown': '境界通過後のタプルは不明',

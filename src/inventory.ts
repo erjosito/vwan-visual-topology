@@ -159,6 +159,16 @@ export function sameInventoryOwner(a: InventoryOwner, b: InventoryOwner) {
   return a.kind === b.kind && a.id === b.id
 }
 
+export function ownsInventoryAddress(topology: InventoryTopology, owner: InventoryOwner, subnetId: string, address?: string): boolean {
+  const ip = address === undefined ? undefined : ipv4(address)
+  if (ip === undefined) return false
+  const owners = inventoryOwners(topology)
+  const network = owners.find((entry) => sameInventoryOwner(entry, owner))
+  const subnets = network?.subnets.filter((subnet) => contains(subnet.prefix, ip)) ?? []
+  return !!network?.prefixes.some((prefix) => contains(prefix, ip)) && subnets.length === 1 && subnets[0].id === subnetId
+    && (topology.version === 2 || owners.filter((entry) => entry.prefixes.some((prefix) => contains(prefix, ip))).length === 1)
+}
+
 export function publicIpv4(address: string): boolean {
   const ip = ipv4(address)
   return ip !== undefined && !['0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8', '169.254.0.0/16',

@@ -151,6 +151,13 @@ export const capabilities = {
       'SKU regional availability/capacity and deployment readiness', 'IPsec traffic-selector enforcement', 'unknown gateway prerequisites'],
     boundaries: 'Azure outbound ER preference does not set site return policy. Configure site inbound local preference explicitly. ARS does not provide ER circuit-to-circuit transit; use Global Reach.',
   },
+  overlappingVnets: {
+    modes: ['hub-spoke', 'full'], topologyVersion: 2,
+    scope: 'Isolated IPv4 VNets may reuse prefixes and workload addresses. Packet endpoints bind to their original VNet/subnet/NIC; the selected identity never supplies a route.',
+    validation: 'Ordinary directly peered VNets require non-overlapping address spaces. Selected-subnet peering retains its separate participating-address-space restrictions.',
+    evidence: 'Local forward/reply paths and original single-service public/NAT mappings retain VNet context. Duplicate workload IP choices include the original network name and ID.',
+    excluded: ['unresolved overlapping shared-transit destinations', 'Private Link Service and proxy forwarding', 'arbitrary multi-stage NAT composition', 'HA-ports overlap qualification', 'legacy standalone VWAN overlap qualification'],
+  },
   subnetPeering: {
     modes: ['hub-spoke', 'full'], topologyVersion: 2,
     field: 'vnetPeerings[].scope: {type:whole-vnet} or {type:subnets,subnetAIds:originalIds[],subnetBIds:originalIds[]}; omitted scope preserves legacy whole-VNet peering.',

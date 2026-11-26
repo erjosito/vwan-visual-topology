@@ -5,6 +5,7 @@ import { createEmptyAzNetTopology } from '../src/azure-net/model'
 import { executePlatform } from '../src/platform/service'
 import type { PacketRequirement, PlatformRequest } from '../src/platform/contract'
 import { PlatformJobs } from './jobs'
+import { overlappingVnets, overlapEndpoint } from '../tests/fixtures/overlapping-vnets'
 
 const compiled = createRequire(import.meta.url)('../platform-dist/service.cjs') as { executePlatform: typeof executePlatform }
 function input(): PlatformRequest {
@@ -43,6 +44,23 @@ const healthy = (request: PlatformRequest) => {
 }
 
 describe('bounded original packet configuration rubrics', () => {
+  it('grades overlapping endpoints by original network and preserves that binding in compiled and isolated execution', async () => {
+    const network = overlappingVnets()
+    const request: PlatformRequest = { contractVersion: 1, operation: 'evaluate', document: { mode: 'full', topology: network },
+      requirements: ['a', 'b'].flatMap((id): PacketRequirement[] => [
+        { id: `local-${id}`, kind: 'packet', sourceAddress: '100.64.1.4', destinationAddress: '100.64.2.4', expectation: 'configured',
+          packet: { source: overlapEndpoint(id), target: overlapEndpoint(id, 'server'), protocol: 'tcp', sourcePort: 49152, destinationPort: 443 } },
+        { id: `remote-${id}`, kind: 'packet', sourceAddress: '100.64.1.4', destinationAddress: '100.64.2.4', expectation: 'configured',
+          packet: { source: overlapEndpoint(id), target: overlapEndpoint(id === 'a' ? 'b' : 'a', 'server'), protocol: 'tcp', sourcePort: 49152, destinationPort: 443 } },
+      ]) }
+    const result = executePlatform(request)
+    expect(result.errors).toEqual([])
+    expect(result.assessments.map((assessment) => assessment.outcome)).toEqual(['satisfied', 'violated', 'satisfied', 'violated'])
+    expect(compiled.executePlatform(request)).toEqual(result)
+    const jobs = new PlatformJobs(resolve('platform-dist', 'worker.cjs'))
+    try { expect(await jobs.run(request)).toEqual(result) } finally { jobs.close() }
+  })
+
   it('retains metadata-only packet grading but never certifies unqualified ARS summary routing', () => {
     const request = input()
     healthy(request)
@@ -58,6 +76,27 @@ describe('bounded original packet configuration rubrics', () => {
     expect(outcome(request)).toBe('not assessed')
     goal(request).expectation = 'blocked'
     expect(outcome(request)).toBe('not assessed')
+  })
+  it('does not certify delivery or isolation for overlapping shared-transit destinations', () => {
+    const network = overlappingVnets()
+    network.vwanHubs.push({ id: 'hub', name: 'Shared transit', preference: 'ExpressRoute', routingIntent: { private: false, internet: false } })
+    for (const vnet of network.vnets) vnet.vwanHubAttachment = { hubId: 'hub', enabled: true }
+    network.vnets.push({ id: 'transit', name: 'Transit client network', role: 'standalone', region: 'westeurope', prefixes: ['10.80.0.0/16'],
+      subnets: [{ id: 'transit-app', name: 'Client', prefix: '10.80.1.0/24' }], gateways: [], appliances: [],
+      vwanHubAttachment: { hubId: 'hub', enabled: true } })
+    network.inventory!.workloads.push({ id: 'transit-client', name: 'Transit client', nicIds: ['transit-client-nic'] })
+    network.inventory!.nics.push({ id: 'transit-client-nic', name: 'Transit NIC', owner: { kind: 'vnet', id: 'transit' },
+      ipConfigurations: [{ id: 'transit-client-ip', name: 'Primary', subnetId: 'transit-app', privateIp: '10.80.1.4' }] })
+    const request: PlatformRequest = { contractVersion: 1, operation: 'evaluate', document: { mode: 'full', topology: network },
+      requirements: ['configured', 'blocked'].map((expectation): PacketRequirement => ({
+        id: expectation, kind: 'packet', sourceAddress: '10.80.1.4', destinationAddress: '100.64.2.4',
+        expectation: expectation === 'configured' ? 'configured' : 'blocked',
+        packet: { source: overlapEndpoint('transit'), target: overlapEndpoint('a', 'server'), protocol: 'tcp', sourcePort: 49152, destinationPort: 443 },
+      })) }
+    const result = executePlatform(request)
+    expect(result.errors).toEqual([])
+    expect(result.assessments.map((assessment) => assessment.outcome)).toEqual(['not assessed', 'not assessed'])
+    expect(compiled.executePlatform(request)).toEqual(result)
   })
   it('never grades unknown health as a configured service or verified isolation, then checks independent probe denial', () => {
     const request = input()
