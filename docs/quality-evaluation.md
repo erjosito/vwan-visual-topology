@@ -56,8 +56,14 @@ run directory. Local evidence stays local. CI runs the scorecard adapter tests
 and the real registered accessibility audit, retaining its raw automated reports
 for seven days. It does not upload study data or claim a full evaluation.
 
-The executable regression manifest is `scripts/quality-scorecard.mjs`, version 7.
-Version 2 added VPN overlap NAT; version 3 adds the separately versioned
+The executable regression manifest is `scripts/quality-scorecard.mjs`, version 16.
+Its registered files are authoritative for the current corpus; the adapter tests
+check this version statement against the executable manifest in CI. This version
+is independent of the platform contract, engine and native topology versions.
+See the [living contract map](../PLATFORM.md#living-contracts-and-sources).
+
+Historical milestones: version 2 added VPN overlap NAT; version 3 added the
+separately versioned
 `scripts/accessibility-scorecard.mjs` manifest/evidence adapter and
 model-contract registration seam. Version 4 registers the separate #165
 document-derived Firewall contracts and native evidence workflows, carrying their
@@ -65,21 +71,22 @@ qualification into each metric. Version 5 registers the guided-course, guidance,
 runner, protected-practice ownership and anonymous local progress-ledger contracts,
 practice isolation/status workflows and SVG accessibility regressions. Version 6
 registers the routing missions; version 7 includes the completed WAN curriculum
-contracts and updated guided workflows from #202 and #208. A
-tracked-file inventory guard fails closed if new
+contracts and updated guided workflows from #202 and #208. Subsequent expansions
+include HA-ports contracts/workflows, learning editions and the revised curriculum.
+A tracked-file inventory guard fails closed if new
 learning contracts or critical learning/accessibility workflows are unregistered.
 The combined plan hash includes all manifests; the expanded corpus is not
 numerically comparable to version 4:
 
 | Numeric series | Current evidence subset |
 | --- | --- |
-| Routing/packet regressions | Native routing, paths, VPN/hub contexts and overlap NAT, classic routing, egress/ingress/NSG/LB and captured comparison tests |
+| Routing/packet regressions | Native routing, paths, VPN/hub contexts and overlap NAT, classic routing, egress/ingress/NSG/LB/HA ports and captured comparison tests |
 | Requirement-grading regressions | Route/flow and packet requirement tests |
-| Training-contract regressions | Routing/connectivity practice, rubric, guided course, guidance, runner, protected-practice ownership and anonymous progress-ledger safety tests |
+| Training-contract regressions | Routing/connectivity practice, rubric, guided/scenario/revised curriculum, HA routing, guidance, runner, protected-practice ownership and anonymous progress-ledger safety tests |
 | Persistence/local-boundary regressions | Workspace originals/recovery, inventory, platform service and MCP tests |
 | Localization-contract regressions | Message/localization contract tests |
-| Scripted UI workflows | Canvas presentation, SVG accessibility, original VNet detail, single-workspace and VPN NAT tests |
-| Scripted training workflows | Learning/practice browser tests, including protected-practice isolation |
+| Scripted UI workflows | Canvas presentation, accessibility labels, original VNet detail, single-workspace, VPN NAT and HA-ports tests |
+| Scripted training workflows | Learning/practice browser tests, including protected-practice isolation, editions and revised curriculum |
 | Scripted localization workflows | Localization browser tests |
 | Static Firewall model contracts | Hand-authored published/candidate matrices and conservative negatives in both native providers; synthetic, not live-Azure-qualified |
 | Static Firewall native workflows | Original IDs/static authoring, ingress/onward tables, per-leg worker parity, path evidence and EN/JA persistence |

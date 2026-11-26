@@ -1,10 +1,18 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { scoreGroup, vitestCases, playwrightCases, unregisteredCriticalFiles } from './quality-scorecard.mjs'
+import { readFileSync } from 'node:fs'
+import { scorecardVersion, scoreGroup, vitestCases, playwrightCases, unregisteredCriticalFiles } from './quality-scorecard.mjs'
 
 const plan = { id: 'example', label: 'Example', files: ['src/example.test.ts'] }
 const item = (name, outcome) => ({ name, outcome, durationMs: 1, file: 'C:\\repo\\src\\example.test.ts'.replaceAll('\\', '/') })
+
+test('living quality documentation identifies the executable regression manifest version', () => {
+  const documentation = readFileSync(new URL('../docs/quality-evaluation.md', import.meta.url), 'utf8')
+  const versions = [...documentation.matchAll(/The executable regression manifest is `scripts\/quality-scorecard\.mjs`, version (\d+)\./g)]
+  assert.equal(versions.length, 1, 'Keep one current manifest version statement in the living quality guide')
+  assert.equal(Number(versions[0][1]), scorecardVersion, 'Update the quality guide when changing the regression corpus')
+})
 
 test('new learning safety and practice workflows cannot silently escape the versioned benchmark', () => {
   assert.deepEqual(unregisteredCriticalFiles([

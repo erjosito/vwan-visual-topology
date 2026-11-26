@@ -6,6 +6,11 @@ and cloud save state belong to that document, not to the currently visible tab.
 Practice has separate history, storage and assessment ownership; it has no
 ordinary document artifact commands.
 
+This is the living contract for the implemented #364/#374 tabs and Save work,
+not the earlier architecture assessment's proposed design. For native/API
+versions, provider support and host boundaries, use the
+[platform contract map](../PLATFORM.md#living-contracts-and-sources).
+
 ## Ownership and revisions
 
 - The active document alone accepts editor/history and topology-storage writes.

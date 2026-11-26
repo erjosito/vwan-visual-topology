@@ -269,16 +269,14 @@ export function firstUsableIp(prefix: string): string {
   ].join('.')
 }
 
-export function findApplianceByIp(topology: AzNetTopology, ip?: string): { vnet: AzVNet; appliance: AzAppliance } | undefined {
+export function findApplianceByIp(topology: AzNetTopology, ip?: string, fromVnetId?: string): { vnet: AzVNet; appliance: AzAppliance } | undefined {
   if (!ip) return undefined
-  for (const vnet of topology.vnets) {
-    for (const appliance of vnet.appliances) {
-      if (appliance.privateIp === ip) {
-        return { vnet, appliance }
-      }
-    }
-  }
-  return undefined
+  const candidates = topology.vnets.flatMap((vnet) => vnet.appliances
+    .filter((appliance) => appliance.privateIp === ip).map((appliance) => ({ vnet, appliance })))
+  const local = candidates.filter(({ vnet }) => vnet.id === fromVnetId)
+  if (local.length) return local.length === 1 ? local[0] : undefined
+  const reachable = fromVnetId ? candidates.filter(({ vnet }) => getActivePeeringBetween(topology, fromVnetId, vnet.id)) : candidates
+  return reachable.length === 1 ? reachable[0] : undefined
 }
 
 export function getActivePeeringBetween(
@@ -1759,7 +1757,7 @@ function compileSingleSubnetEffectiveRoutes(
     for (const udr of udrTable.routes) {
       if (!udr.enabled) continue
       const targetAppliance =
-        udr.nextHopType === 'VirtualAppliance' ? findApplianceByIp(topology, udr.nextHopIp) : undefined
+        udr.nextHopType === 'VirtualAppliance' ? findApplianceByIp(topology, udr.nextHopIp, vnet.id) : undefined
       candidates.push({
         id: `udr:${subnet.id}:${udr.id}`,
         prefix: udr.prefix,
@@ -1978,17 +1976,25 @@ export function lookupSubnetEffectiveRoute(
 export function locateDestinationIp(
   topology: AzNetTopology,
   destinationIp: string,
+  contextVnetId?: string,
 ): {
   label: string
   endpoint?: AzEndpointRef
   vnet?: AzVNet
   subnet?: AzSubnet
   site?: AzNetTopology['sites'][number]
+  ambiguousVnetIds?: string[]
 } {
   const ipNum = ipv4(destinationIp)
   if (ipNum === undefined) return { label: destinationIp }
 
-  for (const vnet of topology.vnets) {
+  const candidates = topology.vnets.filter((vnet) => vnet.prefixes.some((prefix) => cidr(prefix) && contains(prefix, ipNum)))
+  const local = candidates.find((vnet) => vnet.id === contextVnetId)
+  if (!local && candidates.length > 1) return {
+    label: `Overlapping destination ${destinationIp}: ${candidates.map((vnet) => `${vnet.name} [${vnet.id}]`).join(', ')}`,
+    ambiguousVnetIds: candidates.map((vnet) => vnet.id),
+  }
+  for (const vnet of local ? [local] : candidates) {
     for (const subnet of vnet.subnets) {
       for (const pe of subnet.privateEndpoints ?? []) {
         if (pe.ipAddress === destinationIp) {
@@ -2108,7 +2114,7 @@ function traceAzNetFlowCore(
     vpnTranslation?: (connectionId: string, direction: 'ingress' | 'egress', destinationAddress: string) =>
       { destinationAddress: string; detail: string; blocked?: string } },
 ): AzFlowTrace {
-  let targetInfo = locateDestinationIp(topology, destinationIp)
+  let targetInfo = locateDestinationIp(topology, destinationIp, source.kind === 'subnet' ? source.vnetId : undefined)
   const hops: AzTraceHop[] = []
   const traversedApplianceIds: string[] = []
   const traversedEdgeIds: string[] = []
@@ -2341,6 +2347,14 @@ function traceAzNetFlowCore(
 
   for (let step = 0; step < 24; step++) {
     const stepCursor = cursor as Cursor
+    if (stepCursor.kind !== 'site' || stepCursor.siteId !== vpnSiteDelivery?.siteId) {
+      targetInfo = locateDestinationIp(topology, destinationIp, 'vnetId' in stepCursor ? stepCursor.vnetId : undefined)
+    }
+    if (targetInfo.ambiguousVnetIds && stepCursor.kind !== 'subnet') {
+      const reason = `${targetInfo.label}. This shared-transit destination is ambiguous; no network owner is inferred from topology order.`
+      return { source, destinationIp, destinationLabel: targetInfo.label, status: 'not-assessed',
+        hops, traversedApplianceIds, traversedEdgeIds, traversedVnetIds, summaryReason: reason }
+    }
     const stateKey = JSON.stringify(stepCursor)
     if (visitedStates.has(stateKey)) {
       pushHop({
@@ -2434,6 +2448,11 @@ function traceAzNetFlowCore(
       // Look up the Effective Route Table for this subnet
       const table = simulation.subnetTables[subnet.id]
       const matched = table ? lookupSubnetEffectiveRoute(table, destinationIp) : undefined
+      if (targetInfo.ambiguousVnetIds && matched?.nextHopType === 'VNetPeering') {
+        return { source, destinationIp, destinationLabel: targetInfo.label, status: 'not-assessed',
+          hops, traversedApplianceIds, traversedEdgeIds, traversedVnetIds,
+          summaryReason: `${targetInfo.label}. Overlapping remote peering destinations require an unambiguous routing context; no first-match owner is selected.` }
+      }
       if (!matched) {
         pushHop({
           nodeKind: 'subnet',
@@ -2656,7 +2675,7 @@ function traceAzNetFlowCore(
             status: assessment.status === 'blocked' ? 'dropped-no-route' : 'not-assessed',
             hops, traversedApplianceIds, traversedEdgeIds, traversedVnetIds, summaryReason: reason }
         }
-        const found = findApplianceByIp(topology, haPorts?.backendAddress ?? matched.nextHopIp)
+        const found = findApplianceByIp(topology, haPorts?.backendAddress ?? matched.nextHopIp, vnet.id)
         if (!found) {
           pushHop({
             nodeKind: 'subnet',
@@ -2991,7 +3010,7 @@ function traceAzNetFlowCore(
         return { source, destinationIp, destinationLabel: targetInfo.label, status: dropped ? 'dropped-blackhole' : 'not-assessed',
           hops, traversedApplianceIds, traversedEdgeIds, traversedVnetIds, summaryReason: reason }
       }
-      if (conditionalStatic?.nextHopKind === 'appliance' && !findApplianceByIp(topology, conditionalStatic.nextHopIp)) {
+      if (conditionalStatic?.nextHopKind === 'appliance' && !findApplianceByIp(topology, conditionalStatic.nextHopIp, vnet.id)) {
         return { source, destinationIp, destinationLabel: targetInfo.label, status: 'not-assessed',
           hops, traversedApplianceIds, traversedEdgeIds, traversedVnetIds, summaryReason: 'Conditional return static next-hop appliance is unknown.' }
       }
@@ -3157,7 +3176,7 @@ function traceAzNetFlowCore(
         .sort((a, b) => (cidr(b.prefix)?.length ?? 0) - (cidr(a.prefix)?.length ?? 0))
       if (matchingStaticRoutes.length > 0) {
         const sr = matchingStaticRoutes[0]
-        const staticTargetApp = findApplianceByIp(topology, sr.nextHopIp)
+        const staticTargetApp = findApplianceByIp(topology, sr.nextHopIp, vnet.id)
         if (staticTargetApp && staticTargetApp.appliance.id !== app.id) {
           if (staticTargetApp.vnet.id !== vnet.id) {
             const check = validatePeeringTransition(
@@ -3269,7 +3288,7 @@ function traceAzNetFlowCore(
       if (nextRoute?.nextHopType === 'VirtualAppliance') {
         const unsupportedHa = unsupportedNvaHaHop(vnet, app, nextRoute.nextHopIp)
         if (unsupportedHa) return unsupportedHa
-        const target = findApplianceByIp(topology, nextRoute.nextHopIp)
+        const target = findApplianceByIp(topology, nextRoute.nextHopIp, vnet.id)
         const transition = target && target.vnet.id !== vnet.id
           ? validatePeeringTransition(vnet, target.vnet, true, app.kind === 'vnra' || target.appliance.kind === 'vnra') : undefined
         if (target && (!transition || transition.ok)) {

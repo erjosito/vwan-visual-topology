@@ -1,4 +1,4 @@
-import { inventoryOwners, namedEndpoints, workloadEndpointKey, type InventoryTopology, type WorkloadIpReference } from './inventory'
+import { inventoryOwners, namedEndpoints, ownsInventoryAddress, workloadEndpointKey, type InventoryTopology, type WorkloadIpReference } from './inventory'
 import { contains, ipv4 } from './validation'
 import { simulate, type Simulation } from './routing'
 import { simulateAzNet, type AzSimulationResult } from './azure-net/engine'
@@ -25,9 +25,6 @@ const unknownRouter = (topology: InventoryTopology, leg: PacketLeg, publicFlow =
     || hop.nodeKind === 'vwan-hub' && topology.version === 2
       && (publicFlow ? topology.vwanHubs.find((hub) => hub.id === hop.nodeId)?.routingIntent.internet
         : topology.vwanHubs.find((hub) => hub.id === hop.nodeId)?.routingIntent.private))
-const knownAddress = (topology: InventoryTopology, address?: string) => !!address
-  && inventoryOwners(topology).filter((owner) => owner.prefixes.some((prefix) => contains(prefix, ipv4(address)!))).length === 1
-
 export function traceLoadBalancer(topology: InventoryTopology, request: PacketRequest, simulation?: Simulation | AzSimulationResult): PacketResult {
   const result: PacketResult = { source: request.source, target: request.target, ingress: 'not-assessed',
     forward: { direction: 'forward', routing: 'not-assessed', steps: [], reasons: [] },
@@ -55,7 +52,7 @@ export function traceLoadBalancer(topology: InventoryTopology, request: PacketRe
   }
   const address = frontend.kind === 'public' ? publicIp?.address : frontend.privateIp
   if (!address) return stop('The original Load Balancer frontend allocation is unknown; no IP is fabricated.')
-  if (frontend.kind === 'private' && !knownAddress(topology, address)) return stop('The original internal frontend address has ambiguous network ownership.')
+  if (frontend.kind === 'private' && !ownsInventoryAddress(topology, lb.owner, frontend.subnetId, address)) return stop('The original internal frontend address has ambiguous network ownership.')
   const source = request.source
   const sourceEndpoint = source.kind === 'workload' ? namedEndpoints(topology).find(({ workload, nic, config }) => same(source,
     { workloadId: workload.id, nicId: nic.id, ipConfigurationId: config.id })) : undefined
@@ -64,7 +61,7 @@ export function traceLoadBalancer(topology: InventoryTopology, request: PacketRe
   }
   const sourceAddress = source.kind === 'external' ? source.address : sourceEndpoint?.config.privateIp
   if (!sourceAddress) return stop('The original client NIC addressing is unknown.')
-  if (source.kind === 'workload' && !knownAddress(topology, sourceAddress)) return stop('The original client address has ambiguous network ownership.')
+  if (sourceEndpoint && !ownsInventoryAddress(topology, sourceEndpoint.nic.owner, sourceEndpoint.config.subnetId, sourceAddress)) return stop('The original client address has ambiguous network ownership.')
   if (source.kind === 'external' && [...inventoryOwners(topology).flatMap((owner) => owner.prefixes), ...topology.sites.flatMap((site) => site.prefixes),
     ...(topology.inventory?.publicIps.flatMap((ip) => ip.address ? [`${ip.address}/32`] : []) ?? []),
     ...(topology.inventory?.publicIpPrefixes?.flatMap((prefix) => prefix.prefix ? [prefix.prefix] : []) ?? []),
@@ -103,7 +100,7 @@ export function traceLoadBalancer(topology: InventoryTopology, request: PacketRe
       const entry = namedEndpoints(topology).find(({ workload, nic, config }) => same(target,
         { workloadId: workload.id, nicId: nic.id, ipConfigurationId: config.id }))!
       const declared = probe.health.find((health) => same(health.target, target))?.status ?? 'unknown'
-      const checks = knownAddress(topology, entry.config.privateIp) ? assessEndpointNsg(topology, entry.nic.owner, entry.nic.id, entry.config.subnetId,
+      const checks = ownsInventoryAddress(topology, entry.nic.owner, entry.config.subnetId, entry.config.privateIp) ? assessEndpointNsg(topology, entry.nic.owner, entry.nic.id, entry.config.subnetId,
         'inbound', { ...original, sourceAddress: '168.63.129.16', destinationAddress: entry.config.privateIp!,
           protocol: 'tcp', sourcePort: 49152, destinationPort: probe.port }, {
           ...nsgScope(topology, entry.nic.owner, entry.config.subnetId, native), purpose: 'health-probe',
@@ -130,7 +127,7 @@ export function traceLoadBalancer(topology: InventoryTopology, request: PacketRe
   }
   const target = ref(assessment.selected!), entry = namedEndpoints(topology).find(({ workload, nic, config }) => same(target,
     { workloadId: workload.id, nicId: nic.id, ipConfigurationId: config.id }))!
-  if (!knownAddress(topology, entry.config.privateIp)) return stop('The original selected backend NIC allocation is unknown or ambiguous.')
+  if (!ownsInventoryAddress(topology, entry.nic.owner, entry.config.subnetId, entry.config.privateIp)) return stop('The original selected backend NIC allocation is unknown or ambiguous.')
   const mapped: FiveTuple = { ...original, destinationAddress: entry.config.privateIp!, destinationPort: selectedRule.backendPort }
   result.forward.steps.push({ entity: { kind: 'load-balancer', id: lb.id }, before: original, after: mapped, routeId: selectedRule.id,
     evidence: rule ? 'Ordinary non-floating LB maps the original frontend to an illustrative known-eligible backend, preserving client source. This selection is not an observed Azure hash/session.'
