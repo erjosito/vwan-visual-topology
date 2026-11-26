@@ -2350,6 +2350,17 @@ function traceAzNetFlowCore(
     if (stepCursor.kind !== 'site' || stepCursor.siteId !== vpnSiteDelivery?.siteId) {
       targetInfo = locateDestinationIp(topology, destinationIp, 'vnetId' in stepCursor ? stepCursor.vnetId : undefined)
     }
+    if (targetInfo.ambiguousVnetIds && stepCursor.kind === 'appliance' && options?.sourceApplianceId === stepCursor.applianceId) {
+      const appliance = topology.vnets.find((vnet) => vnet.id === stepCursor.vnetId)?.appliances.find((entry) => entry.id === stepCursor.applianceId)
+      const table = appliance && simulation.subnetTables[appliance.subnetId]
+      const route = table && lookupSubnetEffectiveRoute(table, destinationIp)
+      const candidates = new Set(table?.routes.filter((entry) => entry.nextHopType === 'VNetPeering'
+        && entry.nextHopResourceId && targetInfo.ambiguousVnetIds!.includes(entry.nextHopResourceId)
+        && cidr(entry.prefix) && contains(entry.prefix, ipNum)).map((entry) => entry.nextHopResourceId))
+      if (route?.nextHopType === 'VNetPeering' && route.nextHopResourceId && candidates.size === 1 && candidates.has(route.nextHopResourceId)) {
+        targetInfo = locateDestinationIp(topology, destinationIp, route.nextHopResourceId)
+      }
+    }
     if (targetInfo.ambiguousVnetIds && stepCursor.kind !== 'subnet') {
       const reason = `${targetInfo.label}. This shared-transit destination is ambiguous; no network owner is inferred from topology order.`
       return { source, destinationIp, destinationLabel: targetInfo.label, status: 'not-assessed',
@@ -3073,7 +3084,7 @@ function traceAzNetFlowCore(
       if (!explicitSubnetPolicy && conditionalStatic?.nextHopKind !== 'appliance' && targetInfo.vnet && targetInfo.subnet) {
         const directRel = getActivePeeringBetween(topology, vnet.id, targetInfo.vnet.id)
         if (directRel) {
-          const check = validatePeeringTransition(vnet, targetInfo.vnet, true, app.kind === 'vnra')
+          const check = validatePeeringTransition(vnet, targetInfo.vnet, options?.sourceApplianceId !== app.id, app.kind === 'vnra')
           if (!check.ok) {
             pushHop({
               nodeKind: 'appliance',

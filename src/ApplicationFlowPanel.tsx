@@ -30,10 +30,11 @@ export function ApplicationFlowPanel({ topology, owner, result, onResult }: {
     : ref.kind === 'load-balancer-frontend' || ref.kind === 'load-balancer-pool' ? `${ref.loadBalancerId} / ${ref.id}` : ref.id
   return <section className="packet-panel" aria-label={t('Application and DNS contracts')} data-testid="application-flow-panel">
     <h3>{t('Application and DNS contracts')}</h3>
-    {!services.some((service) => service.tcpProxy) && <p>{t(applicationUnavailable)}</p>}<p>{t(applicationOffline)}</p>
+    {!services.some((service) => service.tcpProxy || service.firewallProxy) && <p>{t(applicationUnavailable)}</p>}<p>{t(applicationOffline)}</p>
     <p>{t('TCP provider configuration is separate from HTTP matching and DNS selection. Unimplemented operations remain not assessed.')}</p>
     <ul>{[...services, ...profiles].map((entry) => <li key={entry.id}>
-      <strong>{entry.name}</strong>{' · '}<code>{entry.id}</code>{' · '}{t('tcpProxy' in entry && entry.tcpProxy ? 'Declared private TCP provider' : 'Provider unavailable')}
+      <strong>{entry.name}</strong>{' · '}<code>{entry.id}</code>{' · '}{t('firewallProxy' in entry && entry.firewallProxy ? 'Declared Firewall proxy provider'
+        : 'tcpProxy' in entry && entry.tcpProxy ? 'Declared private TCP provider' : 'Provider unavailable')}
       {entry.unsupportedFeatures.length > 0 && <p>{t('Unsupported declarations')}: {entry.unsupportedFeatures.join(', ')}</p>}
     </li>)}</ul>
     <form onChange={() => { job.current?.abort(); job.current = null; setRunning(false); setError(''); onResult(undefined) }} onSubmit={async (event) => {
@@ -47,6 +48,10 @@ export function ApplicationFlowPanel({ topology, owner, result, onResult }: {
         ?? { kind: 'external' as const, address: String(form.get('address')) }
       const application: ApplicationRequest = kind === 'tcp'
         ? { version: 1, kind, serviceId: String(form.get('service')), client: source, sourcePort: Number(form.get('sourcePort')), port: Number(form.get('port')) }
+        : kind === 'firewall-proxy'
+        ? { version: 1, kind, serviceId: String(form.get('service')), client: source, mode: 'explicit',
+          sourcePort: Number(form.get('sourcePort')), proxyPort: Number(form.get('proxyPort')), scheme: form.get('scheme') === 'http' ? 'http' : 'https',
+          host: String(form.get('host')), port: Number(form.get('port')) }
         : kind === 'http'
         ? { version: 1, kind, serviceId: String(form.get('service')), client: source, scheme: String(form.get('scheme')) as 'http' | 'https',
           host: String(form.get('host')), port: Number(form.get('port')), path: String(form.get('path')) }
@@ -70,6 +75,7 @@ export function ApplicationFlowPanel({ topology, owner, result, onResult }: {
       <label htmlFor={`${controlId}-operation`}>{t('Application operation')}</label><select id={`${controlId}-operation`} value={kind} onChange={(event) => setKind(event.target.value as ApplicationRequest['kind'])}>
         <option value="http">{t('HTTP request matching')}</option><option value="dns">{t('DNS answer selection')}</option>
         <option value="tcp">{t('TCP proxy connections')}</option>
+        <option value="firewall-proxy">{t('Firewall explicit proxy')}</option>
       </select>
       <label htmlFor={`${controlId}-source`}>{t('Original client or resolver')}</label><select id={`${controlId}-source`} name="source">
         <option value="external">{t('Explicit external IPv4')}</option>
@@ -78,11 +84,14 @@ export function ApplicationFlowPanel({ topology, owner, result, onResult }: {
       <label>{t('External client or resolver IPv4')}<input name="address" defaultValue="198.51.100.10" maxLength={15} /></label>
       {kind !== 'dns' ? <>
         <label htmlFor={`${controlId}-service`}>{t('Original application service')}</label><select id={`${controlId}-service`} name="service" required>{services.map((entry) => <option key={entry.id} value={entry.id}>{entry.name} ({entry.id})</option>)}</select>
-        {kind === 'http' ? <>
+        {kind === 'http' || kind === 'firewall-proxy' ? <>
         <label htmlFor={`${controlId}-scheme`}>{t('Request scheme')}</label><select id={`${controlId}-scheme`} name="scheme"><option value="https">HTTPS</option><option value="http">HTTP</option></select>
         <label>{t('Request host')}<input name="host" required maxLength={253} defaultValue="app.example.test" /></label>
         <label>{t('Request port')}<input name="port" type="number" min={1} max={65535} required defaultValue={443} /></label>
-        <label>{t('Absolute request path')}<input name="path" required maxLength={2048} defaultValue="/" /></label>
+        {kind === 'http' ? <label>{t('Absolute request path')}<input name="path" required maxLength={2048} defaultValue="/" /></label> : <>
+          <label>{t('TCP source port')}<input name="sourcePort" type="number" min={1} max={65535} required defaultValue={49152} /></label>
+          <label>{t('Firewall proxy port')}<input name="proxyPort" type="number" min={1} max={65535} required defaultValue={3128} /></label>
+        </>}
         </> : <>
           <label key="tcp-source-port">{t('TCP source port')}<input name="sourcePort" type="number" min={1} max={65535} required defaultValue={49152} /></label>
           <label key="tcp-listener-port">{t('TCP listener port')}<input name="port" type="number" min={1} max={65535} required defaultValue={1433} /></label>
@@ -115,6 +124,10 @@ export function ApplicationFlowPanel({ topology, owner, result, onResult }: {
           <ol>{leg.steps.slice(0, 100).map((step, index) => <li key={index}><code>{step.entity.kind} / {step.entity.id}</code> {t(step.evidence)}</li>)}</ol>
         </details>)}
         <p>{t('Forward NSG permission')}: {t(connection.nsg.forward.outcome)}; {t('Conditional response permission')}: {t(connection.nsg.reply.outcome)}</p>
+        {connection.returnVariants && <details data-testid="firewall-instance-returns">
+          <summary>{t('Possible Firewall instance return addresses')}: {connection.returnVariants.length}</summary>
+          {connection.returnVariants.map((leg) => <p key={leg.tuple?.destinationAddress}><code>{leg.tuple?.destinationAddress}</code>: {t(leg.routing)}</p>)}
+        </details>}
         {connection.nsg.forward.checks.map((check, index) => <p key={index}><code>{check.target.id}: {check.tuple.sourceAddress}:{check.tuple.sourcePort} -&gt; {check.tuple.destinationAddress}:{check.tuple.destinationPort}</code> {t(check.outcome)}{check.uncertainty && ` (${t('Illustrative source port')})`}</p>)}
       </section>)}
       {result.limitations.map((limitation) => <p key={limitation}>{t(limitation)}</p>)}
