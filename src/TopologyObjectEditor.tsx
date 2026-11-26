@@ -11,7 +11,7 @@ import { spokeNvaConnectionForSite, spokeNvaConnectionForSpoke } from './topolog
 import { createExpressRouteAttachment, deleteTopologyObject, syncNvaDownstreamLinks, syncSiteNvaSpokeLinks } from './topology-mutations'
 import { defaultSpokeNvaPeerIp, parseAsPath, validateTopology } from './validation'
 import { CanvasOverlay } from './CanvasOverlay'
-import { ConfigurationEditStatus } from './WorkspacePresentation'
+import { ConfigurationEditStatus, InspectorSection } from './WorkspacePresentation'
 import { measureAzWork } from './azure-net/performance'
 import { useWorkspaceConfigurationPending } from './workspace-context'
 import { applyRoutingIntentEdit } from './native-routing-intent'
@@ -58,6 +58,20 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
   const connectedSite = request.kind === 'site' && !item && !!request.hubId && !isSpokeNva
   const nvaSpokes = topology.spokes.filter((s) => s.id !== request.id && Boolean(s.hubId) && Boolean(spokeNvaConnectionForSpoke(topology, s.id)))
   const title = request.deleting ? t("Delete {0}", label) : t(item ? 'Edit {0}' : 'Add {0}', connectedSite ? t('connected site') : label)
+  const diagramLabel = (item as { label?: string } | undefined)?.label
+  const spokeDefaultRoute = spoke?.hubId ? spoke.propagateDefaultRoute ?? false : true
+  const spokeRoutingSummary = [
+    spoke?.bgpCommunities?.virtualNetworkCommunity,
+    spoke?.bgpCommunities?.regionalCommunity,
+    selectedSpokeHubId && spokeDefaultRoute ? t('Propagate default route (0.0.0.0/0)') : '',
+  ].filter(Boolean).join(' · ')
+  const nvaConnectionCount = (spoke?.nvaSpokeIds?.length ?? (request.nvaSpokeId ? 1 : 0))
+    + topology.connections.filter((connection) => connection.spokeId === spoke?.id && connection.transport === 'SpokeNVA').length
+  const hubIntentSummary = [
+    hub?.routingIntent.private ? t('Private traffic via Azure Firewall') : '',
+    hub?.routingIntent.internet ? t('Internet traffic via Azure Firewall') : '',
+    hub?.routingIntent.privatePrefixes.length ? t('{0} configured prefixes', hub.routingIntent.privatePrefixes.length) : '',
+  ].filter(Boolean).join(' · ')
 
   const save = (event: FormEvent<HTMLFormElement>) => measureAzWork('editor-submit', () => {
     event.preventDefault()
@@ -258,7 +272,9 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
       </> : <>
         <Field title={t("Name")}><input name="name" required maxLength={120} defaultValue={item?.name ?? (isSpokeNva && hostSpoke ? `${hostSpoke.name} NVA` : '')} autoFocus /></Field>
         {(request.kind === 'hub' || request.kind === 'spoke' || request.kind === 'site' || request.kind === 'erLocation') && (
-          <Field title={t("Diagram label (optional)")}><input name="label" maxLength={120} defaultValue={(item as { label?: string } | undefined)?.label ?? ''} placeholder={t("Optional note displayed on diagram node")} /></Field>
+          <InspectorSection title={t('Node labels and annotations')} summary={diagramLabel || t('Optional diagram labels')} initialOpen={!!diagramLabel}>
+            <Field title={t("Diagram label (optional)")}><input name="label" maxLength={120} defaultValue={diagramLabel ?? ''} placeholder={t("Optional note displayed on diagram node")} /></Field>
+          </InspectorSection>
         )}
         {request.kind === 'erLocation' && <>
           <Field title={t("Peering location (Microsoft catalog)")}>
@@ -355,14 +371,14 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           </fieldset>)}
           <Field title={t("Region")}><AzureRegionSelect name="region" required={!hub} defaultValue={hub?.region ?? ''} /></Field>
           <Field title={t("Routing preference")}><select name="preference" defaultValue={hub?.preference ?? 'ExpressRoute'}>{Object.entries(preferenceLabels).map(([value, name]) => <option key={value} value={value}>{t(name)}</option>)}</select></Field>
-          <fieldset><legend>{t("Routing intent")}</legend>
+          <InspectorSection title={t('Routing intent')} summary={hubIntentSummary || t('No routing intent policies')} initialOpen={!!hubIntentSummary}>
             <label className="checkbox-field"><input type="checkbox" name="privateIntent" aria-label={t("Private traffic routing intent")} checked={hubIntent.private}
               onChange={(event) => setHubIntent({ ...hubIntent, private: event.target.checked })} />{t("Private traffic via Azure Firewall")}</label>
             <label className="checkbox-field"><input type="checkbox" name="internetIntent" aria-label={t("Internet traffic routing intent")} checked={hubIntent.internet}
               onChange={(event) => setHubIntent({ ...hubIntent, internet: event.target.checked })} />{t("Internet traffic via Azure Firewall")}</label>
             <Field title={t("Additional private traffic prefixes")}><input name="privatePrefixes" defaultValue={hub?.routingIntent.privatePrefixes.join(', ') ?? ''} placeholder="100.64.0.0/10" /></Field>
             <p className="muted">{t("RFC1918 prefixes are included automatically with private intent. Firewall nodes and route views update when you save.")}</p>
-          </fieldset>
+          </InspectorSection>
           <RoutingIntentNotice hub={{ ...hubStatic, name: hub?.name ?? '', routingIntent: hubIntent }} />
           <Suspense fallback={null}><HubStaticRoutesEditor hub={{ ...hubStatic, routingIntent: hubIntent }} focusFirewall={request.focusFirewall} onChange={(owner) => {
             setDirty(true)
@@ -375,16 +391,22 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           <Field title="Azure region (failure domain)"><input name="region" maxLength={120} defaultValue={spoke?.region ?? ''} placeholder="West Europe" /></Field>
           <p className="muted">Region is explicit, not inferred from hub attachment or ER location. Missing or unrecognized regions are unassessed in failure analysis.</p>
           <Field title={t("Prefixes")}><input name="prefixes" required defaultValue={spoke?.prefixes.join(', ') ?? ''} placeholder="10.50.0.0/16" /></Field>
-          <VnetCommunityEditor value={spoke?.bgpCommunities} formField />
-          {selectedSpokeHubId && <label className="checkbox-field"><input key={selectedSpokeHubId} type="checkbox" name="propagateDefaultRoute" defaultChecked={spoke?.hubId ? spoke.propagateDefaultRoute ?? false : true} />{t("Propagate default route (0.0.0.0/0)")}</label>}
-          {nvaSpokes.length > 0 && <fieldset><legend>{t("Connected NVA spokes")}</legend>
-            <p className="muted">{t("Attach this VNet behind one or more spoke BGP NVAs so those NVAs advertise its prefixes to Virtual WAN.")}</p>
-            {nvaSpokes.map((nvaSpoke) => <label key={nvaSpoke.id} className="checkbox-field"><input type="checkbox" name="nvaSpokeIds" value={nvaSpoke.id} defaultChecked={spoke?.nvaSpokeIds?.includes(nvaSpoke.id) || request.nvaSpokeId === nvaSpoke.id} />{nvaSpoke.name} ({nvaSpoke.prefixes.join(', ')})</label>)}
-          </fieldset>}
-          {(!spoke || spoke.hubId) && <fieldset><legend>{t("BGP NVAs in this spoke")}</legend><p className="muted">{t("VNet address spaces remain system routes. Add an NVA to exchange downstream VNet or site prefixes with the hub over BGP; this is separate from integrated SD-WAN.")}</p>
-            {spoke && <><p>{t("{0} configured BGP peers", topology.connections.filter((connection) => connection.spokeId === spoke.id).length)}</p><button type="button" onClick={() => onAddNva(spoke.id)}>{topology.connections.some((connection) => connection.spokeId === spoke.id && connection.transport === 'SpokeNVA') ? t("Configure BGP NVA") : t("Add BGP NVA")}</button><p className="muted">{t("Save spoke changes before adding an NVA.")}</p></>}
-            {!spoke && <p className="muted">{t("Create the spoke first, then use Add BGP NVA from its menu or editor.")}</p>}
-          </fieldset>}
+          <InspectorSection title={t('Routing options')} summary={spokeRoutingSummary || t('No optional routing settings')} initialOpen={!!spokeRoutingSummary}>
+            <VnetCommunityEditor value={spoke?.bgpCommunities} formField />
+            {selectedSpokeHubId && <label className="checkbox-field"><input key={selectedSpokeHubId} type="checkbox" name="propagateDefaultRoute" defaultChecked={spokeDefaultRoute} />{t("Propagate default route (0.0.0.0/0)")}</label>}
+          </InspectorSection>
+          <p className="muted">{t('Virtual WAN stores VNet communities but does not propagate them.')}</p>
+          {(nvaSpokes.length > 0 || !spoke || spoke.hubId) && <InspectorSection title={t('NVA connectivity')}
+            summary={t('{0} configured NVA connections', nvaConnectionCount)} initialOpen={nvaConnectionCount > 0}>
+            {nvaSpokes.length > 0 && <fieldset><legend>{t("Connected NVA spokes")}</legend>
+              <p className="muted">{t("Attach this VNet behind one or more spoke BGP NVAs so those NVAs advertise its prefixes to Virtual WAN.")}</p>
+              {nvaSpokes.map((nvaSpoke) => <label key={nvaSpoke.id} className="checkbox-field"><input type="checkbox" name="nvaSpokeIds" value={nvaSpoke.id} defaultChecked={spoke?.nvaSpokeIds?.includes(nvaSpoke.id) || request.nvaSpokeId === nvaSpoke.id} />{nvaSpoke.name} ({nvaSpoke.prefixes.join(', ')})</label>)}
+            </fieldset>}
+            {(!spoke || spoke.hubId) && <fieldset><legend>{t("BGP NVAs in this spoke")}</legend><p className="muted">{t("VNet address spaces remain system routes. Add an NVA to exchange downstream VNet or site prefixes with the hub over BGP; this is separate from integrated SD-WAN.")}</p>
+              {spoke && <><p>{t("{0} configured BGP peers", topology.connections.filter((connection) => connection.spokeId === spoke.id).length)}</p><button type="button" onClick={() => onAddNva(spoke.id)}>{topology.connections.some((connection) => connection.spokeId === spoke.id && connection.transport === 'SpokeNVA') ? t("Configure BGP NVA") : t("Add BGP NVA")}</button><p className="muted">{t("Save spoke changes before adding an NVA.")}</p></>}
+              {!spoke && <p className="muted">{t("Create the spoke first, then use Add BGP NVA from its menu or editor.")}</p>}
+            </fieldset>}
+          </InspectorSection>}
         </>}
         {request.kind === 'site' && isSpokeNva && <>
           <Field title={t("NVA ASN")}><input name="asn" type="number" required min={1} max={65534} defaultValue={site?.asn ?? 65001} /></Field>

@@ -306,6 +306,8 @@ for (const mode of ['vwan', 'full'] as const) for (const language of ['en', 'ja'
         await page.getByRole('menuitem', { name: enabled ? 'Enable Private Traffic Routing Intent' : 'Disable Private Traffic Routing Intent', exact: true }).click()
       } else {
         await page.getByRole('menuitem', { name: text('Edit configuration'), exact: true }).click()
+        const intent = page.getByRole('dialog').getByLabel(text('Private traffic routing intent'), { exact: true }).locator('xpath=ancestor::details[1]')
+        if (await intent.getAttribute('open') === null) await intent.locator(':scope > summary').click()
         await page.getByRole('dialog').getByLabel(text('Private traffic routing intent'), { exact: true }).setChecked(enabled)
         await page.getByRole('button', { name: text('Save changes'), exact: true }).click()
       }
