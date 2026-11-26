@@ -145,6 +145,7 @@ jobs:
         env:
           TRAFFIC_TOKEN: ${{ secrets.GH_STATS_TRAFFIC_TOKEN }}
           AZURE_STATS_SWA_RESOURCE_ID: ${{ vars.AZURE_STATS_SWA_RESOURCE_ID }}
+          AZURE_STATS_USER_CLOUD_INSIGHTS_RESOURCE_ID: ${{ vars.AZURE_STATS_USER_CLOUD_INSIGHTS_RESOURCE_ID }}
           AZURE_FUNCTION_APP: ${{ vars.AZURE_STATS_FUNCTION_APP }}
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_STATS_RESOURCE_GROUP }}
         run: |
@@ -155,6 +156,9 @@ jobs:
           settings=("GH_STATS_TRAFFIC_TOKEN=$TRAFFIC_TOKEN")
           if [ -n "$AZURE_STATS_SWA_RESOURCE_ID" ]; then
             settings+=("AZURE_STATS_SWA_RESOURCE_ID=$AZURE_STATS_SWA_RESOURCE_ID")
+          fi
+          if [ -n "$AZURE_STATS_USER_CLOUD_INSIGHTS_RESOURCE_ID" ]; then
+            settings+=("AZURE_STATS_USER_CLOUD_INSIGHTS_RESOURCE_ID=$AZURE_STATS_USER_CLOUD_INSIGHTS_RESOURCE_ID")
           fi
           az functionapp config appsettings set \
             --resource-group "$AZURE_RESOURCE_GROUP" --name "$AZURE_FUNCTION_APP" \

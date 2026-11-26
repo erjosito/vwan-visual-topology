@@ -1,3 +1,5 @@
+import { cloudMetricsSource } from './cloud.mjs'
+
 const dayMs = 86_400_000
 export const dashboardHistoryDays = 366
 
@@ -5,6 +7,7 @@ export async function buildDashboardSummary(snapshots, { repository, now = new D
   const observations = []
   const trafficDays = new Map()
   const webObservations = []
+  const cloudObservations = []
   let latest
   for await (const snapshot of snapshots) {
     if (snapshot.schemaVersion !== 1 || snapshot.repository !== repository
@@ -16,6 +19,10 @@ export async function buildDashboardSummary(snapshots, { repository, now = new D
       assets: snapshot.releases.flatMap((release) => release.assets.map(({ id, downloads }) => ({ id, downloads }))),
     })
     if (snapshot.web?.status === 'available') webObservations.push(snapshot.web)
+    if (snapshot.cloud?.status === 'available') {
+      if (snapshot.cloud.source !== cloudMetricsSource) throw new Error('Unsupported user-cloud metrics source.')
+      cloudObservations.push(snapshot.cloud)
+    }
     if (snapshot.traffic.status !== 'available') continue
     for (const metric of ['views', 'clones']) {
       for (const entry of snapshot.traffic[metric].days) {
@@ -72,6 +79,28 @@ export async function buildDashboardSummary(snapshots, { repository, now = new D
       days: [...webDays.values()].sort((a, b) => a.date.localeCompare(b.date)),
     }
   }
+  const cloudDays = new Map()
+  let cloud = { status: 'not_configured', days: [] }
+  cloudObservations.sort((a, b) => a.collectedAt.localeCompare(b.collectedAt))
+  const latestCloud = cloudObservations.at(-1)
+  if (latestCloud) {
+    for (const observation of cloudObservations) {
+      if (observation.resourceId.toLowerCase() !== latestCloud.resourceId.toLowerCase()) continue
+      for (const entry of observation.days) {
+        if (entry.date < cutoff || entry.date >= observation.collectedAt.slice(0, 10)) continue
+        cloudDays.set(entry.date, {
+          date: entry.date, requests: entry.requests, throttled: entry.throttled, serverErrors: entry.serverErrors,
+        })
+      }
+    }
+    cloud = {
+      status: 'available',
+      source: cloudMetricsSource,
+      resourceName: latestCloud.resourceId.split('/').at(-1),
+      collectedAt: latestCloud.collectedAt,
+      days: [...cloudDays.values()].sort((a, b) => a.date.localeCompare(b.date)),
+    }
+  }
   const window = (metric) => {
     const data = latest.traffic[metric]
     return { count: data.count, uniques: data.uniques, from: data.days[0]?.date ?? null, through: data.days.at(-1)?.date ?? null }
@@ -95,6 +124,7 @@ export async function buildDashboardSummary(snapshots, { repository, now = new D
     trafficDays: [...trafficDays.values()].sort((a, b) => a.date.localeCompare(b.date))
       .map((row) => ({ ...row, partial: row.date >= latest.collectedAt.slice(0, 10) })),
     web,
+    cloud,
   }
 }
 
