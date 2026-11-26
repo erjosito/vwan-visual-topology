@@ -7,6 +7,7 @@ import { RouterSnatEditor } from './RouterSnatEditor'
 import { NsgEditor } from './NsgEditor'
 import { DnatEditor } from './DnatEditor'
 import { LoadBalancerEditor } from './LoadBalancerEditor'
+import { PrivateLinkEditor } from './PrivateLinkEditor'
 import type { Simulation } from './routing'
 import type { AzSimulationResult } from './azure-net/engine'
 import './network-detail.css'
@@ -334,6 +335,7 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, selecte
         onResult={(result) => setApplicationEvidence({ topology, result })} />
       <LoadBalancerEditor key={initialLoadBalancerId ?? ''} initialSelectedId={initialLoadBalancerId}
         topology={topology} owner={owner} change={change} onSelect={(id) => { setQuery(''); onSelect(id) }} />
+      <PrivateLinkEditor topology={topology} owner={owner} change={change} />
       {selected && <form data-testid="selected-workload-form" key={JSON.stringify([selected, nics.filter((nic) => selected.nicIds.includes(nic.id)), topology.inventory?.publicIps])} onSubmit={(event) => {
         event.preventDefault()
         const data = new FormData(event.currentTarget)

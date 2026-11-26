@@ -7,6 +7,7 @@ import type { PacketRequirement, PlatformRequest } from '../src/platform/contrac
 import { PlatformJobs } from './jobs'
 import { overlappingVnets, overlapEndpoint } from '../tests/fixtures/overlapping-vnets'
 import { composedNat, composedNatRequest } from '../tests/fixtures/composed-nat'
+import { privateLinkTopology, privateLinkRequest } from '../tests/fixtures/private-link'
 
 const compiled = createRequire(import.meta.url)('../platform-dist/service.cjs') as { executePlatform: typeof executePlatform }
 function input(): PlatformRequest {
@@ -45,6 +46,26 @@ const healthy = (request: PlatformRequest) => {
 }
 
 describe('bounded original packet configuration rubrics', () => {
+  it('preserves original Private Link associations, approval unknowns and blocked connections in all execution surfaces', async () => {
+    const network = privateLinkTopology()
+    const request: PlatformRequest = { contractVersion: 1, operation: 'evaluate', document: { mode: 'full', topology: network },
+      requirements: ['a', 'b'].map((id) => ({ id: `private-service-${id}`, kind: 'packet',
+        sourceAddress: '100.64.1.4', destinationAddress: '100.64.2.10', expectation: 'configured',
+        requiredBackend: { workloadId: 'provider-vm', nicId: 'provider-nic', ipConfigurationId: 'provider-ip', address: '10.91.3.4' },
+        packet: privateLinkRequest(id) })) }
+    const jobs = new PlatformJobs(resolve('platform-dist', 'worker.cjs'))
+    try {
+      for (const state of ['approved', 'pending', 'unknown'] as const) {
+        network.inventory!.privateEndpointConnections![0].state = state
+        const result = executePlatform(request)
+        expect(result.errors).toEqual([])
+        expect(result.assessments.map((assessment) => assessment.outcome))
+          .toEqual([state === 'approved' ? 'satisfied' : state === 'pending' ? 'violated' : 'not assessed', 'satisfied'])
+        expect(compiled.executePlatform(request)).toEqual(result)
+        expect(await jobs.run(request)).toEqual(result)
+      }
+    } finally { jobs.close() }
+  })
   it('preserves composed translations and negative return controls in source, compiled and isolated execution', async () => {
     const network = composedNat()
     const request: PlatformRequest = { contractVersion: 1, operation: 'evaluate', document: { mode: 'full', topology: network },

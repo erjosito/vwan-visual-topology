@@ -5,6 +5,7 @@ import { simulateAzNet, traceAzNetFlow } from './azure-net/engine'
 import { pruneDeletedInventory, validateInventory, type NetworkLoadBalancer } from './inventory'
 import { tracePacket, type PacketRequest } from './packet-flow'
 import { validateTopology } from './validation'
+import { privateLinkTopology, privateLinkRequest } from '../tests/fixtures/private-link'
 
 const owner = { kind: 'vnet' as const, id: 'network' }
 const backend = { workloadId: 'server', nicId: 'server-nic', ipConfigurationId: 'server-ip' }
@@ -36,6 +37,141 @@ function network(internal = false) {
 }
 const privateRequest: PacketRequest = { ...request, source: { kind: 'workload', ...client },
   target: { kind: 'load-balancer', loadBalancerId: 'lb', frontendId: 'lb-front' } }
+
+describe('original Private Endpoint to provider service forwarding', () => {
+  it.each(['tcp', 'udp'] as const)('maps overlapping %s consumers through separate approved connections without peering', (protocol) => {
+    const topology = parseAzNetTopology(privateLinkTopology())
+    const original = structuredClone(topology)
+    for (const id of ['a', 'b']) {
+      const result = tracePacket(topology, { ...privateLinkRequest(id), protocol })
+      expect(result).toMatchObject({ ingress: 'configured', translation: 'snat-dnat',
+        forward: { routing: 'reachable' }, reply: { routing: 'reachable', session: 'conditional-response' },
+        nsg: { forward: { outcome: 'allowed' }, reply: { outcome: 'allowed' } },
+        loadBalancer: { selected: { workloadId: 'provider-vm' } } })
+      const stages = result.forward.steps.filter((step) => step.after
+        && (step.before.sourceAddress !== step.after.sourceAddress || step.before.destinationAddress !== step.after.destinationAddress))
+      expect(stages.map((step) => [step.entity.id, step.before.sourceAddress, step.after!.sourceAddress, step.after!.destinationAddress]))
+        .toEqual([['pls', '100.64.1.4', '10.91.1.4', '10.91.2.10'], ['provider-lb', '10.91.1.4', '10.91.1.4', '10.91.3.4']])
+      expect(result.forward.steps.find((step) => step.entity.kind === 'private-endpoint')?.routeId).toBe(`${id}-connection`)
+      expect(result.reply.steps.find((step) => step.entity.kind === 'private-link-service')?.after).toMatchObject({
+        sourceAddress: '100.64.2.10', destinationAddress: '100.64.1.4', destinationPort: 49152,
+      })
+      expect(result.nsg!.forward.checks.find((check) => check.target.id === 'provider-nic')?.tuple).toMatchObject({
+        sourceAddress: '10.91.1.4', destinationAddress: '10.91.3.4', destinationPort: 8443,
+      })
+      const direct = tracePacket(topology, { ...privateLinkRequest(id),
+        target: { kind: 'workload', workloadId: 'provider-vm', nicId: 'provider-nic', ipConfigurationId: 'provider-ip' } })
+      expect(direct.forward.routing).not.toBe('reachable')
+      const other = tracePacket(topology, { ...privateLinkRequest(id),
+        target: { kind: 'private-endpoint', privateEndpointId: `${id === 'a' ? 'b' : 'a'}-pe` } })
+      expect(other.forward.routing).not.toBe('reachable')
+    }
+    expect(topology).toEqual(original)
+  })
+
+  it('distinguishes known rejected connections from unknown binding, provisioning and unsupported provider features', () => {
+    const topology = privateLinkTopology()
+    topology.inventory!.privateEndpointConnections![0].state = 'pending'
+    expect(tracePacket(parseAzNetTopology(topology), privateLinkRequest('a')).ingress).toBe('blocked')
+    topology.inventory!.privateEndpointConnections![0].state = 'unknown'
+    expect(tracePacket(topology, privateLinkRequest('a')).ingress).toBe('not-assessed')
+    topology.inventory!.privateEndpointConnections![0].state = 'approved'
+    topology.inventory!.privateLinkServices![0].proxyProtocol = true
+    expect(tracePacket(topology, privateLinkRequest('a')).ingress).toBe('not-assessed')
+    topology.inventory!.privateLinkServices![0].proxyProtocol = false
+    topology.inventory!.privateLinkServices![0].provisioningState = 'unknown'
+    expect(tracePacket(topology, privateLinkRequest('a')).ingress).toBe('not-assessed')
+    topology.inventory!.privateLinkServices![0].provisioningState = 'succeeded'
+    delete topology.vnets[2].subnets[0].privateLinkServiceNetworkPolicies
+    expect(tracePacket(topology, privateLinkRequest('a')).ingress).toBe('not-assessed')
+    topology.inventory!.privateEndpointConnections = []
+    expect(tracePacket(topology, privateLinkRequest('a')).translation).toBe('not-assessed')
+  })
+
+  it('does not infer backend eligibility or inverse service mapping through a discarded provider return', () => {
+    const topology = privateLinkTopology()
+    topology.inventory!.loadBalancers![0].probes[0].health = []
+    expect(tracePacket(parseAzNetTopology(topology), privateLinkRequest('a')).ingress).toBe('not-assessed')
+    topology.inventory!.loadBalancers![0].probes[0].health = [{ target: topology.inventory!.loadBalancers![0].pools[0].members[0], status: 'healthy' }]
+    topology.vnets[2].subnets[2].routeTableId = 'drop-nat'
+    topology.udrTables.push({ id: 'drop-nat', name: 'Drop provider response', disableBgpRoutePropagation: false,
+      routes: [{ id: 'drop-service-nat', name: 'DropNat', prefix: '10.91.1.0/24', nextHopType: 'None', enabled: true }] })
+    const result = tracePacket(parseAzNetTopology(topology), privateLinkRequest('a'))
+    expect(result.reply.routing).toBe('unreachable')
+    expect(result.reply.session).toBeUndefined()
+    expect(result.reply.steps.some((step) => step.entity.kind === 'private-link-service' && step.after)).toBe(false)
+  })
+
+  it('rejects invalid original bindings and provider NAT allocations at admission', () => {
+    for (const edit of [
+      (topology: ReturnType<typeof privateLinkTopology>) => { topology.inventory!.privateLinkServices![0].frontendId = 'missing' },
+      (topology: ReturnType<typeof privateLinkTopology>) => { topology.inventory!.privateLinkServices![0].natIpConfigurations[0].privateIp = '100.64.1.4' },
+      (topology: ReturnType<typeof privateLinkTopology>) => { topology.inventory!.privateEndpointConnections![0].serviceId = 'missing' },
+      (topology: ReturnType<typeof privateLinkTopology>) => { topology.inventory!.privateEndpointConnections!.push(structuredClone(topology.inventory!.privateEndpointConnections![0])) },
+      (topology: ReturnType<typeof privateLinkTopology>) => { topology.inventory!.privateLinkServices![0].id = 'a-pe' },
+      (topology: ReturnType<typeof privateLinkTopology>) => { topology.inventory!.privateLinkServices![0].natIpConfigurations[0].id = 'b-pe' },
+      (topology: ReturnType<typeof privateLinkTopology>) => { topology.inventory!.privateLinkServices![0].natIpConfigurations[0] = { id: 'nat-conflict', subnetId: 'provider-backend', privateIp: '10.91.3.4' } },
+    ]) {
+      const topology = privateLinkTopology(); edit(topology)
+      expect(() => parseAzNetTopology(topology)).toThrow(/Inventory:/)
+    }
+  })
+
+  it('keeps provider-side ownership even when provider addresses repeat the consumer workloads and endpoints', () => {
+    const topology = privateLinkTopology(), provider = topology.vnets[2]
+    provider.prefixes = ['100.64.0.0/16']
+    provider.subnets[0].prefix = '100.64.3.0/24'
+    provider.subnets[1].prefix = '100.64.2.0/24'
+    provider.subnets[2].prefix = '100.64.1.0/24'
+    topology.inventory!.privateLinkServices![0].natIpConfigurations[0].privateIp = '100.64.3.4'
+    topology.inventory!.loadBalancers![0].frontends[0] = { id: 'provider-frontend', name: 'Repeated frontend',
+      kind: 'private', subnetId: 'provider-front', privateIp: '100.64.2.10' }
+    topology.inventory!.nics.find((nic) => nic.id === 'provider-nic')!.ipConfigurations[0].privateIp = '100.64.1.4'
+    topology.inventory!.networkSecurityGroups![0].rules[1].sources = ['100.64.3.4']
+    const result = tracePacket(parseAzNetTopology(topology), privateLinkRequest('b'))
+    expect(result).toMatchObject({ ingress: 'configured', reply: { routing: 'reachable', session: 'conditional-response' },
+      loadBalancer: { selected: { workloadId: 'provider-vm' } } })
+    expect(result.forward.steps.find((step) => step.entity.id === 'pls')!.after).toMatchObject({
+      sourceAddress: '100.64.3.4', destinationAddress: '100.64.2.10',
+    })
+  })
+
+  it('evaluates enabled consumer filtering and refuses port-specific certainty about a provider NAT allocation', () => {
+    const topology = privateLinkTopology()
+    topology.vnets[0].subnets[1].privateEndpointNetworkPolicies = 'NetworkSecurityGroupEnabled'
+    topology.inventory!.networkSecurityGroups!.push({ id: 'consumer-nsg', name: 'Consumer filtering', rules: [{
+      id: 'deny-consumer', name: 'DenyConsumer', priority: 100, direction: 'inbound', action: 'deny', protocol: 'any',
+      sources: ['*'], destinations: ['*'], sourcePorts: ['*'], destinationPorts: ['443'],
+    }] })
+    topology.inventory!.nsgAssociations!.push({ owner: { kind: 'vnet', id: 'a' }, target: { kind: 'subnet', id: 'a-data' }, nsgId: 'consumer-nsg' })
+    const denied = tracePacket(parseAzNetTopology(topology), privateLinkRequest('a'))
+    expect(denied).toMatchObject({ ingress: 'blocked', security: 'denied' })
+    expect(denied.forward.steps.some((step) => step.entity.kind === 'private-link-service')).toBe(false)
+    topology.vnets[0].subnets[1].privateEndpointNetworkPolicies = 'Disabled'
+    topology.inventory!.networkSecurityGroups![0].rules[1].sourcePorts = ['49152']
+    const unknown = tracePacket(topology, privateLinkRequest('a'))
+    expect(unknown.ingress).toBe('not-assessed')
+    expect(unknown.reply.session).toBeUndefined()
+    expect(unknown.reply.steps.some((step) => step.entity.kind === 'private-link-service' && step.after)).toBe(false)
+  })
+
+  it('does not silently use inbound NAT rules or remove unrelated connections when original provider attachments are deleted', () => {
+    const topology = privateLinkTopology(), lb = topology.inventory!.loadBalancers![0]
+    lb.inboundNatRules = [{ id: 'unsupported-inbound', name: 'Inbound NAT only', frontendId: 'provider-frontend', poolId: 'provider-pool',
+      target: lb.pools[0].members[0], protocol: 'tcp', frontendPort: 443, backendPort: 8443 }]
+    lb.rules = lb.rules.filter((rule) => rule.protocol !== 'tcp')
+    expect(tracePacket(parseAzNetTopology(topology), privateLinkRequest('a')).ingress).toBe('not-assessed')
+    const next = structuredClone(topology)
+    next.vnets[0].subnets[1].privateEndpoints = []
+    pruneDeletedInventory(next, topology)
+    expect(next.inventory!.privateEndpointConnections!.map((connection) => connection.privateEndpointId)).toEqual(['b-pe'])
+    next.vnets[2].subnets = next.vnets[2].subnets.filter((subnet) => subnet.id !== 'provider-nat')
+    pruneDeletedInventory(next, topology)
+    expect(next.inventory!.privateLinkServices).toEqual([])
+    expect(next.inventory!.privateEndpointConnections).toEqual([])
+    expect(() => parseAzNetTopology(next)).not.toThrow()
+  })
+})
 const outbound: PacketRequest = { ...request, source: { kind: 'workload', ...backend }, target: { kind: 'external', address: '8.8.8.8' } }
 function addOutbound(topology: ReturnType<typeof network>) {
   topology.inventory!.loadBalancers![0].outboundRules = [{ id: 'lb-out', name: 'Outbound', frontendIds: ['lb-front'], poolId: 'lb-pool', protocol: 'any' }]

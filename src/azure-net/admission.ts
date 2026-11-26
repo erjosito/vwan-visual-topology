@@ -77,6 +77,7 @@ const schema = object({
       routeTableId: id, defaultOutboundAccess: bool, delegations: strings,
       internetEgressStatus: choice('unknown'),
       privateEndpointNetworkPolicies: choice('Disabled', 'Enabled', 'RouteTableEnabled', 'NetworkSecurityGroupEnabled'),
+      privateLinkServiceNetworkPolicies: choice('Disabled', 'Enabled'),
       privateEndpoints: array(object({ ...named, ipAddress: text, serviceName: text })),
     })),
     gateways: array(object({ ...named, kind: choice('ExpressRoute', 'Vpn'), asn, bgpEnabled: bool, enabled: bool }, {

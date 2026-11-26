@@ -1,8 +1,8 @@
-import { inventoryOwners, namedEndpoints, ownsInventoryAddress, workloadEndpointKey, type InventoryTopology, type WorkloadIpReference } from './inventory'
+import { inventoryOwners, namedEndpoints, ownsInventoryAddress, workloadEndpointKey, type InventoryOwner, type InventoryTopology, type WorkloadIpReference } from './inventory'
 import { contains, ipv4 } from './validation'
 import { simulate, type Simulation } from './routing'
 import { simulateAzNet, type AzSimulationResult } from './azure-net/engine'
-import { assessEndpointNsg, completePacketNsg, endpointNsg, nsgScope, type NsgCheck } from './packet-security'
+import { assessEndpointNsg, completePacketNsg, endpointNsg, nsgScope, type NsgCheck, type TupleUncertainty } from './packet-security'
 import { traceInventoryPacketLeg } from './packet-ingress'
 import type { FiveTuple, PacketLeg, PacketRequest, PacketResult, WorkloadEndpoint } from './packet-flow'
 
@@ -25,7 +25,8 @@ const unknownRouter = (topology: InventoryTopology, leg: PacketLeg, publicFlow =
     || hop.nodeKind === 'vwan-hub' && topology.version === 2
       && (publicFlow ? topology.vwanHubs.find((hub) => hub.id === hop.nodeId)?.routingIntent.internet
         : topology.vwanHubs.find((hub) => hub.id === hop.nodeId)?.routingIntent.private))
-export function traceLoadBalancer(topology: InventoryTopology, request: PacketRequest, simulation?: Simulation | AzSimulationResult): PacketResult {
+export function traceLoadBalancer(topology: InventoryTopology, request: PacketRequest, simulation?: Simulation | AzSimulationResult,
+  privateLinkSource?: { owner: InventoryOwner; subnetId: string; address: string; uncertainty: TupleUncertainty }): PacketResult {
   const result: PacketResult = { source: request.source, target: request.target, ingress: 'not-assessed',
     forward: { direction: 'forward', routing: 'not-assessed', steps: [], reasons: [] },
     reply: { direction: 'reply', routing: 'not-assessed', steps: [], reasons: [] },
@@ -59,9 +60,12 @@ export function traceLoadBalancer(topology: InventoryTopology, request: PacketRe
   if (frontend.kind === 'public' ? source.kind !== 'external' : source.kind !== 'workload') {
     return stop('Public LB initiation requires an explicit Internet client; internal LB requires an original private client. Additional egress/DNAT translation stages are not inferred.')
   }
-  const sourceAddress = source.kind === 'external' ? source.address : sourceEndpoint?.config.privateIp
+  const sourceAddress = privateLinkSource?.address ?? (source.kind === 'external' ? source.address : sourceEndpoint?.config.privateIp)
   if (!sourceAddress) return stop('The original client NIC addressing is unknown.')
-  if (sourceEndpoint && !ownsInventoryAddress(topology, sourceEndpoint.nic.owner, sourceEndpoint.config.subnetId, sourceAddress)) return stop('The original client address has ambiguous network ownership.')
+  if (privateLinkSource ? !ownsInventoryAddress(topology, privateLinkSource.owner, privateLinkSource.subnetId, sourceAddress)
+    : sourceEndpoint && !ownsInventoryAddress(topology, sourceEndpoint.nic.owner, sourceEndpoint.config.subnetId, sourceAddress)) {
+    return stop('The original client address has ambiguous network ownership.')
+  }
   if (source.kind === 'external' && [...inventoryOwners(topology).flatMap((owner) => owner.prefixes), ...topology.sites.flatMap((site) => site.prefixes),
     ...(topology.inventory?.publicIps.flatMap((ip) => ip.address ? [`${ip.address}/32`] : []) ?? []),
     ...(topology.inventory?.publicIpPrefixes?.flatMap((prefix) => prefix.prefix ? [prefix.prefix] : []) ?? []),
@@ -70,9 +74,11 @@ export function traceLoadBalancer(topology: InventoryTopology, request: PacketRe
   const original: FiveTuple = { sourceAddress, destinationAddress: address, protocol: request.protocol,
     sourcePort: request.sourcePort, destinationPort: request.destinationPort }
   const native = simulation ?? (topology.version === 1 ? simulate(topology) : simulateAzNet(topology))
+  const sourceOwner = privateLinkSource?.owner ?? sourceEndpoint?.nic.owner
+  const sourceSubnetId = privateLinkSource?.subnetId ?? sourceEndpoint?.config.subnetId
   result.forward.tuple = original
   if (frontend.kind === 'private') {
-    result.forward = traceInventoryPacketLeg(topology, native, sourceEndpoint!.nic.owner, sourceEndpoint!.config.subnetId, original,
+    result.forward = traceInventoryPacketLeg(topology, native, sourceOwner!, sourceSubnetId!, original,
       'forward', { owner: lb.owner, subnetId: frontend.subnetId })
     if (result.forward.routing !== 'reachable') return stop('Native routing does not reach this internal frontend; the LB creates no BGP or UDR route.', result.forward.routing === 'unreachable')
     if (unknownRouter(topology, result.forward)) {
@@ -91,7 +97,7 @@ export function traceLoadBalancer(topology: InventoryTopology, request: PacketRe
     kind: rule ? 'load-balancing' : 'inbound-nat', eligible: [], probes: [] }
   result.loadBalancer = assessment
   if (pool.membersStatus === 'unknown') return stop('Original Load Balancer backend membership is incomplete; no hidden backend is invented.')
-  if (frontend.kind === 'private' && source.kind === 'workload' && pool.members.some((member) => same(member, source))) {
+  if (frontend.kind === 'private' && source.kind === 'workload' && !privateLinkSource && pool.members.some((member) => same(member, source))) {
     return stop('A backend accessing its own internal Load Balancer frontend is unsupported by Azure; no hairpin delivery is inferred.', true)
   }
   if (rule) {
@@ -134,9 +140,10 @@ export function traceLoadBalancer(topology: InventoryTopology, request: PacketRe
       : 'The original inbound NAT rule targets its specific backend association without requiring or consulting a health probe.' },
   { entity: { kind: 'workload', id: target.workloadId }, before: mapped, after: mapped,
     evidence: 'The original selected private backend NIC receives the mapped tuple subject to its own subnet/NIC NSGs; listener readiness is unassessed.' })
+  if (privateLinkSource) result.forward.steps = result.forward.steps.map((step) => ({ ...step, uncertainty: privateLinkSource.uncertainty }))
   const response = reverse(mapped)
   result.reply = traceInventoryPacketLeg(topology, native, entry.nic.owner, entry.config.subnetId, response, 'reply',
-    frontend.kind === 'private' ? { owner: sourceEndpoint!.nic.owner, subnetId: sourceEndpoint!.config.subnetId } : undefined,
+    frontend.kind === 'private' ? { owner: sourceOwner!, subnetId: sourceSubnetId! } : undefined,
     undefined, undefined, frontend.kind === 'public')
   if (unknownRouter(topology, result.reply, frontend.kind === 'public')) {
     result.reply.routing = 'not-assessed'
@@ -148,7 +155,13 @@ export function traceLoadBalancer(topology: InventoryTopology, request: PacketRe
     result.reply.session = 'conditional-response'
   } else result.reply.steps.push({ entity: { kind: 'load-balancer', id: lb.id }, before: response, after: null,
     evidence: 'A reachable symmetric backend return is not established; no inverse mapping is asserted.' })
-  const sourceNsg = source.kind === 'workload' ? endpointNsg(topology, source, 'outbound', original, native) : { outcome: 'allowed' as const, checks: [] }
+  if (privateLinkSource) result.reply.steps = result.reply.steps.map((step) => ({ ...step, uncertainty: {
+    sourceAddressPrefixes: privateLinkSource.uncertainty.destinationAddressPrefixes,
+    sourcePorts: privateLinkSource.uncertainty.destinationPorts,
+    destinationAddressPrefixes: privateLinkSource.uncertainty.sourceAddressPrefixes,
+    destinationPorts: privateLinkSource.uncertainty.sourcePorts,
+  } }))
+  const sourceNsg = source.kind === 'workload' && !privateLinkSource ? endpointNsg(topology, source, 'outbound', original, native) : { outcome: 'allowed' as const, checks: [] }
   result.nsg = completePacketNsg(topology, target, result.forward, result.reply, sourceNsg, native, 'none', true)
   result.security = result.nsg.forward.outcome === 'denied' ? 'denied' : 'not-assessed'
   result.ingress = result.nsg.forward.outcome === 'denied' ? 'blocked' : result.nsg.forward.outcome === 'allowed' ? 'configured' : 'not-assessed'

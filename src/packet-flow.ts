@@ -9,10 +9,12 @@ import { completePacketNsg, endpointNsg, type NsgAssessment, type TupleUncertain
 import { tracePublicIngress } from './packet-ingress'
 import { traceLoadBalancer, type LoadBalancerPacketAssessment } from './packet-load-balancer'
 import type { HaPortsAssessment } from './ha-ports'
+import { tracePrivateLink } from './packet-private-link'
 
 export interface WorkloadEndpoint { kind: 'workload'; workloadId: string; nicId: string; ipConfigurationId: string }
 export type PacketEndpoint = WorkloadEndpoint | { kind: 'external'; address: string } | { kind: 'public-ip'; publicIpId: string }
   | { kind: 'load-balancer'; loadBalancerId: string; frontendId: string }
+  | { kind: 'private-endpoint'; privateEndpointId: string }
 export interface FiveTuple {
   sourceAddress: string
   destinationAddress: string
@@ -75,6 +77,11 @@ export function validatePacketRequest(input: unknown): asserts input is PacketRe
         || typeof endpoint.publicIpId !== 'string' || !endpoint.publicIpId || endpoint.publicIpId.length > 120) {
         throw new Error('Public-IP endpoints are destination-only and require an original public-IP ID.')
       }
+    } else if (endpoint.kind === 'private-endpoint') {
+      if (endpoint === request.source || Object.keys(endpoint).some((key) => !['kind', 'privateEndpointId'].includes(key))
+        || typeof endpoint.privateEndpointId !== 'string' || !endpoint.privateEndpointId || endpoint.privateEndpointId.length > 120) {
+        throw new Error('Private Endpoint destinations require an original endpoint identity.')
+      }
     } else if (endpoint.kind === 'load-balancer') {
       if (endpoint === request.source || Object.keys(endpoint).some((key) => !['kind', 'loadBalancerId', 'frontendId'].includes(key))
         || [endpoint.loadBalancerId, endpoint.frontendId].some((id) => typeof id !== 'string' || !id || id.length > 120)) {
@@ -112,12 +119,14 @@ export function tracePacket(topology: InventoryTopology, request: PacketRequest,
       delivery: 'not-assessed', security: 'not-assessed', translation: 'not-assessed',
       limitations: ['Configuration observation only; no live connectivity, probe health or guest policy is certified.'] }
   }
+  if (request.target.kind === 'private-endpoint') return tracePrivateLink(topology, request, topology.version === 2 ? simulation as AzSimulationResult | undefined : undefined)
   if (request.target.kind === 'load-balancer' || request.target.kind === 'public-ip' && topology.inventory?.loadBalancers?.some((lb) =>
     lb.frontends.some((frontend) => frontend.kind === 'public' && frontend.publicIpId === (request.target as Extract<PacketEndpoint, { kind: 'public-ip' }>).publicIpId))) {
     return traceLoadBalancer(topology, request, simulation)
   }
   if (request.target.kind === 'public-ip') return tracePublicIngress(topology, request, simulation)
   const resolve = (ref: PacketEndpoint) => {
+    if (ref.kind === 'private-endpoint') return { reason: 'Private Endpoints require their explicit bound service path.' }
     if (ref.kind === 'load-balancer') return { reason: 'Load Balancer endpoints require their explicit service path.' }
     if (ref.kind === 'public-ip') return { reason: 'Public-IP endpoints require the explicit ingress path.' }
     if (ref.kind === 'external') {

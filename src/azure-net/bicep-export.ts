@@ -85,6 +85,7 @@ export function generateAzNetBicep(
   if (topology.vwanHubs.some((hub) => hub.firewall)) warnings.push('Declared local hub Firewall identities and static inspection are not deployed by this Bicep starter; preserve native JSON. This is not an equivalent inspection deployment.')
   if (topology.vpnConnections.some((connection) => connection.nat)) warnings.push('VPN overlap NAT rules, gateway capabilities, instance associations and BGP translation are not deployed by this Bicep starter. Preserve native JSON; generated gateways/connections are not an equivalent NAT deployment.')
   if (topology.inventory?.routerSnatPolicies?.length) warnings.push('Firewall network-rule SNAT/private ranges and NVA guest SNAT are simulation declarations, not deployed by this Bicep starter. Preserve native JSON and configure original device policies separately.')
+  if (topology.inventory?.privateLinkServices?.length || topology.inventory?.privateEndpointConnections?.length) warnings.push('Private Link Service NAT configurations and Private Endpoint approval/bindings are not deployed by this Bicep starter. Preserve native JSON; this is not an equivalent private-service deployment.')
   if (topology.vnets.some((vnet) => vnet.subnets.some((subnet) => subnet.defaultOutboundAccess === undefined))) {
     warnings.push('Legacy unspecified defaultOutboundAccess is preserved as unspecified; Azure deployment defaults can differ. Set it explicitly for a reproducible outbound posture.')
   }

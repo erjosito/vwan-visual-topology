@@ -166,6 +166,14 @@ export const capabilities = {
     excluded: ['arbitrary DNAT or public multi-router chains', 'managed-hub/gateway/VPN NAT composition', 'HA-ports steering', 'live guest/session state'],
     maxNvas: 4,
   },
+  privateLink: {
+    modes: ['hub-spoke', 'full'], topologyVersion: 2,
+    destination: '{kind:private-endpoint,privateEndpointId:originalId}',
+    configuration: 'inventory.privateLinkServices[] declares original provider owner, loadBalancerId/frontendId, natIpConfigurations, provisioningState and proxyProtocol; privateEndpointConnections[] binds privateEndpointId/serviceId with explicit approval state.',
+    scope: 'Declared approved IPv4 TCP/UDP Private Endpoint to Standard internal NIC-backed Load Balancer. One original NAT configuration with Private Link Service network policies explicitly disabled. Separate original consumer and provider networks, filtering and conditional responses; no VNet transit.',
+    evidence: 'Consumer endpoint/connection, provider service/NAT configuration and LB/backend identities; translated tuples, declared health and independent provider/consumer return routing. No live provisioning, allocation, session or application verification.',
+    excluded: ['Proxy Protocol v2', 'multiple NAT configurations', 'intermediate router/translation composition', 'Direct Connect preview', 'Application Gateway private connectivity', 'inferred capture associations'],
+  },
   subnetPeering: {
     modes: ['hub-spoke', 'full'], topologyVersion: 2,
     field: 'vnetPeerings[].scope: {type:whole-vnet} or {type:subnets,subnetAIds:originalIds[],subnetBIds:originalIds[]}; omitted scope preserves legacy whole-VNet peering.',
