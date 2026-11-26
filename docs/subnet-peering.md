@@ -71,6 +71,23 @@ forwarding, proxy behavior, general multi-stage NAT, or overlap qualification fo
 the legacy standalone VWAN provider. Bounded HA-ports steering retains its
 separately documented ownership restrictions.
 
+### Composed private SNAT
+
+H&S and Full Hybrid also support TCP/UDP workload-to-workload paths through
+two to four original NVA VMs with explicit `nva-snat` declarations. Use the
+existing original NVA SNAT editor for each waypoint. Each rule matches the
+tuple visible there, including source translation from the preceding NVA.
+The packet panel and MCP expose both mappings and their conditional inverses.
+Each inverse requires an independently checked route to the exact original
+translator, followed by its return route. A different router, missing route or
+loop does not establish a response mapping. Subnet and NIC filtering uses the
+tuple visible at each boundary; source ports remain illustrative.
+
+This slice does not qualify arbitrary public or DNAT chains, managed hubs,
+VPN/gateway composition or HA-ports steering. Existing single-service NAT and
+classic Firewall-to-NAT-Gateway support are unchanged. No live guest NAT rules,
+session state or application delivery are verified.
+
 ## Supported boundaries
 
 Gateway/ARS/VWAN/appliance composition, private endpoints, delegated-subnet

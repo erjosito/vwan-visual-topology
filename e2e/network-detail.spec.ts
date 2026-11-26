@@ -6,6 +6,36 @@ import { executePlatform } from '../src/platform/service'
 import type { PlatformRequest } from '../src/platform/contract'
 import { validateTopology } from '../src/validation'
 import { overlappingVnets } from '../tests/fixtures/overlapping-vnets'
+import { composedNat } from '../tests/fixtures/composed-nat'
+
+test('composed private NVA SNAT shows both boundaries and conditional inverses after reopening', async ({ page }) => {
+  const topology = composedNat()
+  await page.addInitScript((topology) => {
+    if (!localStorage.getItem('aznet-visual-topology:v1')) localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))
+  }, topology)
+  await page.goto('/?mode=full')
+  const probe = async () => {
+    await page.getByTestId('aznet-vnet-network').click()
+    await page.getByRole('button', { name: 'VNet detail', exact: true }).click()
+    const packet = page.getByTestId('network-detail-dialog').getByTestId('packet-flow-panel')
+    await packet.getByLabel('Packet source', { exact: true }).selectOption({ label: 'client / client NIC / Primary (10.90.1.4)' })
+    await packet.getByLabel('Packet destination', { exact: true }).selectOption({ label: 'server / server NIC / Primary (10.90.4.4)' })
+    await packet.getByRole('button', { name: 'Trace packet routing', exact: true }).click()
+    await expect(packet.getByRole('heading', { name: 'Forward routing: reachable', exact: true })).toBeVisible()
+    await expect(packet.getByRole('heading', { name: 'Reply routing: reachable', exact: true })).toBeVisible()
+    for (const name of ['Forward routing', 'Reply routing']) {
+      const leg = packet.getByRole('region', { name, exact: true })
+      await leg.getByText(/^Routing evidence \(/).click()
+      await expect(leg.getByTestId('packet-step-tuples')).toHaveCount(2)
+    }
+    await expect(packet.getByText('Explicit original NVA guest SNAT policy matches the tuple at this boundary.', { exact: false })).toHaveCount(2)
+    await expect(packet.getByText('Inverse SNAT for this exact conditional response at its original NVA,', { exact: false })).toHaveCount(2)
+  }
+  await probe()
+  await page.reload()
+  await probe()
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)).toEqual(topology)
+})
 
 test('isolated overlapping VNets retain distinct endpoint choices, local routing and persistence', async ({ page }) => {
   const topology = overlappingVnets()

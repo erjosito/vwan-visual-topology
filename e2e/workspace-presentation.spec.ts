@@ -81,6 +81,7 @@ for (const language of ['en', 'ja']) for (const theme of ['light', 'dark']) {
     const text = (en: string, ja: string) => language === 'ja' ? ja : en
     const requests: string[] = [], downloads: string[] = []
     await context.route('https://github.com/**', route => route.fulfill({ contentType: 'text/html', body: 'Platform destination' }))
+    await context.route('https://apps.microsoft.com/**', route => route.fulfill({ contentType: 'text/html', body: 'Microsoft Store destination' }))
     page.on('request', request => requests.push(request.url()))
     page.on('download', download => downloads.push(download.suggestedFilename()))
     await page.setViewportSize({ width: language === 'ja' ? 390 : 1440, height: 900 })
@@ -101,6 +102,8 @@ for (const language of ['en', 'ja']) for (const theme of ['light', 'dark']) {
     await page.keyboard.press('Enter')
     expect(requests.some(url => url.includes('FeedbackDialog'))).toBe(false)
     await expect(help.getByRole('link', { name: text('Windows app', 'Windows アプリ'), exact: true })).toBeVisible()
+    await expect(help.getByRole('link', { name: text('Windows app', 'Windows アプリ'), exact: true })).toHaveAttribute(
+      'title', text('Get the Windows app from the Microsoft Store', 'Microsoft Store から Windows アプリを入手'))
     await expect(help.getByRole('link', { name: text('MCP server', 'MCP サーバー'), exact: true })).toBeVisible()
     await help.getByRole('button', { name: text('Feedback', 'フィードバック'), exact: true }).press('Enter')
     await expect(page.getByRole('dialog')).toBeVisible()
@@ -110,10 +113,11 @@ for (const language of ['en', 'ja']) for (const theme of ['light', 'dark']) {
     await page.keyboard.press('Enter')
     expect(downloads).toEqual([])
     expect(requests.some(url => url.startsWith('https://github.com/'))).toBe(false)
+    expect(requests.some(url => url.startsWith('https://apps.microsoft.com/'))).toBe(false)
     expect((await new AxeBuilder({ page }).include('.presentation-group[open]').analyze()).violations).toEqual([])
     await help.screenshot({ path: info.outputPath(`platform-links-${language}-${theme}.png`) })
     for (const [label, target] of [
-      [text('Windows app', 'Windows アプリ'), 'https://github.com/erjosito/vwan-visual-topology/releases/latest'],
+      [text('Windows app', 'Windows アプリ'), 'https://apps.microsoft.com/detail/9P76BP1MXWZ2'],
       [text('MCP server', 'MCP サーバー'), 'https://github.com/erjosito/vwan-visual-topology/blob/main/PLATFORM.md#local-mcp--copilot-skill'],
     ]) {
       if (!await help.getByRole('link', { name: label, exact: true }).isVisible()) await help.locator('summary').press('Enter')

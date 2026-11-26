@@ -158,6 +158,14 @@ export const capabilities = {
     evidence: 'Local forward/reply paths and original single-service public/NAT mappings retain VNet context. Duplicate workload IP choices include the original network name and ID.',
     excluded: ['unresolved overlapping shared-transit destinations', 'Private Link Service and proxy forwarding', 'arbitrary multi-stage NAT composition', 'HA-ports overlap qualification', 'legacy standalone VWAN overlap qualification'],
   },
+  composedNat: {
+    modes: ['hub-spoke', 'full'], topologyVersion: 2,
+    scope: 'IPv4 TCP/UDP workload-to-workload chains of two to four original NVAs with explicit nva-snat declarations. Policies match the translated tuple at each waypoint; no destination identity supplies routing.',
+    evidence: 'Ordered before/after tuples at original owners, independent routes to each inverse translator and the original source, and subnet/NIC NSGs at the visible tuple boundaries. Responses are conditional, not reverse initiations. Ports are illustrative.',
+    compatibility: 'Existing single-router SNAT, public DNAT, VPN NAT and classic Firewall private handoff to its own subnet NAT Gateway retain their separate scopes.',
+    excluded: ['arbitrary DNAT or public multi-router chains', 'managed-hub/gateway/VPN NAT composition', 'HA-ports steering', 'live guest/session state'],
+    maxNvas: 4,
+  },
   subnetPeering: {
     modes: ['hub-spoke', 'full'], topologyVersion: 2,
     field: 'vnetPeerings[].scope: {type:whole-vnet} or {type:subnets,subnetAIds:originalIds[],subnetBIds:originalIds[]}; omitted scope preserves legacy whole-VNet peering.',
