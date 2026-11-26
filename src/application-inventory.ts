@@ -6,17 +6,6 @@ export const applicationLimits = {
   maxServices: 32, maxDnsProfiles: 32, maxReferences: 64, maxFeatures: 32,
   maxListeners: 64, maxRules: 64, maxMembers: 64, maxDnsEndpoints: 64,
 } as const
-export const applicationCapabilities = {
-  inventoryVersion: 1,
-  requestVersion: 1,
-  minimumContractVersion: 2,
-  operations: ['application'],
-  providers: ['application-gateway-tcp'] as string[],
-  scope: 'Native v2 private Standard_v2/WAF_v2 TCP proxy: one declared instance, listener and original workload backend. Separate client/backend connections and independent returns. HTTP/DNS, TLS termination, Proxy Protocol and managed private connectivity remain unavailable.',
-  limits: applicationLimits,
-  privacy: 'Offline declared configuration only; no DNS queries, probes, credentials, telemetry or origin fetches.',
-}
-
 export const fail = (reason: string): never => { throw new Error(`Application: ${reason}`) }
 export function object(value: unknown, fields: string[]): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) return fail('plain object required')

@@ -4,7 +4,8 @@ import type { FiveTuple, PacketLeg, WorkloadEndpoint } from './packet-flow'
 import type { NsgAssessment } from './packet-security'
 import { evaluateTcpProxy } from './application-tcp'
 import { applicationReferenceExists, fail, object, reference, text, validateApplicationInventory } from './application-inventory'
-export { applicationLimits, applicationCapabilities, applicationReferenceKey, applicationReferenceExists, validateApplicationInventory } from './application-inventory'
+export { applicationLimits, applicationReferenceKey, applicationReferenceExists, validateApplicationInventory } from './application-inventory'
+export { applicationCapabilities } from './application-capabilities'
 
 export type ApplicationReference =
   | { kind: 'service'; id: string }
