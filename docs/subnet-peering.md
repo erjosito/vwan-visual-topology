@@ -181,6 +181,48 @@ and [gateway connection/source-address behavior](https://learn.microsoft.com/en-
 These support a bounded synthetic configuration model, not a live Azure
 qualification claim.
 
+### Firewall explicit HTTP/HTTPS proxy
+
+Open **VNet detail > Original Firewall proxy policy** to bind an existing
+`azure-firewall` appliance in its dedicated `AzureFirewallSubnet` to an original
+Standard/Premium policy. Declare the original policy groups, collections and
+rules as bounded JSON and DNS bindings to original workload/NIC/IP identities.
+Saving rejects malformed JSON, dangling references and ambiguous priorities.
+Editing preserves the original identities; native JSON retains the policy.
+
+Use the **Firewall explicit proxy** application operation, or
+`{version: 1, kind: "firewall-proxy", mode: "explicit", serviceId, client,
+sourcePort, proxyPort, scheme, host, port}` with application contract version 2.
+The client addresses the original Firewall private IP and configured HTTP port,
+including for HTTPS CONNECT. It does not need a UDR or direct backend route.
+An original matching application allow rule is required. Network rules are
+examined first regardless of application-rule priority; a matching network rule
+remains unqualified rather than being relabeled as application proxying.
+Unmatched application policy remains unassessed because built-in infrastructure
+rules are not captured.
+
+The two TCP connections have independent native routes, NSG checks and
+conditional replies. The upstream always has Firewall source translation,
+irrespective of network-rule private SNAT exclusions. Neither the private VIP nor
+the representative ephemeral port is claimed as an actual serving-instance
+allocation. Filtering covers the Firewall subnet and ephemeral-port uncertainty;
+every usable Firewall subnet address has an original native return witness in
+`application.connections[].returnVariants`. This exhaustive proof is bounded to
+/24 through /26. A VIP-only allowance or return route cannot prove that all
+possible instances work. Mixed returns remain unassessed.
+
+Declare complete policy, successful provisioning, no inheritance or DNAT
+composition, and disabled threat intelligence, IDPS and TLS inspection.
+Unknown controls, public upstreams, additional routers, Private Link composition
+and transparent application rules remain unassessed. DNS bindings are explicit
+configuration, not live resolution. Application, TLS and listener availability
+remain unverified. The Bicep starter omits these policy and DNS declarations and
+is not an equivalent deployment.
+
+References: Microsoft's [explicit proxy](https://learn.microsoft.com/en-us/azure/firewall/explicit-proxy),
+[rule processing](https://learn.microsoft.com/en-us/azure/firewall/rule-processing)
+and [private-range SNAT](https://learn.microsoft.com/en-us/azure/firewall/snat-private-range).
+
 ## Supported boundaries
 
 Gateway/ARS/VWAN/appliance composition, private endpoints, delegated-subnet

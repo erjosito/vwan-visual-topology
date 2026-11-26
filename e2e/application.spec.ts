@@ -12,8 +12,73 @@ import '../src/application-messages-ja'
 import '../src/network-detail-messages-ja'
 import '../src/packet-messages-ja'
 import { applicationTcpTopology } from '../tests/fixtures/application-tcp'
+import { applicationFirewallTopology } from '../tests/fixtures/application-firewall'
 
 for (const locale of ['en', 'ja'] as const) {
+test(`Firewall explicit proxy authoring ${locale} preserves original policy and conditional connections after reload`, async ({ page }) => {
+  await loadLanguage(locale)
+  const t = (message: string) => translate(locale, message)
+  const topology = applicationFirewallTopology(), config = topology.application!.services[0].firewallProxy!
+  delete topology.application
+  await page.addInitScript(({ topology, locale }) => {
+    if (!localStorage.getItem('aznet-visual-topology:v1')) localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))
+    localStorage.setItem('vwan-visual-topology:language:v1', locale)
+  }, { topology, locale })
+  await page.setViewportSize({ width: locale === 'ja' ? 390 : 1600, height: 1000 })
+  await page.goto(`/?mode=${locale === 'ja' ? 'hub-spoke' : 'full'}`)
+  const open = async () => {
+    await page.getByTestId('aznet-vnet-proxy').click()
+    await page.getByRole('button', { name: t('VNet detail'), exact: true }).click()
+    return page.getByTestId('network-detail-dialog')
+  }
+  const dialog = await open(), editor = dialog.getByTestId('firewall-proxy-editor')
+  await editor.locator('summary').click()
+  const form = editor.getByTestId('firewall-proxy-form')
+  await form.getByLabel(t('Firewall service name'), { exact: true }).fill('Original Firewall proxy')
+  await form.getByLabel(t('Original Firewall policy ID'), { exact: true }).fill(config.policyId)
+  await form.getByLabel(t('Enable explicit proxy in the declared policy'), { exact: true }).check()
+  await form.getByLabel(t('Declare complete policy without inheritance, DNAT, threat intelligence, IDPS or TLS inspection (unverified)'), { exact: true }).check()
+  await form.getByLabel(t('Declare successful service provisioning (unverified)'), { exact: true }).check()
+  await form.getByLabel(t('Original DNS bindings (JSON)'), { exact: true }).fill(JSON.stringify(config.dnsBindings))
+  await form.getByLabel(t('Original policy collections (JSON)'), { exact: true }).fill('{')
+  await form.getByRole('button', { name: t('Save original Firewall policy'), exact: true }).click()
+  await expect(editor.getByRole('alert')).toHaveText(t('Firewall policy was not saved. Check JSON syntax, original identities, priorities and dedicated Firewall subnet.'))
+  await form.getByLabel(t('Original policy collections (JSON)'), { exact: true }).fill(JSON.stringify(config.collections))
+  await form.getByRole('button', { name: t('Save original Firewall policy'), exact: true }).click()
+  await expect(editor.getByRole('alert')).toHaveCount(0)
+  const inspect = async (outcome: string) => {
+    const panel = page.getByTestId('application-flow-panel')
+    await panel.getByLabel(t('Application operation'), { exact: true }).selectOption('firewall-proxy')
+    await panel.getByLabel(t('Original client or resolver'), { exact: true }).selectOption({ label: 'client VM / client NIC / Primary (100.64.1.4) [Client / client]' })
+    await panel.getByRole('button', { name: t('Inspect application contract'), exact: true }).click()
+    await expect(panel.getByTestId('application-decisions').getByRole('heading', {
+      name: `${t('Configuration')}: ${t(outcome)} · ${t('Application availability')}: ${t('not-assessed')}`, exact: true,
+    })).toBeVisible()
+  }
+  await inspect('satisfied')
+  await expect(page.getByTestId('application-connection-client-to-proxy')).toBeVisible()
+  await expect(page.getByTestId('application-connection-proxy-to-backend')).toBeVisible()
+  await expect(page.getByTestId('firewall-instance-returns').locator('summary')).toContainText('59')
+  expect((await new AxeBuilder({ page }).include('[data-testid="firewall-proxy-editor"]').include('[data-testid="application-flow-panel"]').analyze()).violations).toEqual([])
+  const read = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
+  const saved = await read()
+  await page.reload()
+  await open()
+  await inspect('satisfied')
+  expect(await read()).toEqual(saved)
+  expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+  await editor.locator('summary').click()
+  await editor.getByLabel(t('Original Firewall service'), { exact: true }).selectOption(saved.application.services[0].id)
+  const denied = structuredClone(config.collections)
+  denied[0].action = 'deny'
+  await editor.getByLabel(t('Original policy collections (JSON)'), { exact: true }).fill(JSON.stringify(denied))
+  await editor.getByRole('button', { name: t('Save original Firewall policy'), exact: true }).click()
+  await expect(page.getByTestId('application-decisions')).toHaveCount(0)
+  await inspect('violated')
+  await expect(page.getByTestId('application-connection-proxy-to-backend')).toHaveCount(0)
+  expect((await read()).application.services[0].firewallProxy.dnsBindings).toEqual(config.dnsBindings)
+})
+
 test(`private TCP authoring ${locale} exposes separate connection tuples and preserves them after reload`, async ({ page }) => {
   await loadLanguage(locale)
   const t = (message: string) => translate(locale, message)

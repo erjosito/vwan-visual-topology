@@ -7,9 +7,25 @@ import { applicationPlatformRequest } from '../tests/fixtures/application'
 import { executePlatform } from '../src/platform/service'
 import { PlatformJobs } from './jobs'
 import { applicationTcpTopology, applicationTcpRequest } from '../tests/fixtures/application-tcp'
+import { applicationFirewallTopology, applicationFirewallRequest } from '../tests/fixtures/application-firewall'
 
 const compiled = createRequire(import.meta.url)('../platform-dist/service.cjs') as { executePlatform: typeof executePlatform }
 describe('shared application headless contracts', () => {
+  it('preserves original Firewall policy, uncertain-instance returns and deny evidence in source, compiled and worker execution', async () => {
+    const topology = applicationFirewallTopology()
+    const request = { contractVersion: 2 as const, operation: 'application' as const, document: { mode: 'full' as const, topology }, application: applicationFirewallRequest() }
+    const jobs = new PlatformJobs(resolve('platform-dist', 'worker.cjs'))
+    try {
+      for (const action of ['allow', 'deny'] as const) {
+        topology.application!.services[0].firewallProxy!.collections[0].action = action
+        const expected = executePlatform(request)
+        expect(expected.errors).toEqual([])
+        expect(expected.application?.configuration).toBe(action === 'allow' ? 'satisfied' : 'violated')
+        expect(compiled.executePlatform(request)).toEqual(expected)
+        expect(await jobs.run(request)).toEqual(expected)
+      }
+    } finally { jobs.close() }
+  })
   it('preserves independent private TCP connection evidence in source, compiled and isolated execution', async () => {
     const topology = applicationTcpTopology()
     const request = { contractVersion: 2 as const, operation: 'application' as const, document: { mode: 'full' as const, topology }, application: applicationTcpRequest() }
@@ -59,14 +75,16 @@ describe('shared application headless contracts', () => {
     const call = async (name: string, args: Record<string, unknown> = {}) => client.callTool({ name, arguments: args })
     try {
       const capabilities = await call('get_capabilities')
-      expect(capabilities.structuredContent).toMatchObject({ contractVersion: 2, supportedContractVersions: [1, 2], application: { providers: ['application-gateway-tcp'] } })
+      expect(capabilities.structuredContent).toMatchObject({ contractVersion: 2, supportedContractVersions: [1, 2], application: { providers: ['application-gateway-tcp', 'azure-firewall-explicit-proxy'] } })
       const request = applicationPlatformRequest()
       for (const invalid of [{ ...request, contractVersion: 1 }, { ...request, contractVersion: 3 }, { ...request, application: { ...request.application, ignored: true } }]) {
         expect((await call('start_simulation', { request: invalid })).isError).toBe(true)
       }
       const tcp = { contractVersion: 2 as const, operation: 'application' as const,
         document: { mode: 'full' as const, topology: applicationTcpTopology() }, application: applicationTcpRequest() }
-      for (const input of [request, tcp]) {
+      const firewall = { contractVersion: 2 as const, operation: 'application' as const,
+        document: { mode: 'full' as const, topology: applicationFirewallTopology() }, application: applicationFirewallRequest() }
+      for (const input of [request, tcp, firewall]) {
         const expected = executePlatform(input)
         const started = (await call('start_simulation', { request: input })).structuredContent as { handle: string }
         let completed: Record<string, unknown> | undefined
