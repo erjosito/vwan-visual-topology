@@ -153,7 +153,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     expect(graph.files.some(({ path }: { path: string }) => /\/(?:practice-session|PracticeWorkspaceBar)-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/flow-gif-codec-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/(?:discrepancy-codec|schema-validation|DiscrepancyTools)-/.test(path))).toBe(false)
-    expect(graph.files.some(({ path }: { path: string }) => /\/(?:AzureComparisonPanel|BgpNeighborsPanel|bgp-neighbors|ResilienceResults|failure-analysis)-/.test(path))).toBe(false)
+    expect(graph.files.some(({ path }: { path: string }) => /\/(?:CanvasSelectionActions|AzureComparisonPanel|BgpNeighborsPanel|bgp-neighbors|ResilienceResults|failure-analysis)-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/(?:ConfigurationEditStatus|VwanVnetConnectionPanel|VnetConnectionEditor|GatewayCoexistenceAutoFix)-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/RouteMapsPanel-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/VpnRoutingWizard-/.test(path))).toBe(false)

@@ -25,7 +25,6 @@ import { CanvasOverlay } from './CanvasOverlay'
 import { hubGatewayConnections } from './hub-gateways'
 import { WorkspaceTools } from './WorkspaceTools'
 import { CanvasStartActions } from './CanvasPresentation'
-import { CanvasSelectionActions } from './CanvasSelectionActions'
 import { vwanWorkspaceIdentity, vwanWorkspaceObjects } from './workspace-objects'
 import { RouteInspector } from './RouteInspector'
 import { RouteMapInspector } from './RouteMapInspector'
@@ -57,6 +56,7 @@ import { pruneDeletedInventory } from './inventory'
 import { measureAzWork, useMeasuredRender } from './azure-net/performance'
 
 const NetworkDetail = lazy(() => import('./NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
+const CanvasSelectionActions = lazy(() => import('./CanvasSelectionActions').then(module => ({ default: module.CanvasSelectionActions })))
 const VwanVnetConnectionPanel = lazy(() => import('./VwanVnetConnectionPanel'))
 const VpnRoutingWizard = lazy(() => import('./VpnRoutingWizard').then((module) => ({ default: module.VpnRoutingWizard })))
 const RouteMapsPanel = lazy(() => import('./RouteMapsPanel').then((module) => ({ default: module.RouteMapsPanel })))
@@ -851,9 +851,9 @@ function App() {
             reset(source.topology); setComparisonSession(source.session); setPanel('comparison')
           }} onImportFile={() => importer.current?.click()} onCompare={() => { finishCaptureImport(); setHighlighting(false); setTracing(false); setPanel('comparison') }} onConfirmImport={() => { if (pendingAzureImport) { reset(validateTopology(pendingAzureImport.topology)); finishCaptureImport() } }} onCancelImport={() => { finishCaptureImport(); setPanel(undefined) }} onClose={() => { finishCaptureImport(); closePanel() }} /></Suspense>}
           <TopologyDiagram topology={topology} faults={scenario.affected} risks={risks} onRisk={setResilienceEndpoint} onClearSelection={() => setSelection(undefined)}
-            selectionActions={selection && selectedObject && <CanvasSelectionActions key={`${selection.kind}:${selection.id}`}
+            selectionActions={selection && selectedObject && <Suspense fallback={null}><CanvasSelectionActions key={`${selection.kind}:${selection.id}`}
               title={selectedObject.name} actions={getContextActions(selection, undefined, true)}
-              onRun={() => setContextMenu(undefined)} onAll={() => setToolsOpenRequest(request => request + 1)} />}
+              onRun={() => setContextMenu(undefined)} onAll={() => setToolsOpenRequest(request => request + 1)} /></Suspense>}
             emptyActions={<CanvasStartActions onAdd={() => setToolsOpenRequest(request => request + 1)} onExamples={() => setPanel('samples')} />}
             canvasStatus={(highlighting || tracing || !!diagnosticPaths?.length || routingIssues.length > 0) && <div className="highlight-status" role="status">{(highlighting || tracing || !!diagnosticPaths?.length) ? (diagnosticPaths?.length ? t('Diagnostic path evidence') : tracing ? groupTrace ? `${groupSummary} · ${paths.length ? pathStatus : t("No matching sources or destination prefixes configured")}` : t('Path: {0} → {1} · {2} · {3}', sourceNode?.name ?? t('source'), targetNode?.name ?? destination, destinationPrefix || destination, pathStatus) : prefix ? t("Preferred routes to {0}", prefix) : t("Preferred routes · {0}", inspected?.name ?? t('Router'))) : t('{0} routing issues', routingIssues.length)}{tracing && <button onClick={() => setPanel('paths')}>{t("Path details")}</button>}{(highlighting || tracing || !!diagnosticPaths?.length) && <button onClick={() => { setDiagnosticHighlight(undefined); setHighlighting(false); setTracing(false); setPrefix('') }}>{t("Clear highlighting")}</button>}{routingIssues.length > 0 && <button onClick={clearHighlightsAndIcons}>{t("Clear highlights & icons")}</button>}</div>}
             onZoom={setZoom} layoutControls={<>

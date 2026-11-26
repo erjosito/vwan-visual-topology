@@ -28,7 +28,6 @@ import type { ContextAction } from '../TopologyContextMenu'
 import type { DetailTarget } from '../network-detail-projection'
 import { WorkspaceTools } from '../WorkspaceTools'
 import { CanvasStartActions } from '../CanvasPresentation'
-import { CanvasSelectionActions } from '../CanvasSelectionActions'
 import { azWorkspaceIdentity, azWorkspaceObjects, workspaceIdentityKey } from '../workspace-objects'
 import { udrAssociationError } from './udr-regions'
 import type { UdrManagerRequest } from './UdrTableManager'
@@ -85,6 +84,7 @@ interface AzureNetAppProps {
 }
 
 const NetworkDetail = lazy(() => import('../NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
+const CanvasSelectionActions = lazy(() => import('../CanvasSelectionActions').then(module => ({ default: module.CanvasSelectionActions })))
 const AzurePanel = lazy(() => import('./AzurePanel').then((module) => ({ default: module.AzurePanel })))
 const Explain = lazy(() => import('../learning/Explain').then((module) => ({ default: module.Explain })))
 const WarningAcknowledgement = lazy(() => import('../WarningAcknowledgement').then((module) => ({ default: module.WarningAcknowledgement })))
@@ -2904,9 +2904,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           <AzureNetDiagram
             selectionActions={canvasSelection && (() => {
               const spec = getContextMenuSpec(canvasSelection, true)
-              return spec && <CanvasSelectionActions key={JSON.stringify(canvasSelection)} title={spec.title} actions={spec.actions}
+              return spec && <Suspense fallback={null}><CanvasSelectionActions key={JSON.stringify(canvasSelection)} title={spec.title} actions={spec.actions}
                 onRun={() => { setContextMenu(null); setToolsDismissRequest(request => request + 1) }}
-                onAll={() => setToolsOpenRequest(request => request + 1)} />
+                onAll={() => setToolsOpenRequest(request => request + 1)} /></Suspense>
             })()}
             emptyActions={<CanvasStartActions onAdd={() => setToolsOpenRequest(request => request + 1)} onExamples={() => setSampleGalleryOpen(true)} />}
             frameRequest={frameRequest}
