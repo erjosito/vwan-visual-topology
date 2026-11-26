@@ -1211,6 +1211,52 @@ test.describe('AzNetSim native workspace compatibility', () => {
 })
 
 for (const mode of ['hub-spoke', 'full']) {
+  test(`blocks remote gateways while local gateway resources remain and diagnoses imported conflicts in ${mode}`, async ({ page }) => {
+    const topology = createEmptyAzNetTopology()
+    topology.vnets = [
+      { id: 'local', name: 'Local VNet', role: 'hub', region: 'westeurope', prefixes: ['10.90.0.0/16'],
+        subnets: [{ id: 'local-gw', name: 'GatewaySubnet', prefix: '10.90.255.0/27' }],
+        gateways: [{ id: 'local-er', name: 'Disabled local ER', kind: 'ExpressRoute', asn: 65515, enabled: false, bgpEnabled: true }], appliances: [] },
+      { id: 'remote', name: 'Remote VNet', role: 'hub', region: 'westeurope', prefixes: ['10.91.0.0/16'],
+        subnets: [{ id: 'remote-gw', name: 'GatewaySubnet', prefix: '10.91.255.0/27' }],
+        gateways: [{ id: 'remote-vpn', name: 'Remote VPN', kind: 'Vpn', asn: 65515, enabled: true, bgpEnabled: true }], appliances: [] },
+    ]
+    const flags = { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: true, useRemoteGateways: false }
+    topology.vnetPeerings = [{ id: 'gateway-peer', name: 'Gateway peering', vnetAId: 'local', vnetBId: 'remote', enabled: true,
+      aToB: { ...flags }, bToA: { ...flags } }]
+    await loadTopology(page, topology, mode)
+    await page.getByTestId('aznet-peering-pill-gateway-peer').hover({ force: true })
+    const popover = page.getByTestId('aznet-peering-hover-card')
+    await expect(popover).toBeVisible()
+    await expect(popover.getByLabel('Use Remote GW', { exact: true })).toHaveCount(2)
+    for (const checkbox of await popover.getByLabel('Use Remote GW', { exact: true }).all()) {
+      await expect(checkbox).toBeDisabled()
+    }
+    await popover.getByRole('button', { name: /^Configure Peering/ }).click()
+    const editor = page.getByTestId('aznet-peering-card-gateway-peer')
+    await expect(editor.getByLabel('Use Remote Gateways', { exact: true })).toHaveCount(2)
+    for (const checkbox of await editor.getByLabel('Use Remote Gateways', { exact: true }).all()) await expect(checkbox).toBeDisabled()
+
+    topology.vnetPeerings[0].aToB.useRemoteGateways = true
+    topology.vnetPeerings[0].bToA.useRemoteGateways = true
+    await loadTopology(page, topology, mode)
+    await page.getByTestId('aznet-peering-pill-gateway-peer').hover({ force: true })
+    await popover.getByRole('button', { name: /^Configure Peering/ }).click()
+    await page.getByTestId('aznet-tab-diagnostics').click()
+    await expect(page.getByText(/has its own Virtual Network Gateway and cannot use remote gateways/)).toHaveCount(2)
+    await page.getByTestId('aznet-tab-editor').click()
+    for (const checkbox of await editor.getByLabel('Use Remote Gateways', { exact: true }).all()) {
+      await expect(checkbox).toBeChecked()
+      await checkbox.uncheck()
+    }
+    await page.getByTestId('aznet-tab-diagnostics').click()
+    await expect(page.getByText(/has its own Virtual Network Gateway and cannot use remote gateways/)).toHaveCount(0)
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
+    expect(saved.vnetPeerings[0].aToB.useRemoteGateways).toBe(false)
+    expect(saved.vnetPeerings[0].bToA.useRemoteGateways).toBe(false)
+    expect(saved.vnets[0].gateways[0].enabled).toBe(false)
+  })
+
   test(`keeps protected peering routes active and BGP conflicts invalid in effective-route and LPM views in ${mode}`, async ({ page }) => {
     const topology = createEmptyAzNetTopology()
     topology.vnets = [
