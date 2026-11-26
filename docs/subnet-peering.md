@@ -51,6 +51,26 @@ Validation checks one link per distinct VNet pair, unique owned references,
 VNet's links, participating parent-address-space restrictions and cross-link
 address-space uniqueness. Invalid scopes cannot certify reachability or isolation.
 
+## Isolated overlapping VNets
+
+H&S and Full Hybrid allow separate VNets to reuse IPv4 prefixes and workload
+addresses. Packet probes bind each workload to its original VNet, subnet and NIC,
+and repeated workload addresses include the network name and ID in the selector.
+Routing still decides where the packet goes: choosing a remote workload does not
+redirect an address that routes locally.
+
+Ordinary whole-VNet peering rejects overlapping address spaces on its two ends.
+Selected-subnet peering retains the participating-parent restrictions above; it
+is not a general workaround for those constraints. Unresolved overlapping
+destinations reached through shared transit or conflicting remote peering routes
+are explicitly not assessed rather than assigned to the first matching VNet.
+
+Existing single-service public mappings and qualified NAT Gateway/Firewall
+behavior retain original network context. This does not add Private Link Service
+forwarding, proxy behavior, general multi-stage NAT, or overlap qualification for
+the legacy standalone VWAN provider. Bounded HA-ports steering retains its
+separately documented ownership restrictions.
+
 ## Supported boundaries
 
 Gateway/ARS/VWAN/appliance composition, private endpoints, delegated-subnet
@@ -92,6 +112,8 @@ Reviewed 2026-11-18:
   participating sets, preview route visibility versus forwarding, address-space
   restrictions, 200/1,000 limits, update/sync, delete/recreate, delegated-subnet and
   VM SKU limitations.
+- [Manage virtual network peering](https://learn.microsoft.com/en-us/azure/virtual-network/virtual-network-manage-peering#requirements-and-constraints):
+  ordinary peering requires non-overlapping address spaces on its two ends.
 - [ARM/Bicep peering schema, 2024-05-01](https://learn.microsoft.com/en-us/azure/templates/microsoft.network/2024-05-01/virtualnetworks/virtualnetworkpeerings):
   exact exported property names and types.
 - [Route Server FAQ](https://learn.microsoft.com/en-us/azure/route-server/route-server-faq#can-i-apply-a-route-map-to-a-spoke-thats-connected-by-subnet-peering):

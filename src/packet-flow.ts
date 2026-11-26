@@ -1,5 +1,5 @@
 import { cidr, contains, ipv4 } from './validation'
-import { inventoryOwners, namedEndpoints, publicIpv4, workloadEndpointKey } from './inventory'
+import { inventoryOwners, namedEndpoints, ownsInventoryAddress, publicIpv4, sameInventoryOwner, workloadEndpointKey } from './inventory'
 import type { InventoryTopology } from './inventory'
 import { simulate, type Simulation } from './routing'
 import { traceNodePath, type NodePath, type PathNode } from './paths'
@@ -92,9 +92,13 @@ export function validatePacketRequest(input: unknown): asserts input is PacketRe
 export { workloadEndpointKey } from './inventory'
 
 export function packetEndpointOptions(topology: InventoryTopology, unknownAddressLabel = 'address unknown') {
-  return namedEndpoints(topology).map(({ workload, nic, config }) => {
+  const endpoints = namedEndpoints(topology)
+  const owners = inventoryOwners(topology)
+  return endpoints.map(({ workload, nic, config }) => {
     const ref: WorkloadEndpoint = { kind: 'workload', workloadId: workload.id, nicId: nic.id, ipConfigurationId: config.id }
-    return { key: workloadEndpointKey(ref), ref, label: `${workload.name} / ${nic.name} / ${config.name} (${config.privateIp ?? unknownAddressLabel})` }
+    const reused = config.privateIp && endpoints.some((entry) => entry.config.privateIp === config.privateIp && !sameInventoryOwner(entry.nic.owner, nic.owner))
+    const context = reused ? ` [${owners.find((owner) => sameInventoryOwner(owner, nic.owner))?.name ?? nic.owner.id} / ${nic.owner.id}]` : ''
+    return { key: workloadEndpointKey(ref), ref, label: `${workload.name} / ${nic.name} / ${config.name} (${config.privateIp ?? unknownAddressLabel})${context}` }
   })
 }
 
@@ -129,8 +133,8 @@ export function tracePacket(topology: InventoryTopology, request: PacketRequest,
       workload.id === ref.workloadId && nic.id === ref.nicId && config.id === ref.ipConfigurationId)
     if (!entry) return { reason: 'Workload/NIC/IP configuration ownership is missing.' }
     if (!entry.config.privateIp) return { reason: 'The selected IP configuration has unknown addressing.' }
-    if (inventoryOwners(topology).filter((owner) => owner.prefixes.some((prefix) => contains(prefix, ipv4(entry.config.privateIp!)!))).length !== 1) {
-      return { reason: 'The selected private address has ambiguous network ownership.' }
+    if (!ownsInventoryAddress(topology, entry.nic.owner, entry.config.subnetId, entry.config.privateIp)) {
+      return { reason: 'The selected private address does not have a unique subnet in its original network.' }
     }
     return {
       address: entry.config.privateIp,
@@ -178,7 +182,9 @@ export function tracePacket(topology: InventoryTopology, request: PacketRequest,
         && hop.subnetId === (to.native as Extract<AzEndpointRef, { kind: 'subnet' }>).subnetId))
     return {
       direction, tuple: packet, routing: trace.status === 'not-assessed' ? 'not-assessed' : trace.status === 'delivered' && owned ? 'reachable' : 'unreachable',
-      native: trace, reasons: [trace.summaryReason],
+      native: trace, reasons: [trace.status === 'delivered' && !owned
+        ? 'Routing reaches a different network than the selected endpoint; the endpoint identity does not override forwarding.'
+        : trace.summaryReason],
       steps: trace.hops.flatMap((hop) => [{
         entity: { kind: hop.nodeKind, id: hop.nodeId }, before: packet,
         after: to.native!.kind === 'internet' && hop.action === 'delivered' ? null : packet, evidence: hop.detail,

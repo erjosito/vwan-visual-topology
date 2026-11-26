@@ -1,4 +1,4 @@
-import { inventoryOwners, namedEndpoints, type InventoryOwner, type InventoryTopology, type NamedEndpoint } from './inventory'
+import { inventoryOwners, namedEndpoints, ownsInventoryAddress, type InventoryOwner, type InventoryTopology, type NamedEndpoint } from './inventory'
 import { cidr, contains, ipv4 } from './validation'
 import { simulate, type Simulation } from './routing'
 import { traceNodePath } from './paths'
@@ -10,8 +10,8 @@ const reverse = (tuple: FiveTuple): FiveTuple => ({ ...tuple, sourceAddress: tup
   sourcePort: tuple.destinationPort, destinationPort: tuple.sourcePort })
 const ref = (entry: NamedEndpoint): WorkloadEndpoint => ({ kind: 'workload', workloadId: entry.workload.id,
   nicId: entry.nic.id, ipConfigurationId: entry.config.id })
-const endpointValid = (topology: InventoryTopology, entry: NamedEndpoint) => !!entry.config.privateIp
-  && inventoryOwners(topology).filter((owner) => owner.prefixes.some((prefix) => contains(prefix, ipv4(entry.config.privateIp!)!))).length === 1
+const endpointValid = (topology: InventoryTopology, entry: NamedEndpoint) =>
+  ownsInventoryAddress(topology, entry.nic.owner, entry.config.subnetId, entry.config.privateIp)
 const hasOtherRouter = (leg: PacketLeg, ownerId?: string) => Array.isArray(leg.native)
   ? leg.native.some((path) => path.firewalls?.some((id) => id !== ownerId) || path.sourceNvaSpokeId || path.nvaSpokeId)
   : leg.native?.hops.some((hop) => hop.nodeKind === 'appliance' && hop.nodeId !== ownerId

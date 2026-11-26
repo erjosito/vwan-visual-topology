@@ -5,6 +5,40 @@ import type { NetworkInventory } from '../src/inventory'
 import { executePlatform } from '../src/platform/service'
 import type { PlatformRequest } from '../src/platform/contract'
 import { validateTopology } from '../src/validation'
+import { overlappingVnets } from '../tests/fixtures/overlapping-vnets'
+
+test('isolated overlapping VNets retain distinct endpoint choices, local routing and persistence', async ({ page }) => {
+  const topology = overlappingVnets()
+  await page.addInitScript((topology) => {
+    if (!localStorage.getItem('aznet-visual-topology:v1')) localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))
+  }, topology)
+  await page.goto('/?mode=full')
+  const open = async () => {
+    await page.getByTestId('aznet-vnet-a').click()
+    await page.getByRole('button', { name: 'VNet detail', exact: true }).click()
+    return page.getByTestId('network-detail-dialog').getByTestId('packet-flow-panel')
+  }
+  let packet = await open()
+  const source = packet.getByLabel('Packet source', { exact: true })
+  const destination = packet.getByLabel('Packet destination', { exact: true })
+  await source.selectOption({ label: 'client A / client NIC / Primary (100.64.1.4) [Network A / a]' })
+  await destination.selectOption({ label: 'server A / server NIC / Primary (100.64.2.4) [Network A / a]' })
+  await packet.getByRole('button', { name: 'Trace packet routing', exact: true }).click()
+  await expect(packet.getByRole('heading', { name: 'Forward routing: reachable', exact: true })).toBeVisible()
+  await expect(packet.getByRole('heading', { name: 'Reply routing: reachable', exact: true })).toBeVisible()
+  await destination.selectOption({ label: 'server B / server NIC / Primary (100.64.2.4) [Network B / b]' })
+  await packet.getByRole('button', { name: 'Trace packet routing', exact: true }).click()
+  await expect(packet.getByRole('heading', { name: 'Forward routing: unreachable', exact: true })).toBeVisible()
+  await expect(packet.getByText('Routing reaches a different network than the selected endpoint; the endpoint identity does not override forwarding.', { exact: true }).first()).toBeVisible()
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
+  expect(saved).toEqual(topology)
+  await page.reload()
+  packet = await open()
+  await packet.getByLabel('Packet source', { exact: true }).selectOption({ label: 'client B / client NIC / Primary (100.64.1.4) [Network B / b]' })
+  await packet.getByLabel('Packet destination', { exact: true }).selectOption({ label: 'server B / server NIC / Primary (100.64.2.4) [Network B / b]' })
+  await packet.getByRole('button', { name: 'Trace packet routing', exact: true }).click()
+  await expect(packet.getByRole('heading', { name: 'Forward routing: reachable', exact: true })).toBeVisible()
+})
 
 function design(mode: string): Topology | AzNetTopology {
   const subnets = [{ id: 'app', name: 'App subnet', prefix: '10.1.1.0/24' }]
@@ -15,7 +49,6 @@ function design(mode: string): Topology | AzNetTopology {
       { id: 'nic-b', name: 'DB NIC', owner: { kind: mode === 'vwan' ? 'spoke' : 'vnet', id: 'network' }, ipConfigurations: [{ id: 'ip-b', name: 'Primary', subnetId: 'app', privateIp: '10.1.1.5' }] },
     ], publicIps: [],
   }
-
   if (mode === 'vwan') return {
     version: 1, name: 'Detail design', hubs: [], sites: [], connections: [], siteLinks: [],
     spokes: [{ id: 'network', name: 'Network', prefixes: ['10.1.0.0/16'], subnets }], inventory,

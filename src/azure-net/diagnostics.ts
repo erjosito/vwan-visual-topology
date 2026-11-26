@@ -494,7 +494,7 @@ export function runAzNetStaticDiagnostics(
       if (!rt) continue
       for (const udr of rt.routes) {
         if (!udr.enabled || udr.nextHopType !== 'VirtualAppliance' || !udr.nextHopIp) continue
-        const target = findApplianceByIp(topology, udr.nextHopIp)
+        const target = findApplianceByIp(topology, udr.nextHopIp, vnet.id) ?? findApplianceByIp(topology, udr.nextHopIp)
         if (target && target.vnet.id !== vnet.id) {
           const directPeering = getActivePeeringBetween(topology, vnet.id, target.vnet.id)
           if (!directPeering) {
@@ -807,7 +807,7 @@ export function runAzNetStaticDiagnostics(
           )
         })
         if (bypassedUdr) {
-          const targetApp = bypassedUdr.nextHopIp ? findApplianceByIp(topology, bypassedUdr.nextHopIp) : undefined
+          const targetApp = findApplianceByIp(topology, bypassedUdr.nextHopIp, vnet.id)
           if (targetApp && targetApp.vnet.id === peerRoute.nextHopResourceId) continue
 
           const peerVnet = topology.vnets.find((v) => v.id === peerRoute.nextHopResourceId)
