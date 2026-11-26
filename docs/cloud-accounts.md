@@ -441,20 +441,72 @@ use their Azure administrative access for retention or permanent-erasure request
 
 ## Operational evidence and follow-ups
 
-The following is a source inventory, not a live configuration inspection or a
-recovery guarantee. No Azure resource or user cloud data was accessed for this
-documentation update.
+The following table inventories source contracts, not recovery guarantees.
+The dated read-only inspection below records a limited deployment check
+separately. No stored topology/progress content was read or modified.
 
 | Question | What the repository establishes | What remains to decide or verify |
 | --- | --- | --- |
 | Is sharing throttled globally? | [`sharing.ts`](../functions/user-cloud/sharing.ts) keeps request, concurrency and per-owner issuance counters in the running handler's memory. The limits described under [read-only sharing](#read-only-sharing) are local, resettable controls, not aggregate or per-IP limits. | Approved inspection of the deployed ingress, worker/replica configuration and aggregate controls. Decide whether current exposure and demand justify a gateway rule or distributed enforcement; do not add infrastructure speculatively. |
 | How far can hosting scale? | [`user-cloud.bicep`](../infra/user-cloud.bicep) specifies a maximum of 40 Function instances. That is neither an observed replica count nor a global application request/cost ceiling. | Actual deployed settings, expected traffic and an operator-approved abuse/cost policy. Telemetry ingestion caps are not spending limits. |
-| Can deleted data be recovered? | The template enables 30-day Blob and container soft deletion. The API uses conditional writes and owner-scoped paths. | Effective retention, operator access and an isolated restore drill. Soft deletion alone does not establish recovery from overwrites/corruption or a complete backup. The template does not enable blob versioning or define a separate backup policy. |
+| Can deleted data be recovered? | The template enables 30-day Blob and container soft deletion. The API uses conditional writes and owner-scoped paths. | Data-plane access and an isolated restore drill remain unverified. Supported block-blob overwrites can have soft-deleted snapshots even without versioning, but their existence and successful restoration have not been tested. The template does not enable blob versioning or define a separate backup policy. |
 | What does app deletion promise? | Deletes remove active records; soft-deleted copies may remain. Share resolution also depends on the private index and source incarnation. | A retention/erasure policy and a restore procedure that does not revive revoked links, erased data or stale write authority. Local profile recovery and portable JSON exports remain separate from server recovery. |
+
+### Recovery policy and user-controlled copies
+
+The owner confirmed that the cloud service is offered free without a data
+guarantee. There is no promised recovery time, guaranteed recovery point or
+successful-restore commitment. The configured retention window is an operational
+setting, not a service-level guarantee. This does not change the documented
+privacy, consent or deletion controls.
+
+Recovery may be useful after an accidental deletion, an unwanted overwrite
+(including an empty/reset history), or an operator/storage mistake. It cannot
+recover changes that were never uploaded, and in-account soft deletion is not an
+independent disaster-recovery backup.
+
+Users should keep portable JSON copies of designs they need. Profile recovery
+and a cloud save are not substitutes for a user-controlled backup. Batch export
+and reimport of selected designs or the whole cloud library is a proposed
+improvement, not an available feature or a replacement for existing individual
+topology export/import. No new cloud resources or protection settings are
+authorized by that proposal.
+
+### Read-only configuration check, 2026-11-26
+
+Scope: Azure Resource Manager metadata for the dedicated storage account and
+`user-cloud` container in the repository's configured user-cloud resource group.
+The resource group was resolved from the `user-cloud-production` deployment
+variables. No blob listing, content, snapshots, credentials or application
+settings were retrieved, and no setting was changed.
+
+| Property | Observed result | Evidence limit |
+| --- | --- | --- |
+| Account | StorageV2, Standard_LRS; HNS flag unset/null | The template does not enable HNS. This is account configuration, not proof of any individual blob's type or history. |
+| Blob soft deletion | Enabled, 30 days; `allowPermanentDelete: false` | Recovery has not been exercised. These settings alone do not prove that a particular deleted blob or snapshot remains recoverable. |
+| Container soft deletion | Enabled, 30 days | No container was deleted or restored. Whole-container restoration could affect many users and is not authorized by this check. |
+| Versioning, change feed, point-in-time restore | Unset/null in the returned service configuration, not explicitly enabled | Do not interpret this as an absence of soft-deleted overwrite snapshots or as tested recovery coverage. |
+| Container access | Public access `None`; no container immutability policy or legal hold | This does not verify the operator's data-plane permissions or private-network access. |
+| Backup vault resources in this resource group | None returned | Outside-group vaults, external copies and cross-resource protection relationships were not assessed; no claim that all backups are absent. |
+
+The runtime storage-account application setting was not inspected. The check is
+limited to the dedicated deployment account, not proof of the running
+application's binding, exact deployed application revision, historical settings
+or a working recovery path. No recovery point/time was measured.
+
+Azure documents [soft deletion of blobs and supported overwrite snapshots](https://learn.microsoft.com/en-us/azure/storage/blobs/soft-delete-blob-overview)
+and [whole-container soft deletion](https://learn.microsoft.com/en-us/azure/storage/blobs/soft-delete-container-overview).
+For supported flat-namespace block-blob overwrites, undeleting makes the retained
+snapshots available; recovering previous content then requires a deliberate
+snapshot copy/promotion. Metadata-only updates are not protected by blob soft
+deletion in the same way. These are documented platform semantics, not results
+of a local drill.
 
 ### Isolated restore verification procedure
 
-This is a procedure to approve and execute later, not a completed drill.
+This is a procedure to approve and execute later, not a completed drill. No
+write/delete/restore scope has been approved. A best-effort drill does not
+introduce a recovery SLA for the free service.
 
 1. Obtain explicit operator approval for the test account(s), isolated
    container/environment, synthetic fixture IDs, allowed operations, retention
@@ -469,8 +521,11 @@ This is a procedure to approve and execute later, not a completed drill.
 3. Delete only the approved fixtures and verify the expected missing/revoked
    behavior. Use the approved administrative recovery mechanism to recover only
    those fixtures within the measured retention window. Treat overwrite recovery
-   as a separate case: if no version/backup is available, record it as unsupported
-   rather than treating a deleted-blob drill as proof.
+   as a separate case: inspect only approved fixture snapshots, versions or
+   backups. Where soft deletion retained a pre-overwrite snapshot, undelete it
+   and perform the separately approved copy/promotion. If no suitable retained
+   copy exists, record the case as unrecoverable; do not infer that merely from
+   disabled versioning or treat a deleted-blob drill as proof.
 4. Verify native content against the originals, account isolation and rejection
    of stale ETags after restoration. Check both share-index and source-incarnation
    behavior. Restoring old share/index/source records can revive an unexpired
