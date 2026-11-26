@@ -62,6 +62,141 @@ async function signIn(page: Page) {
   await expect(page.getByRole('button', { name: 'Refresh cloud topologies', exact: true })).toBeEnabled()
 }
 
+for (const language of ['en', 'ja'] as const) {
+  test(`${language}: library backup preserves GUIDs and restores only explicitly chosen conflicts`, async ({ page }) => {
+    const service = await setup(page), text = (en: string, ja: string) => language === 'ja' ? ja : en
+    const ids = [crypto.randomUUID(), crypto.randomUUID()], prefix = `users/${testOwner('alice')}/topologies/`
+    const documents = [
+      parseCloudTopology({ version: 1, name: 'WAN backup', description: 'Original WAN description', topology: example }),
+      parseCloudTopology({ version: 1, name: 'Mixed backup', description: 'Original mixed description',
+        topology: { ...sampleHubSpokeFirewallUdr, retainedExtension: { original: 'Keep native fields' } } }),
+    ]
+    for (const [index, id] of ids.entries()) {
+      await service.store.put(`${prefix}${id}.json`, JSON.stringify(documents[index]), null, documents[index].name, documents[index].description)
+    }
+    await page.setViewportSize({ width: language === 'ja' ? 390 : 1280, height: 1000 })
+    await page.addInitScript(language => {
+      localStorage.setItem('vwan-visual-topology:language:v1', language)
+      localStorage.setItem('aznet-ui-preview:v1', 'true')
+    }, language)
+    await page.goto('/?mode=vwan')
+    await page.getByTestId('cloud-account-open').click()
+    await page.getByRole('button', { name: text('Sign in with Microsoft', 'Microsoft でサインイン'), exact: true }).click()
+    await expect(page.getByTestId('cloud-progress-status')).toContainText(language === 'ja' ? '同期' : 'Synced')
+    const open = page.getByRole('button', { name: text('Library backup and import', 'ライブラリのバックアップと取込'), exact: true })
+    await open.click()
+    const tools = page.getByRole('dialog', { name: text('Library backup and import', 'ライブラリのバックアップと取込'), exact: true })
+    const local = await page.evaluate(() => Object.fromEntries(Object.entries(localStorage).filter(([key]) =>
+      key.startsWith('network-simulator:workspace-tab:') || key === 'network-simulator:practice-workspace:v1')))
+    await tools.getByRole('checkbox', { name: /^WAN backup / }).check()
+    await tools.getByRole('button', { name: text('Prepare selected backup', '選択したバックアップを準備'), exact: true }).click()
+    await expect(tools.getByText(language === 'ja' ? /^1件を準備/ : /^1 topologies prepared/)).toBeVisible()
+    await tools.getByRole('button', { name: text('Prepare whole-library backup', 'ライブラリ全体のバックアップを準備'), exact: true }).click()
+    await expect(tools.getByText(language === 'ja' ? /^2件を準備/ : /^2 topologies prepared/)).toBeVisible()
+    const downloading = page.waitForEvent('download')
+    await tools.getByRole('button', { name: text('Download backup', 'バックアップをダウンロード'), exact: true }).click()
+    const download = await downloading, raw = readFileSync((await download.path())!, 'utf8')
+    const archive = JSON.parse(raw)
+    expect(archive.entries).toEqual(ids.map((id, index) => ({ id, document: documents[index] })))
+    expect(raw).not.toContain('"etag"')
+    expect(raw).not.toContain('"token"')
+    await service.store.delete(`${prefix}${ids[0]}.json`, service.data.get(`${prefix}${ids[0]}.json`)!.etag)
+    await service.store.put(`${prefix}${ids[1]}.json`, JSON.stringify({ ...documents[1], name: 'Changed cloud save' }),
+      service.data.get(`${prefix}${ids[1]}.json`)!.etag, 'Changed cloud save')
+    const input = tools.getByLabel(text('Library backup JSON file', 'ライブラリのバックアップJSONファイル'), { exact: true })
+    await input.setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(raw) })
+    const conflict = tools.locator(`[data-backup-id="${ids[1]}"]`)
+    await expect(conflict.getByRole('combobox')).toHaveValue('keep')
+    expect(service.data.has(`${prefix}${ids[0]}.json`)).toBe(false)
+    expect(JSON.parse(service.data.get(`${prefix}${ids[1]}.json`)!.raw).name).toBe('Changed cloud save')
+    expect((await new AxeBuilder({ page }).include('.cloud-library-backup').analyze()).violations).toEqual([])
+    expect(await tools.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
+    await conflict.getByRole('combobox').selectOption('overwrite')
+    page.removeAllListeners('dialog')
+    page.once('dialog', dialog => { void dialog.dismiss() })
+    const confirm = tools.getByRole('button', { name: text('Confirm batch import', '一括取込を確認'), exact: true })
+    await confirm.click()
+    expect(service.data.has(`${prefix}${ids[0]}.json`)).toBe(false)
+    page.on('dialog', dialog => { void dialog.accept() })
+    await confirm.click()
+    await expect(tools.getByText(language === 'ja' ? /^結果: 取込2件/ : /^Results: 2 imported/)).toBeVisible()
+    for (const [index, id] of ids.entries()) expect(JSON.parse(service.data.get(`${prefix}${id}.json`)!.raw)).toEqual(documents[index])
+    await tools.getByRole('button', { name: text('Refresh import preview', '取込プレビューを更新'), exact: true }).click()
+    await expect(tools.getByText(text('Identical: skip without writing', '同一: 書き込まずスキップ'), { exact: true })).toHaveCount(2)
+    await expect(confirm).toBeDisabled()
+    expect([...service.data.keys()].filter(key => key.includes('/topologies/'))).toHaveLength(2)
+    expect(await page.evaluate(() => Object.fromEntries(Object.entries(localStorage).filter(([key]) =>
+      key.startsWith('network-simulator:workspace-tab:') || key === 'network-simulator:practice-workspace:v1')))).toEqual(local)
+    await tools.getByRole('button', { name: text('Close backup tools', 'バックアップを閉じる'), exact: true }).click()
+    await expect(open).toBeFocused()
+  })
+}
+
+test('library import rejects invalid batches and stale overwrite revisions without losing existing saves', async ({ page }) => {
+  const service = await setup(page), id = crypto.randomUUID(), key = `users/${testOwner('alice')}/topologies/${id}.json`
+  const saved = parseCloudTopology({ version: 1, name: 'Current', topology: example })
+  await service.store.put(key, JSON.stringify(saved), null, saved.name)
+  await page.goto('/?mode=vwan')
+  await signIn(page)
+  await page.getByRole('button', { name: 'Library backup and import', exact: true }).click()
+  const tools = page.getByRole('dialog', { name: 'Library backup and import', exact: true })
+  const input = tools.getByLabel('Library backup JSON file', { exact: true })
+  const archive = { format: 'aznetsim-cloud-library', version: 1, entries: [{ id, document: { ...saved, name: 'Backup' } }] }
+  await input.setInputFiles({ name: 'invalid.json', mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ ...archive, token: 'must not be imported' })) })
+  await expect(tools.getByRole('alert')).toContainText('Invalid or unsupported')
+  await expect(tools.locator('[data-backup-id]')).toHaveCount(0)
+  await input.setInputFiles({ name: 'valid.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(archive)) })
+  await tools.getByRole('combobox').selectOption('overwrite')
+  await service.store.put(key, JSON.stringify({ ...saved, name: 'Newer cloud version' }), service.data.get(key)!.etag, 'Newer cloud version')
+  await tools.getByRole('button', { name: 'Confirm batch import', exact: true }).click()
+  await expect(tools.getByText(/^Results: 0 imported; 0 matching confirmed; 0 skipped; 1 failed/)).toBeVisible()
+  expect(JSON.parse(service.data.get(key)!.raw).name).toBe('Newer cloud version')
+  await tools.getByRole('button', { name: 'Refresh import preview', exact: true }).click()
+  await expect(tools.getByRole('combobox')).toHaveValue('keep')
+})
+
+for (const action of ['cancel', 'sign-out'] as const) {
+  test(`library backup ${action} discards delayed account data without downloading a partial file`, async ({ page }) => {
+    const service = await setup(page), id = crypto.randomUUID(), key = `users/${testOwner('alice')}/topologies/${id}.json`
+    await service.store.put(key, JSON.stringify({ version: 1, name: 'Alice private save', topology: example }), null, 'Alice private save')
+    await page.goto('/?mode=vwan')
+    await signIn(page)
+    await page.getByRole('button', { name: 'Library backup and import', exact: true }).click()
+    const tools = page.getByRole('dialog', { name: 'Library backup and import', exact: true })
+    let release!: () => void, entered!: () => void, downloads = 0
+    const pending = new Promise<void>(resolve => { release = resolve })
+    const requested = new Promise<void>(resolve => { entered = resolve })
+    page.on('download', () => { downloads++ })
+    await page.route(`**/api/cloud/topologies/${id}`, async route => { entered(); await pending; await route.fallback() })
+    try {
+      await tools.getByRole('button', { name: 'Prepare whole-library backup', exact: true }).click()
+      await requested
+      if (action === 'cancel') {
+        await tools.getByRole('button', { name: 'Cancel batch operation', exact: true }).click()
+        release()
+        await expect(tools.getByRole('alert')).toContainText('Cancelled. No partial backup was downloaded.')
+        await expect(tools.getByRole('button', { name: 'Download backup', exact: true })).toHaveCount(0)
+      } else {
+        await page.getByRole('button', { name: 'Sign out of this app', exact: true, includeHidden: true })
+          .evaluate(button => (button as HTMLButtonElement).click())
+        release()
+        await expect(tools).toHaveCount(0)
+        await page.evaluate(() => sessionStorage.setItem('mock-cloud-user', 'bob'))
+        await page.getByRole('button', { name: 'Sign in with Microsoft', exact: true }).click()
+        const open = page.getByRole('button', { name: 'Library backup and import', exact: true })
+        await expect(open).toBeEnabled()
+        await expect(tools).toHaveCount(0)
+        await open.click()
+        await expect(tools.getByRole('checkbox')).toHaveCount(0)
+        await expect(tools).not.toContainText('Alice private save')
+      }
+      expect(downloads).toBe(0)
+      expect(JSON.parse(service.data.get(key)!.raw).name).toBe('Alice private save')
+    } finally { release() }
+  })
+}
+
 async function startCloudPicker(page: Page, language: 'en' | 'ja' = 'en') {
   await page.addInitScript(({ language, topology, key }) => {
     localStorage.setItem('vwan-visual-topology:language:v1', language)

@@ -33,6 +33,12 @@
 }
 .document-save-detail { overflow-wrap: anywhere; }
 .document-save-detail small { display: block; }
+.cloud-library-backup { width: min(800px, calc(100vw - 32px)); overflow-wrap: anywhere; }
+.cloud-backup-selection, .cloud-backup-preview { max-height: 32dvh; overflow: auto; }
+.cloud-backup-selection label { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 6px; }
+.cloud-backup-selection input { flex: 0 0 24px; width: 24px; height: 24px; }
+.cloud-backup-preview > div { border: 1px solid var(--border); padding: 10px; margin: 8px 0; }
+.cloud-library-backup :is(input[type="file"], select) { max-width: 100%; }
 .cloud-destination-dialog { width: min(900px, calc(100vw - 32px)); }
 .cloud-destination-dialog textarea { width: 100%; box-sizing: border-box; }
 .cloud-save-picker { margin: 12px 0; min-width: 0; border: 1px solid var(--border); }
