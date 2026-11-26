@@ -2307,6 +2307,10 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       if (!link) return null
       const loc = topology.erLocations.find((l) => l.id === link.locationId)
       const label = link.targetKind === 'site' ? 'ExpressRoute Link' : 'ER connection'
+      const configure = () => {
+        setSelected({ kind: 'er-link', linkId: link.id })
+        setActiveTab('editor')
+      }
       return {
         title: `${label} · ${link.name}`,
         actions: [
@@ -2321,22 +2325,11 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           },
           ...(link.targetKind === 'site' ? [] : [{
             label: 'Set Routing Weight',
-            children: [0, 10, 50, 100, 200].map((w) => ({
-              label: `Weight ${w}${(link.weight ?? 0) === w ? ' (Current)' : ''}`,
-              onSelect: () => {
-                commitTopology((draft) => {
-                  const l = draft.erLinks.find((x) => x.id === link.id)
-                  if (l) l.weight = w || undefined
-                })
-              },
-            })),
+            onSelect: configure,
           }]),
           {
             label: `Configure ${label} (${loc?.name ?? link.locationId})`,
-            onSelect: () => {
-              setSelected({ kind: 'er-link', linkId: link.id })
-              setActiveTab('editor')
-            },
+            onSelect: configure,
           },
           {
             label: `Delete ${label}`,

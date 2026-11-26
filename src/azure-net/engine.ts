@@ -299,6 +299,8 @@ export function getActivePeeringBetween(
   return undefined
 }
 
+const ER_ECMP_LIMIT = 'ECMP eligible; deterministic representative trace, not packet distribution.'
+
 function chooseBgpWinners(
   entries: AzBgpRibEntry[],
   preference: AzArsPreference | 'VPN',
@@ -363,7 +365,7 @@ function chooseBgpWinners(
             ? `Won via shortest AS path (${minAsLen} hops)`
             : `Won via ${normalizedPref} routing preference (AS path len ${minAsLen})`
       }
-      if (isWinner && winners.size > 1 && c.originProtocol === 'ExpressRoute') explanation += '; equal-cost eligible, packet distribution is not simulated'
+      if (isWinner && winners.size > 1 && c.originProtocol === 'ExpressRoute') explanation += `. ${ER_ECMP_LIMIT}`
       if (c.advertisedSummaryFrom) explanation += ` · Advertised gateway summary from ${c.advertisedSummaryFrom}; not a local forwarding route`
       if (c.routeMapTrace?.length) explanation += ` · ${c.routeMapTrace.join('; ')}`
       output.push({ ...c, preferred: isWinner, explanation })
@@ -787,7 +789,6 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
             originProtocol: 'ExpressRoute',
             preferred: true,
             weight: link.weight ?? 0,
-            explanation: `Advertised by on-premises site ${site.name} to MSEE ${loc.name} (customer AS path retained)`,
           })
         }
       } else if (link.targetKind === 'vnet-gateway') {
@@ -1669,8 +1670,7 @@ function compileSingleSubnetEffectiveRoutes(
           continue
         }
         // Avoid duplicating if ARS already injected a preferred route for the same gateway & prefix
-        if (rawBgpRoutes.some((existing) => existing.prefix === r.prefix && existing.nextHopResourceId === gw.id &&
-          (gw.kind !== 'ExpressRoute' || !existing.connectionId || existing.connectionId === r.connectionId))) {
+        if (rawBgpRoutes.some((existing) => existing.prefix === r.prefix && existing.nextHopResourceId === gw.id && !existing.connectionId)) {
           continue
         }
         const id = `bgp:gw:${subnet.id}:${gw.id}:${r.id}`
@@ -3513,7 +3513,7 @@ function traceAzNetFlowCore(
               action: 'gateway-transit',
               edgeId: erLink.id,
               detail: `${gw.name} transmits over ExpressRoute connection "${erLink.name}" to ${loc?.name ?? erLink.locationId}${equalCost
-                ? '. Equal-cost eligible; this trace shows one deterministic representative, not packet distribution.' : ''}`,
+                ? `. ${ER_ECMP_LIMIT}` : ''}`,
             })
             cursor = { kind: 'er-location', locationId: erLink.locationId, fromTargetId: gw.id }
             continue

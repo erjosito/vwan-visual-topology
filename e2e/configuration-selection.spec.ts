@@ -348,10 +348,12 @@ for (const profile of [profiles[0], profiles[2]]) test(`full: dual ER controls r
   topology.erLinks.find((link) => link.id === 'site-a')!.weight = 10
   await prepare(page, 'full', topology, profile)
   const ja = profile.language === 'ja'
-  const open = async (id: string) => {
+  const open = async (id: string, weight = false) => {
     await page.getByTestId(`aznet-erlink-${id}`).focus()
     await page.keyboard.press('Shift+F10')
-    await page.getByRole('menuitem').filter({ hasText: 'Circuit A' }).click()
+    if (id === 'site-a') await expect(page.getByRole('menuitem', { name: 'Set Routing Weight', exact: true })).toHaveCount(0)
+    if (weight) await page.getByRole('menuitem', { name: 'Set Routing Weight', exact: true }).click()
+    else await page.getByRole('menuitem').filter({ hasText: 'Circuit A' }).click()
     return page.getByTestId('aznet-hybrid-connection-editor')
   }
   const save = async () => {
@@ -360,7 +362,7 @@ for (const profile of [profiles[0], profiles[2]]) test(`full: dual ER controls r
     }).click()
   }
   const read = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
-  let editor = await open('azure-a')
+  let editor = await open('azure-a', true)
   const weight = editor.getByRole('spinbutton', { name: ja ? 'Azure 接続のルーティング重み' : 'Azure connection routing weight' })
   await expect(editor.locator('input[name="inbound"]')).toHaveCount(0)
   await weight.fill('32001')

@@ -66,8 +66,9 @@ Reusing a site ID or gateway ID does not merge the circuit candidates.
 These abstractions do not identify the physical primary/secondary MSEE sessions.
 
 Open **Configure ER connection** to set **Azure connection routing weight**
-(integer 0-32000, default 0). For the same prefix, higher weight precedes
-shorter AS path. Weight stays local to Azure and does not influence the site's
+(integer 0-32000, default 0). **Set Routing Weight** opens this same validated
+editor instead of a separate preset submenu. For the same prefix, higher weight
+precedes shorter AS path. Weight stays local to Azure and does not influence the site's
 reverse-direction selection. Open the **site ER link** to set
 **Site-to-Azure AS-path prepend**. Customer private ASNs and their prepends
 are retained on private peering. Use site inbound route-map local preference
