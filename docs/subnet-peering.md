@@ -136,6 +136,44 @@ including provider source NAT, approval, supported protocols and Standard LB
 integration. Qualification here is synthetic configuration testing, not live
 Azure service, provisioning, allocation or application validation.
 
+### Application Gateway private TCP proxy
+
+The separately negotiated application contract (`contractVersion: 2`,
+`operation: "application"`) also accepts
+`{version: 1, kind: "tcp", serviceId, client, sourcePort, port}`. The client is
+an original workload/NIC/IP binding. Open **VNet detail > Application Gateway
+private TCP proxy** to declare one private Standard_v2/WAF_v2 gateway, its
+dedicated subnet, distinct frontend and serving-instance addresses, original
+listener/rule/pool IDs and rule priority, one original workload backend and
+its port. Missing addresses, unknown provisioning or unknown default TCP probe
+health remain not assessed. Declared healthy is unverified.
+
+The **TCP proxy connections** application operation shows the client/frontend
+connection separately from the instance/backend connection. Backend NSGs see
+the instance's private source, with an illustrative ephemeral port. Each
+connection has independent forward and return routing, filtering and conditional
+response evidence. A reachable frontend does not imply a reachable backend.
+The client needs no direct backend route, and the proxy grants no arbitrary VNet
+transit. An unrelated unpeered duplicate address does not make an otherwise
+unique original peering route ambiguous; competing remote peering owners and
+unresolved shared transit remain unassessed.
+
+Native `application.services[].tcpProxy` persists the explicit configuration;
+the shared worker and MCP return the two connections in
+`application.connections[]`. Unsupported operations and unknown capture
+relationships do not gain coverage merely from retaining those fields. This
+slice does not qualify public frontends, multiple serving instances, TLS
+termination, Proxy Protocol, HTTP/WAF, autoscale/failover, additional translating
+routers, Private Link composition or live listener/application readiness.
+The Bicep starter is not an equivalent gateway deployment.
+
+References: Microsoft's
+[TCP/TLS proxy configuration](https://learn.microsoft.com/en-us/azure/application-gateway/how-to-tcp-tls-proxy),
+[Layer 4 client IP behavior](https://learn.microsoft.com/en-us/azure/application-gateway/proxy-protocol-header)
+and [gateway connection/source-address behavior](https://learn.microsoft.com/en-us/azure/application-gateway/how-application-gateway-works).
+These support a bounded synthetic configuration model, not a live Azure
+qualification claim.
+
 ## Supported boundaries
 
 Gateway/ARS/VWAN/appliance composition, private endpoints, delegated-subnet

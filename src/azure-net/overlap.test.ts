@@ -76,6 +76,20 @@ describe('isolated overlapping VNet addresses', () => {
     expect(trace.summaryReason).toContain('Network B')
   })
 
+  it('does not make a single original peering ambiguous because an unrelated unpeered VNet reuses its remote addresses', () => {
+    const topology = overlappingVnets()
+    topology.vnets.push({ id: 'proxy', name: 'Proxy network', role: 'standalone', region: 'westeurope', prefixes: ['10.92.0.0/16'],
+      subnets: [{ id: 'proxy-subnet', name: 'Proxy', prefix: '10.92.1.0/24' }], appliances: [], gateways: [] })
+    topology.vnetPeerings.push({ id: 'proxy-a', name: 'Only network A', vnetAId: 'proxy', vnetBId: 'a', enabled: true, aToB: flags, bToA: flags })
+    for (const reversed of [false, true]) {
+      if (reversed) topology.vnets.reverse()
+      const trace = traceAzNetFlow(topology, simulateAzNet(topology), { kind: 'subnet', vnetId: 'proxy', subnetId: 'proxy-subnet' }, '100.64.1.4')
+      expect(trace.status).toBe('delivered')
+      expect(trace.hops.at(-1)).toMatchObject({ vnetId: 'a', subnetId: 'a-app' })
+      expect(trace.traversedVnetIds).not.toContain('b')
+    }
+  })
+
   it('retains independently owned NAT Gateway mappings for repeated private client addresses', () => {
     const topology = overlappingVnets()
     topology.inventory!.publicIps = ['a', 'b'].map((id, index) => ({
