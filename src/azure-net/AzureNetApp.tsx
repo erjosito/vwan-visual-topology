@@ -27,6 +27,7 @@ import { WorkspaceCanvasTabs, WorkspaceTabPanel } from '../WorkspaceTabs'
 import type { ContextAction } from '../TopologyContextMenu'
 import type { DetailTarget } from '../network-detail-projection'
 import { WorkspaceTools } from '../WorkspaceTools'
+import { CanvasStartActions } from '../CanvasPresentation'
 import { azWorkspaceIdentity, azWorkspaceObjects, workspaceIdentityKey } from '../workspace-objects'
 import { udrAssociationError } from './udr-regions'
 import type { UdrManagerRequest } from './UdrTableManager'
@@ -2893,6 +2894,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
 
           <WorkspaceCanvasTabs />
           <AzureNetDiagram
+            emptyActions={<CanvasStartActions onAdd={() => setToolsOpenRequest(request => request + 1)} onExamples={() => setSampleGalleryOpen(true)} />}
             frameRequest={frameRequest}
             topology={topology}
             vpnUnderlays={simulation.vpnUnderlays}

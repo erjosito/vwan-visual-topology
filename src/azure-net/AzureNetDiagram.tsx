@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useEffectEvent, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { Fragment, useEffect, useEffectEvent, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useWorkspaceEditorState } from '../workspace-context'
 import { diagramCurve } from '../diagram-layout'
 import { t } from '../i18n'
@@ -51,6 +51,7 @@ export interface AzRouteMapSelection {
 }
 
 interface AzureNetDiagramProps {
+  emptyActions?: ReactNode
   readOnly?: boolean
   frameRequest?: { vnetId: string; revision: number }
   faults?: import('../failures').FaultMap
@@ -228,6 +229,7 @@ function computePositions(topology: AzNetTopology): {
 }
 
 export function AzureNetDiagram({
+  emptyActions,
   readOnly = false,
   topology,
   vpnUnderlays,
@@ -757,6 +759,7 @@ export function AzureNetDiagram({
 
   return (
     <div ref={shellRef} className="aznet-canvas-shell" data-testid="aznet-canvas-shell">
+      {!readOnly && !topology.vnets.length && !topology.vwanHubs.length && !topology.sites.length && !topology.erLocations.length && emptyActions}
       <svg
         ref={svgRef}
         className="aznet-diagram-svg"
