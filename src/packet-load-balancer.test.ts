@@ -6,6 +6,7 @@ import { pruneDeletedInventory, validateInventory, type NetworkLoadBalancer } fr
 import { tracePacket, type PacketRequest } from './packet-flow'
 import { validateTopology } from './validation'
 import { privateLinkTopology, privateLinkRequest } from '../tests/fixtures/private-link'
+import { generateAzNetBicep } from './azure-net/bicep-export'
 
 const owner = { kind: 'vnet' as const, id: 'network' }
 const backend = { workloadId: 'server', nicId: 'server-nic', ipConfigurationId: 'server-ip' }
@@ -170,6 +171,12 @@ describe('original Private Endpoint to provider service forwarding', () => {
     expect(next.inventory!.privateLinkServices).toEqual([])
     expect(next.inventory!.privateEndpointConnections).toEqual([])
     expect(() => parseAzNetTopology(next)).not.toThrow()
+  })
+
+  it('exports the explicit provider subnet policy but warns that the starter omits private service resources and approval', () => {
+    const output = generateAzNetBicep(parseAzNetTopology(privateLinkTopology()))
+    expect(output.text).toContain("privateLinkServiceNetworkPolicies: 'Disabled'")
+    expect(output.warnings.join(' ')).toContain('Private Link Service NAT configurations and Private Endpoint approval/bindings are not deployed')
   })
 })
 const outbound: PacketRequest = { ...request, source: { kind: 'workload', ...backend }, target: { kind: 'external', address: '8.8.8.8' } }

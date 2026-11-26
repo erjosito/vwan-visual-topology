@@ -296,6 +296,7 @@ export function generateAzNetBicep(
       ) {
         lines.push(`          privateEndpointNetworkPolicies: '${sub.privateEndpointNetworkPolicies}'`)
       }
+      if (sub.privateLinkServiceNetworkPolicies) lines.push(`          privateLinkServiceNetworkPolicies: '${sub.privateLinkServiceNetworkPolicies}'`)
       lines.push(`        }`)
       lines.push(`      }`)
     }
