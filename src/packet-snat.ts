@@ -4,6 +4,7 @@ import { simulate, type Simulation } from './routing'
 import { traceNodePath } from './paths'
 import { simulateAzNet, traceAzNetFlow, type AzFlowTrace, type AzSimulationResult } from './azure-net/engine'
 import type { FiveTuple, PacketLeg, PacketRequest, PacketResult, PacketStep } from './packet-flow'
+import { applyPrivateNvaSnatChain } from './packet-nat-chain'
 
 const privateRanges = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '100.64.0.0/10']
 const reverse = (tuple: FiveTuple): FiveTuple => ({ ...tuple, sourceAddress: tuple.destinationAddress, destinationAddress: tuple.sourceAddress,
@@ -38,7 +39,9 @@ export function applyRouterSnat(topology: InventoryTopology, request: PacketRequ
     return { translation: 'not-assessed', ...(request.target.kind === 'external' ? { egress: 'not-assessed' as const } : {}) }
   }
   if (forward.routing !== 'reachable') return unknown('Translation cannot bypass a missing route, forced-tunnel limitation or forwarding loop.')
-  if (owners.length !== 1) return unknown('Multiple router translation stages are not modeled. Original routing evidence is preserved.')
+  if (owners.length !== 1) return applyPrivateNvaSnatChain(topology, request, forward, reply, owners,
+    topology.version === 2 ? simulation as AzSimulationResult | undefined : undefined)
+    ?? unknown('This router translation composition is not assessed. Original routing evidence is preserved.')
   if (!Array.isArray(forward.native) && forward.native.hops.some((hop) => hop.nodeKind === 'vnet-gateway')) {
     return unknown('Gateway/forced-tunnel translation is not assessed; subnet NAT Gateway does not override the selected route.')
   }
