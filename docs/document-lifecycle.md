@@ -1,6 +1,10 @@
 # Document lifecycle contract
 
-When profile recovery is unavailable or another window owns it, one workspace notice explains that changes are temporary and provides **Save a file** and **Save to cloud** actions for the active tab. Save every changed tab before closing. Cloud saving is disabled when it is not configured; confirmed file/cloud saves remain independent of profile recovery. contract
+When profile recovery is unavailable or another window owns it, one workspace notice explains that changes are temporary and provides **Save a file** and **Save to cloud** actions for the active tab. Save every changed tab before closing. Cloud saving is disabled when it is not configured; confirmed file/cloud saves remain independent of profile recovery.
+
+For user-facing steps and save-status interpretation, see
+[Save, Save As and Recovery](https://aznet-simulator.com/docs/#save-recovery),
+also bundled with the Windows app.
 
 Each open design has one `WorkspaceDocument` identity. Its native provider,
 undo/redo history, editor state, configuration registrations, artifact commands
