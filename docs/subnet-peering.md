@@ -51,6 +51,13 @@ Validation checks one link per distinct VNet pair, unique owned references,
 VNet's links, participating parent-address-space restrictions and cross-link
 address-space uniqueness. Invalid scopes cannot certify reachability or isolation.
 
+A VNet with its own VPN or ExpressRoute gateway cannot enable
+`useRemoteGateways`, even when that local gateway is disabled in the simulator.
+Canvas and full peering editors prevent enabling this combination but permit
+clearing an invalid saved flag. Imported conflicts retain their original
+configuration for repair and appear in topology validation. A disabled local
+gateway does not make the peer's gateway an eligible routing fallback.
+
 ## Isolated overlapping VNets
 
 H&S and Full Hybrid allow separate VNets to reuse IPv4 prefixes and workload
@@ -173,6 +180,82 @@ References: Microsoft's
 and [gateway connection/source-address behavior](https://learn.microsoft.com/en-us/azure/application-gateway/how-application-gateway-works).
 These support a bounded synthetic configuration model, not a live Azure
 qualification claim.
+
+### Firewall explicit HTTP/HTTPS proxy
+
+Open **VNet detail > Original Firewall proxy policy** to bind an existing
+`azure-firewall` appliance in its dedicated `AzureFirewallSubnet` to an original
+Standard/Premium policy. Declare the original policy groups, collections and
+rules as bounded JSON and DNS bindings to original workload/NIC/IP identities.
+Saving rejects malformed JSON, dangling references and ambiguous priorities.
+Editing preserves the original identities; native JSON retains the policy.
+
+Use the **Firewall explicit proxy** application operation, or
+`{version: 1, kind: "firewall-proxy", mode: "explicit", serviceId, client,
+sourcePort, proxyPort, scheme, host, port}` with application contract version 2.
+The client addresses the original Firewall private IP and configured HTTP port,
+including for HTTPS CONNECT. It does not need a UDR or direct backend route.
+An original matching application allow rule is required. Network rules are
+examined first regardless of application-rule priority; a matching network rule
+remains unqualified rather than being relabeled as application proxying.
+Unmatched application policy remains unassessed because built-in infrastructure
+rules are not captured.
+
+The two TCP connections have independent native routes, NSG checks and
+conditional replies. The upstream always has Firewall source translation,
+irrespective of network-rule private SNAT exclusions. Neither the private VIP nor
+the representative ephemeral port is claimed as an actual serving-instance
+allocation. Filtering covers the Firewall subnet and ephemeral-port uncertainty;
+every usable Firewall subnet address has an original native return witness in
+`application.connections[].returnVariants`. This exhaustive proof is bounded to
+/24 through /26. A VIP-only allowance or return route cannot prove that all
+possible instances work. Mixed returns remain unassessed.
+
+Declare complete policy, successful provisioning, no inheritance or DNAT
+composition, and disabled threat intelligence, IDPS and TLS inspection.
+Unknown controls, public upstreams, additional routers and Private Link
+composition remain unassessed. Transparent interception has its separate proof
+described below. DNS bindings are explicit
+configuration, not live resolution. Application, TLS and listener availability
+remain unverified. The Bicep starter omits these policy and DNS declarations and
+is not an equivalent deployment.
+
+References: Microsoft's [explicit proxy](https://learn.microsoft.com/en-us/azure/firewall/explicit-proxy),
+[rule processing](https://learn.microsoft.com/en-us/azure/firewall/rule-processing)
+and [private-range SNAT](https://learn.microsoft.com/en-us/azure/firewall/snat-private-range).
+
+### Firewall transparent application rules
+
+The same original Firewall policy also supports
+`{version: 1, kind: "firewall-proxy", mode: "transparent", serviceId, client,
+sourcePort, destinationAddress, scheme, host, port}`. Do not supply `proxyPort`.
+Choose **Firewall application proxy > Transparent application rule** in the
+application panel and declare the original destination plus HTTP Host or HTTPS
+SNI. Explicit proxy need not be enabled for transparent rules.
+
+The original native route must actually reach the selected original Firewall,
+for example through the client's UDR. The unmodified native witness stops with
+`status: "proxy-intercepted"` at that appliance. It does not report backend
+delivery, infer a direct client/backend connection or turn a bypass into proxy
+evidence. Upstream routing and its response are assessed independently.
+Original client traffic sent to a peered Firewall is not classified as traffic
+forwarded from a third VNet merely because its next hop is an appliance.
+
+Network rules match the original destination and precede application rules
+regardless of numeric application priority. A matching transparent network deny
+is a violation; a matching network allow remains outside this application
+proxy provider. HTTP Host may select the declared Firewall DNS-bound backend,
+even when it differs from the original client destination. Without TLS
+inspection, HTTPS uses declared SNI for matching but cannot substitute a
+different DNS answer for the original destination. Such a mismatch stays
+unassessed.
+
+Both proxy connections retain conditional replies. The client-facing reply
+preserves the original destination identity; this does not create an
+end-to-end NAT inverse or live session. Application-rule source translation
+still applies independently of network-rule private SNAT exclusions. The same
+instance-address uncertainty, exhaustive bounded return witnesses, original
+identities and unsupported controls described above apply.
 
 ## Supported boundaries
 

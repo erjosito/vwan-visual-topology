@@ -3,7 +3,10 @@ import type { InventoryOwner, InventoryTopology, WorkloadIpReference } from './i
 import type { FiveTuple, PacketLeg, WorkloadEndpoint } from './packet-flow'
 import type { NsgAssessment } from './packet-security'
 import { evaluateTcpProxy } from './application-tcp'
-import { applicationReferenceExists, fail, object, reference, text, validateApplicationInventory } from './application-inventory'
+import { evaluateFirewallProxy } from './application-firewall'
+import { ipv4 } from './validation'
+import { applicationReferenceExists, fail, normalizeApplicationHost, object, reference, text, validateApplicationInventory } from './application-inventory'
+export { normalizeApplicationHost } from './application-inventory'
 export { applicationLimits, applicationReferenceKey, applicationReferenceExists, validateApplicationInventory } from './application-inventory'
 export { applicationCapabilities } from './application-capabilities'
 
@@ -11,17 +14,42 @@ export type ApplicationReference =
   | { kind: 'service'; id: string }
   | { kind: 'dns-profile'; id: string }
   | { kind: 'subnet'; owner: InventoryOwner; id: string }
+  | { kind: 'appliance'; owner: InventoryOwner; id: string }
   | ({ kind: 'workload' } & WorkloadIpReference)
   | { kind: 'public-ip'; id: string }
   | { kind: 'load-balancer-frontend' | 'load-balancer-pool'; loadBalancerId: string; id: string }
 export interface ApplicationService {
   id: string
   name: string
-  kind: 'application-gateway' | 'front-door'
+  kind: 'application-gateway' | 'front-door' | 'azure-firewall'
   owner?: InventoryOwner
   references: ApplicationReference[]
   unsupportedFeatures: string[]
   tcpProxy?: TcpProxyConfiguration
+  firewallProxy?: FirewallProxyConfiguration
+}
+export interface FirewallProxyConfiguration {
+  applianceId: string
+  policyId: string
+  sku: 'Standard' | 'Premium'
+  configuration: 'complete' | 'unknown'
+  parentPolicy: 'none' | 'unknown'
+  dnat: 'none' | 'unknown'
+  threatIntelligence: 'off' | 'unknown'
+  idps: 'off' | 'unknown'
+  tlsInspection: 'off' | 'unknown'
+  provisioningState: 'succeeded' | 'unknown'
+  explicitProxy: { enabled: boolean; httpPort: number }
+  collections: ({
+    id: string; groupId: string; groupPriority: number; priority: number; action: 'allow' | 'deny'
+  } & ({
+    type: 'network'
+    rules: { id: string; sourcePrefixes: string[]; destinationPrefixes: string[]; destinationPorts: (number | '*')[]; protocol: 'tcp' | 'udp' | 'any' }[]
+  } | {
+    type: 'application'
+    rules: { id: string; sourcePrefixes: string[]; targetFqdns: string[]; protocol: 'http' | 'https'; port: number }[]
+  }))[]
+  dnsBindings: { id: string; host: string; backend: WorkloadIpReference }[]
 }
 export interface TcpProxyConfiguration {
   sku: 'Standard_v2' | 'WAF_v2'
@@ -52,9 +80,14 @@ export interface ApplicationInventory {
   dnsProfiles: ApplicationDnsProfile[]
 }
 export type ApplicationClient = WorkloadEndpoint | { kind: 'external'; address: string }
+type FirewallProxyRequest = {
+  version: 1; kind: 'firewall-proxy'; serviceId: string; client: ApplicationClient;
+  sourcePort: number; scheme: 'http' | 'https'; host: string; port: number
+} & ({ mode: 'explicit'; proxyPort: number } | { mode: 'transparent'; destinationAddress: string })
 export type ApplicationRequest =
   | { version: 1; kind: 'http'; serviceId: string; client: ApplicationClient; scheme: 'http' | 'https'; host: string; port: number; path: string }
   | { version: 1; kind: 'tcp'; serviceId: string; client: ApplicationClient; sourcePort: number; port: number }
+  | FirewallProxyRequest
   | { version: 1; kind: 'dns'; profileId: string; resolver: ApplicationClient; name: string; evaluatedAt: string; cache: 'fresh' }
 export type ApplicationOutcome = 'satisfied' | 'violated' | 'not-assessed'
 type Decision<K extends string, E> = {
@@ -72,6 +105,9 @@ export type ApplicationDecision =
   | Decision<'request-route', { serviceId: string; path: string; poolId: string | null; candidates: ApplicationReference[]; unsupportedFeatures: string[] }>
   | Decision<'network-leg', { leg: 'client-to-proxy' | 'proxy-to-backend'; source: ApplicationClient | ApplicationReference | null; target: ApplicationReference | null; before: (FiveTuple & { protocol: 'tcp' }) | null; after: (FiveTuple & { protocol: 'tcp' }) | null; packetEvidence: { section: 'packet'; direction: 'forward' | 'reply'; stepIndexes: number[] } | { section: 'application-connections'; connectionId: string } | null }>
   | Decision<'response-assumption', { conditional: true; owner: ApplicationReference | null; httpAvailability: 'not-assessed'; tlsAvailability: 'not-assessed' }>
+  | Decision<'firewall-policy', { applianceId: string | null; policyId: string | null; groupId: string | null; collectionId: string | null;
+      ruleId: string | null; ruleType: 'network' | 'application' | null; action: 'allow' | 'deny' | null;
+      mode: 'explicit' | 'transparent'; host: string; port: number; dnsBindingId: string | null; backend: ApplicationReference | null }>
 export interface ApplicationResult {
   version: 1
   kind: ApplicationRequest['kind']
@@ -80,7 +116,7 @@ export interface ApplicationResult {
   decisions: ApplicationDecision[]
   uncertainties: { decisionId: string; reasons: string[]; references: ApplicationReference[] }[]
   limitations: string[]
-  connections?: { id: 'client-to-proxy' | 'proxy-to-backend'; forward: PacketLeg; reply: PacketLeg; nsg: { forward: NsgAssessment; reply: NsgAssessment } }[]
+  connections?: { id: 'client-to-proxy' | 'proxy-to-backend'; forward: PacketLeg; reply: PacketLeg; returnVariants?: PacketLeg[]; nsg: { forward: NsgAssessment; reply: NsgAssessment } }[]
 }
 export const applicationDecisionLabels: Record<ApplicationDecision['kind'], string> = {
   'dns-selection': 'DNS selection',
@@ -88,12 +124,7 @@ export const applicationDecisionLabels: Record<ApplicationDecision['kind'], stri
   'request-route': 'Request route',
   'network-leg': 'Network leg',
   'response-assumption': 'Response assumption',
-}
-export function normalizeApplicationHost(value: unknown): string {
-  const host = text(value, 253).toLowerCase().replace(/\.$/, '')
-  if (!host || host.split('.').some((label) => label.length > 63 || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label))
-    || /^\d+(?:\.\d+){3}$/.test(host)) return fail('explicit DNS hostname required; URLs, IP literals and wildcards are not request hosts')
-  return host
+  'firewall-policy': 'Firewall proxy policy',
 }
 export function normalizeApplicationPath(value: unknown): string {
   const path = text(value, 2048)
@@ -112,8 +143,22 @@ function client(value: unknown): ApplicationClient {
   return entry as unknown as ApplicationClient
 }
 export function validateApplicationRequest(value: unknown): ApplicationRequest {
-  const entry = object(value, ['version', 'kind', 'serviceId', 'client', 'scheme', 'host', 'port', 'path', 'profileId', 'resolver', 'name', 'evaluatedAt', 'cache', 'sourcePort'])
+  const entry = object(value, ['version', 'kind', 'serviceId', 'client', 'scheme', 'host', 'port', 'path', 'profileId', 'resolver', 'name', 'evaluatedAt', 'cache', 'sourcePort', 'mode', 'proxyPort', 'destinationAddress'])
   if (entry.version !== 1) fail('unsupported request version')
+  if (entry.kind === 'firewall-proxy') {
+    object(entry, ['version', 'kind', 'serviceId', 'client', 'mode', 'sourcePort', 'proxyPort', 'scheme', 'host', 'port', 'destinationAddress'])
+    if ((entry.mode !== 'explicit' && entry.mode !== 'transparent') || (entry.scheme !== 'http' && entry.scheme !== 'https')) return fail('explicit/transparent mode and HTTP/HTTPS scheme required')
+    if ([entry.port, entry.sourcePort, ...(entry.mode === 'explicit' ? [entry.proxyPort] : [])].some((port) =>
+      typeof port !== 'number' || !Number.isInteger(port) || port < 1 || port > 65535)) return fail('proxy TCP ports 1-65535 required')
+    const common: Omit<FirewallProxyRequest, 'mode'> = { version: 1, kind: 'firewall-proxy', serviceId: text(entry.serviceId), client: client(entry.client),
+      sourcePort: entry.sourcePort as number, scheme: entry.scheme, host: normalizeApplicationHost(entry.host), port: entry.port as number }
+    if (entry.mode === 'explicit') {
+      if (entry.destinationAddress !== undefined) return fail('explicit proxy has no original destination IPv4')
+      return { ...common, mode: 'explicit', proxyPort: entry.proxyPort as number }
+    }
+    if (typeof entry.destinationAddress !== 'string' || ipv4(entry.destinationAddress) === undefined || entry.proxyPort !== undefined) return fail('transparent proxy requires an original destination IPv4 and no explicit proxy port')
+    return { ...common, mode: 'transparent', destinationAddress: entry.destinationAddress }
+  }
   if (entry.kind === 'tcp') {
     object(entry, ['version', 'kind', 'serviceId', 'client', 'sourcePort', 'port'])
     const serviceId = text(entry.serviceId), source = client(entry.client)
@@ -133,7 +178,7 @@ export function validateApplicationRequest(value: unknown): ApplicationRequest {
       || !Number.isFinite(Date.parse(entry.evaluatedAt)) || new Date(entry.evaluatedAt).toISOString() !== entry.evaluatedAt) fail('fresh resolver and explicit canonical UTC evaluation time required')
     return { ...entry, name: normalizeApplicationHost(entry.name) } as ApplicationRequest
   }
-  return fail('separate TCP, HTTP or DNS operation required')
+  return fail('separate TCP, Firewall proxy, HTTP or DNS operation required')
 }
 export function aggregateApplicationDecisions(kind: ApplicationRequest['kind'], decisions: readonly ApplicationDecision[]): ApplicationOutcome {
   if (decisions.some((entry) => entry.outcome === 'violated')) return 'violated'
@@ -147,10 +192,16 @@ export function aggregateApplicationDecisions(kind: ApplicationRequest['kind'], 
       case 'network-leg': return entry.evidence.source === null || entry.evidence.target === null || entry.evidence.before === null
         || entry.evidence.after === null || entry.evidence.packetEvidence === null
       case 'response-assumption': return false
+      case 'firewall-policy': return entry.evidence.applianceId === null || entry.evidence.policyId === null || entry.evidence.groupId === null
+        || entry.evidence.collectionId === null || entry.evidence.ruleId === null || entry.evidence.ruleType !== 'application'
+        || entry.evidence.action !== 'allow' || entry.evidence.dnsBindingId === null || entry.evidence.backend === null
     }
   })) return 'not-assessed'
   if (new Set(decisions.map((entry) => entry.id)).size !== decisions.length) return 'not-assessed'
   if (kind === 'dns') return decisions.length === 1 && decisions[0].kind === 'dns-selection' ? 'satisfied' : 'not-assessed'
+  if (kind === 'firewall-proxy') return ['firewall-policy', 'response-assumption'].every((kind) => decisions.some((entry) => entry.kind === kind))
+    && ['client-to-proxy', 'proxy-to-backend'].every((leg) => decisions.some((entry) => entry.kind === 'network-leg' && entry.evidence.leg === leg))
+    && decisions.every((entry) => ['firewall-policy', 'network-leg', 'response-assumption'].includes(entry.kind)) ? 'satisfied' : 'not-assessed'
   if (!['listener-match', 'request-route', 'response-assumption'].every((kind) => decisions.some((entry) => entry.kind === kind))
     || !['client-to-proxy', 'proxy-to-backend'].every((leg) => decisions.some((entry) => entry.kind === 'network-leg' && entry.evidence.leg === leg))
     || decisions.some((entry) => entry.kind === 'dns-selection')) return 'not-assessed'
@@ -167,6 +218,13 @@ export function evaluateApplication(topology: InventoryTopology, input: Applicat
   const entry = request.kind === 'dns' ? topology.application?.dnsProfiles.find((profile) => profile.id === request.profileId)
     : topology.application?.services.find((service) => service.id === request.serviceId)
   if (!entry) return fail('explicit original service/profile is missing')
+  if (request.kind === 'firewall-proxy' && entry.kind !== 'traffic-manager') {
+    const result = evaluateFirewallProxy(topology, request, entry)
+    result.configuration = aggregateApplicationDecisions(request.kind, result.decisions)
+    result.limitations.unshift(applicationOffline)
+    return result
+  }
+  if (request.kind === 'firewall-proxy') return fail('Firewall proxy requires an original application service')
   if (request.kind === 'tcp' && entry.kind !== 'traffic-manager') {
     const result = evaluateTcpProxy(topology, request, entry)
     result.configuration = aggregateApplicationDecisions('tcp', result.decisions)

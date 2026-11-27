@@ -19,7 +19,7 @@ const hasOtherRouter = (leg: PacketLeg, ownerId?: string) => Array.isArray(leg.n
 
 function route(topology: InventoryTopology, simulation: Simulation | AzSimulationResult, owner: InventoryOwner,
   subnetId: string, tuple: FiveTuple, direction: PacketLeg['direction'], target?: { owner: InventoryOwner; subnetId: string },
-  deviceId?: string, deviceAddress?: string, conditionalMapping = false): PacketLeg {
+  deviceId?: string, deviceAddress?: string, conditionalMapping = false, applicationProxyId?: string): PacketLeg {
   if (topology.version === 1) {
     const native = traceNodePath(topology, simulation as Simulation, { kind: 'spoke', id: owner.id }, tuple.destinationAddress)
     const complete = native.length && native.every((path) => path.traceComplete !== false && path.status !== 'unknown')
@@ -30,7 +30,8 @@ function route(topology: InventoryTopology, simulation: Simulation | AzSimulatio
       steps: native.flatMap((path) => path.hubs.map((id) => ({ entity: { kind: 'hub', id }, before: tuple, after: tuple, evidence: path.steps.join(' ') }))) }
   }
   const native = traceAzNetFlow(topology, simulation as AzSimulationResult, { kind: 'subnet', vnetId: owner.id, subnetId },
-    tuple.destinationAddress, { sourceAddress: deviceAddress ?? tuple.sourceAddress, ...(deviceId ? { sourceApplianceId: deviceId } : {}) })
+    tuple.destinationAddress, { sourceAddress: deviceAddress ?? tuple.sourceAddress, ...(deviceId ? { sourceApplianceId: deviceId } : {}),
+      ...(applicationProxyId ? { applicationProxyId } : {}) })
   const terminal = native.hops.at(-1)
   const owned = native.hops.some((hop) => hop.action === 'delivered' && (target
     ? hop.vnetId === target.owner.id && hop.subnetId === target.subnetId
@@ -38,8 +39,10 @@ function route(topology: InventoryTopology, simulation: Simulation | AzSimulatio
   // Existing-flow inverse NAT supplies a mapping, not an independent outbound rule.
   const mappedResponse = conditionalMapping && native.status === 'dropped-no-outbound-access'
     && terminal?.vnetId === owner.id && terminal.subnetId === subnetId && terminal.matchedRoute?.nextHopType === 'Internet'
+  const intercepted = terminal && target && applicationProxyId && native.status === 'proxy-intercepted' && terminal.nodeId === applicationProxyId
+    && terminal.nodeKind === 'appliance' && terminal.vnetId === target.owner.id && terminal.subnetId === target.subnetId
   return { direction, tuple, native, routing: native.status === 'not-assessed' ? 'not-assessed'
-    : native.status === 'delivered' && owned || mappedResponse ? 'reachable' : 'unreachable',
+    : native.status === 'delivered' && owned || mappedResponse || intercepted ? 'reachable' : 'unreachable',
   reasons: [mappedResponse ? 'The selected Internet route uses only this established response mapping; unsolicited outbound permission is not inferred.' : native.summaryReason],
   steps: native.hops.map((hop) => ({ entity: { kind: hop.nodeKind, id: hop.nodeId }, before: tuple, after: tuple, evidence: hop.detail,
     ...(hop.edgeId ? { edgeId: hop.edgeId } : {}), ...(hop.matchedRoute ? { routeId: hop.matchedRoute.id } : {}),

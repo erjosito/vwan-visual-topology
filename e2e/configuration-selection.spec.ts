@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { createEmptyAzNetTopology } from '../src/azure-net/model'
 import type { Topology } from '../src/model'
 import { vpnGatewayModeTopology } from '../tests/fixtures/vpn-gateway-mode'
+import { dualExpressRouteTopology } from '../tests/fixtures/dual-expressroute'
 
 test.use({ storageState: { cookies: [], origins: [] } })
 
@@ -339,6 +340,47 @@ test('full: explicit hybrid drafts are protected and saved changes do not prompt
     await expect(scope).toContainText('Branch')
     const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
     expect(saved.vpnConnections[0]).toMatchObject({ name: 'Branch VPN', bgpEnabled: false })
+})
+
+for (const profile of [profiles[0], profiles[2]]) test(`full: dual ER controls retain direction and imported values (${profile.language})`, async ({ page }) => {
+  const topology = dualExpressRouteTopology()
+  topology.erLinks.find((link) => link.id === 'azure-a')!.prepend = [64496]
+  topology.erLinks.find((link) => link.id === 'site-a')!.weight = 10
+  await prepare(page, 'full', topology, profile)
+  const ja = profile.language === 'ja'
+  const open = async (id: string, weight = false) => {
+    await page.getByTestId(`aznet-erlink-${id}`).focus()
+    await page.keyboard.press('Shift+F10')
+    if (id === 'site-a') await expect(page.getByRole('menuitem', { name: 'Set Routing Weight', exact: true })).toHaveCount(0)
+    if (weight) await page.getByRole('menuitem', { name: 'Set Routing Weight', exact: true }).click()
+    else await page.getByRole('menuitem').filter({ hasText: 'Circuit A' }).click()
+    return page.getByTestId('aznet-hybrid-connection-editor')
+  }
+  const save = async () => {
+    await page.getByTestId('aznet-hybrid-connection-editor').getByRole('button', {
+      name: ja ? '接続のルーティングを保存' : 'Save connection routing', exact: true,
+    }).click()
+  }
+  const read = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
+  let editor = await open('azure-a', true)
+  const weight = editor.getByRole('spinbutton', { name: ja ? 'Azure 接続のルーティング重み' : 'Azure connection routing weight' })
+  await expect(editor.locator('input[name="inbound"]')).toHaveCount(0)
+  await weight.fill('32001')
+  await save()
+  expect((await read()).erLinks.find((link: { id: string }) => link.id === 'azure-a').weight).toBe(0)
+  await weight.fill('200')
+  await save()
+  expect((await read()).erLinks.find((link: { id: string }) => link.id === 'azure-a')).toMatchObject({ weight: 200, prepend: [64496] })
+  editor = await open('site-a')
+  await expect(editor.locator('input[name="weight"]')).toHaveCount(0)
+  await editor.getByRole('textbox', { name: ja ? 'サイトから Azure への AS パス プリペンド' : 'Site-to-Azure AS-path prepend' }).fill('65010 65010 65010')
+  await save()
+  expect((await read()).erLinks.find((link: { id: string }) => link.id === 'site-a')).toMatchObject({
+    weight: 10, prepend: [65010, 65010, 65010],
+  })
+  await page.reload()
+  editor = await open('azure-a')
+  await expect(editor.locator('input[name="weight"]')).toHaveValue('200')
 })
 
 for (const mode of ['hub-spoke', 'full']) {

@@ -306,7 +306,9 @@ export interface AzErLink {
   targetKind: 'vnet-gateway' | 'vwan-hub' | 'site'
   targetId: string
   enabled: boolean
+  /** Azure-side connection selection, integer 0-32000; not advertised to the site. */
   weight?: number
+  /** Site-to-Azure advertisement or VWAN hub inbound prepend; not classic gateway ingress. */
   prepend?: number[]
   hubRouting?: HubRoutingConfiguration
   learnSiteRoutes?: boolean
@@ -1440,6 +1442,14 @@ export function validateAzNetTopology(input: unknown): string[] {
         if (subnet && cidr(subnet.prefix) && !usableSubnetAddress(subnet.prefix, app.privateIp)) {
           errors.push(`Appliance "${app.name}" IP "${app.privateIp}" must be in subnet "${subnet.name}", excluding reserved addresses.`)
         }
+      }
+    }
+  }
+  for (const peering of candidate.vnetPeerings) {
+    for (const [vnetId, flags] of [[peering.vnetAId, peering.aToB], [peering.vnetBId, peering.bToA]] as const) {
+      const vnet = candidate.vnets.find((entry) => entry.id === vnetId)
+      if (flags.useRemoteGateways && vnet?.gateways.length) {
+        errors.push(`Peering "${peering.name}": VNet "${vnet.name}" has its own Virtual Network Gateway and cannot use remote gateways, even when the local gateway is disabled.`)
       }
     }
   }

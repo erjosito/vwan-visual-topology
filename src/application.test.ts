@@ -10,6 +10,202 @@ import { simulateAzNet } from './azure-net/engine'
 import { applicationTcpTopology, applicationTcpRequest } from '../tests/fixtures/application-tcp'
 import { tracePacket } from './packet-flow'
 import { generateAzNetBicep } from './azure-net/bicep-export'
+import { applicationFirewallTopology, applicationFirewallRequest, applicationFirewallTransparentTopology, applicationFirewallTransparentRequest } from '../tests/fixtures/application-firewall'
+
+describe('original Firewall transparent application rules', () => {
+  it.each(['http', 'https'] as const)('proves native interception for %s without claiming native backend delivery', (scheme) => {
+    const topology = applicationFirewallTransparentTopology()
+    const request = { ...applicationFirewallTransparentRequest(), scheme, port: scheme === 'http' ? 80 : 443,
+      destinationAddress: scheme === 'http' ? '198.51.100.40' : '10.93.1.4' }
+    const collection = topology.application!.services[0].firewallProxy!.collections[0]
+    if (collection.type !== 'application') throw new Error('Expected the original application collection')
+    collection.rules[0].protocol = scheme; collection.rules[0].port = request.port
+    topology.inventory!.networkSecurityGroups![0].rules[0].destinationPorts = [String(request.port)]
+    const result = evaluateApplication(topology, request)
+    expect(result.configuration).toBe('satisfied')
+    expect(result.connections![0].forward.native).toMatchObject({ status: 'proxy-intercepted', destinationIp: request.destinationAddress,
+      traversedApplianceIds: ['firewall'] })
+    expect(result.connections![0].forward.steps.at(-1)).toMatchObject({ entity: { kind: 'appliance', id: 'firewall' } })
+    expect(result.connections![0].reply.tuple).toMatchObject({ sourceAddress: request.destinationAddress, sourcePort: request.port, destinationAddress: '100.64.1.4' })
+    expect(result.connections![1].forward.tuple).toMatchObject({ sourceAddress: '10.92.1.4', destinationAddress: '10.93.1.4', destinationPort: request.port })
+    expect(result.connections![1].returnVariants).toHaveLength(59)
+    expect(result.availability).toBe('not-assessed')
+  })
+
+  it('does not relabel direct native backend delivery as Firewall interception', () => {
+    const topology = applicationFirewallTransparentTopology()
+    delete topology.vnets.find((entry) => entry.id === 'client')!.subnets[0].routeTableId
+    topology.vnetPeerings.push({ ...structuredClone(topology.vnetPeerings[0]), id: 'direct-backend', vnetAId: 'client', vnetBId: 'backend' })
+    const result = evaluateApplication(topology, applicationFirewallTransparentRequest())
+    expect(result.configuration).toBe('violated')
+    expect(result.connections![0].forward.native).toMatchObject({ status: 'delivered', traversedApplianceIds: [] })
+    expect(result.connections![0].forward.routing).toBe('unreachable')
+    expect(result.connections).toHaveLength(1)
+  })
+
+  it('requires an enabled original Firewall and native client access before creating an upstream connection', () => {
+    const topology = applicationFirewallTransparentTopology(), request = applicationFirewallTransparentRequest()
+    const firewall = topology.vnets.find((entry) => entry.id === 'proxy')!.appliances[0]
+    firewall.enableIpForwarding = false
+    const disabled = evaluateApplication(topology, request)
+    expect(disabled.configuration).toBe('violated')
+    expect(disabled.connections).toHaveLength(1)
+    expect(disabled.connections![0].forward.routing).toBe('unreachable')
+    firewall.enableIpForwarding = true
+    topology.vnetPeerings[0].enabled = false
+    const blocked = evaluateApplication(topology, request)
+    expect(blocked.configuration).toBe('violated')
+    expect(blocked.connections).toHaveLength(1)
+    expect(blocked.connections![0].forward.routing).toBe('unreachable')
+  })
+
+  it('filters the original client destination and keeps application SNAT despite network-rule private exclusions', () => {
+    const topology = applicationFirewallTransparentTopology(), request = applicationFirewallTransparentRequest()
+    topology.inventory!.routerSnatPolicies = [{ owner: { kind: 'appliance', id: 'firewall' }, kind: 'firewall-network-rules', publicIpIds: [], privateRanges: ['0.0.0.0/0'] }]
+    expect(evaluateApplication(topology, request).configuration).toBe('satisfied')
+    topology.inventory!.networkSecurityGroups!.push({ id: 'client-nsg', name: 'Original client destination filter', rules: [{
+      id: 'deny-original-destination', name: 'Deny original destination', priority: 100, direction: 'outbound', action: 'deny', protocol: 'tcp',
+      sources: ['100.64.1.4'], destinations: ['10.93.1.4'], sourcePorts: ['*'], destinationPorts: ['443'],
+    }] })
+    topology.inventory!.nsgAssociations!.push({ owner: { kind: 'vnet', id: 'client' }, target: { kind: 'nic', id: 'client-nic' }, nsgId: 'client-nsg' })
+    const denied = evaluateApplication(topology, request)
+    expect(denied.configuration).toBe('violated')
+    expect(denied.connections).toHaveLength(1)
+    expect(denied.connections![0].nsg.forward.outcome).toBe('denied')
+  })
+
+  it('does not substitute Firewall DNS resolution for the original non-inspected HTTPS destination', () => {
+    const result = evaluateApplication(applicationFirewallTransparentTopology(),
+      { ...applicationFirewallTransparentRequest(), destinationAddress: '198.51.100.40' })
+    expect(result.configuration).toBe('not-assessed')
+    expect(result.decisions[0].reasons.join()).toContain('retains the original destination')
+    expect(result.connections).toEqual([])
+  })
+
+  it('applies network precedence to the original destination before HTTP DNS retargeting', () => {
+    const topology = applicationFirewallTransparentTopology(), config = topology.application!.services[0].firewallProxy!
+    const application = config.collections[0]
+    if (application.type !== 'application') throw new Error('Expected the original application collection')
+    application.rules[0].protocol = 'http'; application.rules[0].port = 80
+    config.collections.push({ id: 'later-network', groupId: 'later-group', groupPriority: 60000, priority: 60000, action: 'deny',
+      type: 'network', rules: [{ id: 'original-network-deny', sourcePrefixes: ['100.64.1.0/24'], destinationPrefixes: ['198.51.100.40/32'], destinationPorts: [80], protocol: 'tcp' }] })
+    const request = { ...applicationFirewallTransparentRequest(), scheme: 'http' as const, port: 80, destinationAddress: '198.51.100.40' }
+    const result = evaluateApplication(topology, request)
+    expect(result.configuration).toBe('violated')
+    expect(result.decisions[0]).toMatchObject({ evidence: { ruleType: 'network', ruleId: 'original-network-deny', action: 'deny' } })
+    expect(result.connections).toEqual([])
+    config.collections.at(-1)!.action = 'allow'
+    expect(evaluateApplication(topology, request).configuration).toBe('not-assessed')
+    expect(() => validateApplicationRequest({ ...request, proxyPort: 3128 })).toThrow()
+  })
+})
+
+describe('original Firewall explicit proxy', () => {
+  it('uses separate policy-backed connections and proves every possible private-instance return address', () => {
+    const topology = applicationFirewallTopology(), request = applicationFirewallRequest()
+    const result = evaluateApplication(topology, request)
+    expect(result.configuration).toBe('satisfied')
+    expect(result.availability).toBe('not-assessed')
+    expect(result.decisions[0]).toMatchObject({ kind: 'firewall-policy', evidence: { policyId: 'original-policy', groupId: 'original-group',
+      collectionId: 'original-collection', ruleId: 'original-https-rule', action: 'allow', dnsBindingId: 'original-dns-binding' } })
+    expect(result.connections).toHaveLength(2)
+    expect(result.connections![0].forward.tuple).toMatchObject({ sourceAddress: '100.64.1.4', destinationAddress: '10.92.1.4', destinationPort: 3128 })
+    const upstream = result.connections![1]
+    expect(upstream.forward.tuple).toMatchObject({ sourceAddress: '10.92.1.4', destinationAddress: '10.93.1.4', destinationPort: 443 })
+    expect(upstream.nsg.forward.checks.at(-1)?.uncertainty).toEqual({ sourceAddressPrefixes: ['10.92.1.0/26'], sourcePorts: [1024, 65535] })
+    expect(upstream.returnVariants).toHaveLength(59)
+    expect(upstream.returnVariants!.every((leg) => leg.routing === 'reachable')).toBe(true)
+    expect(upstream.reply.session).toBe('conditional-response')
+    expect(generateAzNetBicep(topology).warnings.join()).toContain('not an equivalent Firewall policy deployment')
+    expect(parseAzNetTopology(JSON.parse(JSON.stringify(topology))).application).toEqual(topology.application)
+    expect(evaluateApplication(topology, { ...request, client: { kind: 'workload', workloadId: 'isolated-vm', nicId: 'isolated-nic', ipConfigurationId: 'isolated-ip' } }).configuration).not.toBe('satisfied')
+  })
+
+  it('does not equate the representative VIP return route or VIP-only NSG allowance with all serving instances', () => {
+    const topology = applicationFirewallTopology(), request = applicationFirewallRequest()
+    topology.udrTables.push({ id: 'split-return', name: 'Split return', disableBgpRoutePropagation: false, routes: [
+      { id: 'one-instance-drop', name: 'One possible instance', prefix: '10.92.1.8/32', nextHopType: 'None', enabled: true },
+    ] })
+    topology.vnets.find((entry) => entry.id === 'backend')!.subnets[0].routeTableId = 'split-return'
+    const result = evaluateApplication(topology, request)
+    expect(result.configuration).toBe('not-assessed')
+    expect(result.connections![1].reply.routing).toBe('not-assessed')
+    expect(result.connections![1].returnVariants!.some((leg) => leg.routing === 'unreachable')).toBe(true)
+    topology.udrTables = []
+    delete topology.vnets.find((entry) => entry.id === 'backend')!.subnets[0].routeTableId
+    topology.inventory!.networkSecurityGroups![0].rules[0].sources = ['10.92.1.4']
+    expect(evaluateApplication(topology, request).configuration).toBe('not-assessed')
+    topology.inventory!.networkSecurityGroups![0].rules[0].sources = ['10.92.1.0/26']
+    topology.inventory!.networkSecurityGroups![0].rules[0].sourcePorts = ['49152']
+    expect(evaluateApplication(topology, request).configuration).toBe('not-assessed')
+  })
+
+  it('uses the same explicit listener for HTTP and HTTPS CONNECT but separately matches the original upstream protocol and port', () => {
+    const topology = applicationFirewallTopology(), request = { ...applicationFirewallRequest(), scheme: 'http' as const, port: 80 }
+    const collection = topology.application!.services[0].firewallProxy!.collections[0]
+    if (collection.type !== 'application') throw new Error('Expected the original application collection')
+    collection.rules[0].protocol = 'http'; collection.rules[0].port = 80
+    topology.inventory!.networkSecurityGroups![0].rules[0].destinationPorts = ['80']
+    const result = evaluateApplication(topology, request)
+    expect(result.configuration).toBe('satisfied')
+    expect(result.connections![0].forward.tuple?.destinationPort).toBe(3128)
+    expect(result.connections![1].forward.tuple?.destinationPort).toBe(80)
+    expect(evaluateApplication(topology, { ...request, scheme: 'https' }).configuration).toBe('not-assessed')
+  })
+
+  it('requires an application allow, preserves explicit deny and never treats network precedence as application SNAT', () => {
+    const topology = applicationFirewallTopology(), request = applicationFirewallRequest(), config = topology.application!.services[0].firewallProxy!
+    config.collections[0].action = 'deny'
+    expect(evaluateApplication(topology, request).configuration).toBe('violated')
+    config.collections[0].action = 'allow'
+    config.collections.unshift({ id: 'later-network', groupId: 'later-group', groupPriority: 60000, priority: 60000, action: 'allow',
+      type: 'network', rules: [{ id: 'network-first', protocol: 'tcp', sourcePrefixes: ['100.64.1.0/24'], destinationPrefixes: ['10.93.1.0/24'], destinationPorts: [443] }] })
+    const network = evaluateApplication(topology, request)
+    expect(network.configuration).toBe('not-assessed')
+    expect(network.decisions[0]).toMatchObject({ evidence: { ruleType: 'network', collectionId: 'later-network', ruleId: 'network-first' } })
+    expect(network.connections).toEqual([])
+    config.collections = []
+    expect(evaluateApplication(topology, request).configuration).toBe('not-assessed')
+  })
+
+  it.each(['configuration', 'parentPolicy', 'dnat', 'threatIntelligence', 'idps', 'tlsInspection', 'provisioningState'] as const)(
+    'does not pass unknown %s evidence', (field) => {
+      const topology = applicationFirewallTopology()
+      topology.application!.services[0].firewallProxy![field] = 'unknown'
+      expect(evaluateApplication(topology, applicationFirewallRequest()).configuration).toBe('not-assessed')
+    })
+
+  it('keeps listener mismatch, filtering and route failures separate from unavailable configuration', () => {
+    const topology = applicationFirewallTopology(), request = applicationFirewallRequest()
+    expect(evaluateApplication(topology, { ...request, proxyPort: 3129 }).configuration).toBe('violated')
+    topology.inventory!.networkSecurityGroups![0].rules[0].sources = ['192.0.2.0/24']
+    expect(evaluateApplication(topology, request).configuration).toBe('violated')
+    topology.inventory!.networkSecurityGroups![0].rules[0].sources = ['10.92.1.0/26']
+    topology.inventory!.routerSnatPolicies = [{ owner: { kind: 'appliance', id: 'firewall' }, kind: 'firewall-network-rules', publicIpIds: [], privateRanges: ['0.0.0.0/0'] }]
+    expect(evaluateApplication(topology, request).configuration).toBe('satisfied')
+    topology.vnetPeerings.push({ ...structuredClone(topology.vnetPeerings[0]), id: 'competing-client', vnetBId: 'isolated' })
+    expect(evaluateApplication(topology, request).configuration).toBe('not-assessed')
+    topology.vnetPeerings.pop()
+    topology.vnetPeerings[1].enabled = false
+    expect(evaluateApplication(topology, request).configuration).toBe('violated')
+  })
+
+  it('rejects malformed, ambiguous or dangling original policy declarations without weakening native admission', () => {
+    const edits: ((topology: ReturnType<typeof applicationFirewallTopology>) => void)[] = [
+      (topology) => { topology.application!.services[0].firewallProxy!.dnsBindings[0].backend.nicId = 'invented-nic' },
+      (topology) => { topology.application!.services[0].firewallProxy!.collections.push(structuredClone(topology.application!.services[0].firewallProxy!.collections[0])) },
+      (topology) => { topology.application!.services[0].firewallProxy!.collections[0].rules[0].sourcePrefixes = ['100.64.1.4/24'] },
+      (topology) => { Object.assign(topology.application!.services[0].firewallProxy!, { ignored: true }) },
+      (topology) => { topology.vnets.find((entry) => entry.id === 'proxy')!.subnets[0].name = 'NotFirewallSubnet' },
+    ]
+    for (const edit of edits) {
+      const topology = applicationFirewallTopology()
+      edit(topology)
+      expect(() => parseAzNetTopology(topology)).toThrow()
+    }
+    expect(() => validateApplicationRequest({ ...applicationFirewallRequest(), destinationAddress: '10.93.1.4' })).toThrow()
+  })
+})
 
 describe('optional application inventory admission', () => {
   it.each(['vwan', 'hub-spoke', 'full'] as const)('round trips original %s identities without changing native simulation or legacy saves', (mode) => {
@@ -90,7 +286,7 @@ describe('optional application inventory admission', () => {
 describe('application negotiation and safe requests', () => {
   it('requires explicit v2 negotiation and advertises only the qualified private TCP provider', () => {
     const input = applicationPlatformRequest()
-    expect(capabilities).toMatchObject({ contractVersion: 2, supportedContractVersions: [1, 2], application: { providers: ['application-gateway-tcp'], minimumContractVersion: 2 } })
+    expect(capabilities).toMatchObject({ contractVersion: 2, supportedContractVersions: [1, 2], application: { providers: ['application-gateway-tcp', 'azure-firewall-explicit-proxy', 'azure-firewall-application-proxy'], minimumContractVersion: 2 } })
     expect(() => validateRequest({ ...input, contractVersion: 1 })).toThrow('contractVersion 2')
     expect(() => validateRequest({ ...input, contractVersion: 3 })).toThrow('version')
     const legacyEnvelope = { ...input, contractVersion: 1, operation: 'validate' }

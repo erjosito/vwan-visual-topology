@@ -67,6 +67,8 @@ export interface AzEffectiveRoute {
   suppressedReason?: string
   privateEndpointRouteTableEnabled?: boolean
   weight?: number
+  /** Original Azure-side ER connection, distinct from the gateway next hop. */
+  connectionId?: string
 }
 
 export interface AzBgpRibEntry {
@@ -212,6 +214,7 @@ export interface AzTraceHop {
 
 export type AzTraceStatus =
   | 'delivered'
+  | 'proxy-intercepted'
   | 'dropped-blackhole'
   | 'dropped-no-route'
   | 'dropped-no-outbound-access'
@@ -296,6 +299,8 @@ export function getActivePeeringBetween(
   return undefined
 }
 
+const ER_ECMP_LIMIT = 'ECMP eligible; deterministic representative trace, not packet distribution.'
+
 function chooseBgpWinners(
   entries: AzBgpRibEntry[],
   preference: AzArsPreference | 'VPN',
@@ -360,6 +365,7 @@ function chooseBgpWinners(
             ? `Won via shortest AS path (${minAsLen} hops)`
             : `Won via ${normalizedPref} routing preference (AS path len ${minAsLen})`
       }
+      if (isWinner && winners.size > 1 && c.originProtocol === 'ExpressRoute') explanation += `. ${ER_ECMP_LIMIT}`
       if (c.advertisedSummaryFrom) explanation += ` · Advertised gateway summary from ${c.advertisedSummaryFrom}; not a local forwarding route`
       if (c.routeMapTrace?.length) explanation += ` · ${c.routeMapTrace.join('; ')}`
       output.push({ ...c, preferred: isWinner, explanation })
@@ -699,7 +705,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
         rel.reverseFlags.useRemoteGateways
       ) {
         const spokeHasLocalGatewayOrArs =
-          other.gateways.some((g) => g.enabled) || Boolean(other.routeServer?.enabled)
+          other.gateways.length > 0 || Boolean(other.routeServer?.enabled)
         if (!hubHasGatewayOrArs) {
           warnings.push(
             `Peering "${rel.peering.name}": "${vnet.name}" sets allowGatewayTransit=true, but "${vnet.name}" has no enabled Virtual Network Gateway or Route Server.`,
@@ -771,21 +777,18 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
         if (!site) continue
         const siteRoutes = sitePolicy(site.id, link.id, 'outbound', selectedAdvertisements((siteRibs[site.id] ?? []).filter((r) => r.preferred), link.advertisedPrefixes))
         for (const sr of siteRoutes) {
-          const stripped = stripPrivateAsnsForMsee(sr.asPath)
-          const prepended = stripPrivateAsnsForMsee(link.prepend ?? [])
           entries.push({
             ...sr,
             id: `erloc:${loc.id}:site:${link.id}:${sr.prefix}`,
             connectionId: link.id,
             prefix: sr.prefix,
-            asPath: [12076, ...prepended, ...(stripped.length ? stripped : [site.asn])],
+            asPath: [12076, ...(link.prepend ?? []), ...sr.asPath],
             nextHopName: `${site.name} (${link.name})`,
             nextHopKind: 'site',
             nextHopId: site.id,
             originProtocol: 'ExpressRoute',
             preferred: true,
             weight: link.weight ?? 0,
-            explanation: `Advertised by on-premises site ${site.name} to MSEE ${loc.name} (private ASNs stripped by MSEE)`,
           })
         }
       } else if (link.targetKind === 'vnet-gateway') {
@@ -1380,6 +1383,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
           originProtocol: 'ExpressRoute',
           preferred: false,
           explanation: `Learned from Azure over ExpressRoute circuit at ${loc.name}. ${lr.explanation}`,
+          weight: undefined,
           advertisedSummaryFrom: lr.advertisedSummaryFrom,
       }))
       learnedFromAzure.push(...sitePolicy(site.id, link.id, 'inbound', received))
@@ -1666,10 +1670,11 @@ function compileSingleSubnetEffectiveRoutes(
           continue
         }
         // Avoid duplicating if ARS already injected a preferred route for the same gateway & prefix
-        if (rawBgpRoutes.some((existing) => existing.prefix === r.prefix && existing.nextHopResourceId === gw.id)) {
+        if (rawBgpRoutes.some((existing) => existing.prefix === r.prefix && existing.nextHopResourceId === gw.id && !existing.connectionId)) {
           continue
         }
         const id = `bgp:gw:${subnet.id}:${gw.id}:${r.id}`
+        const erConnection = topology.erLinks.find((link) => link.id === r.connectionId)
         // Without ARS, coexisting ER wins identical prefixes before comparing AS-path lengths.
         if (!ars && gw.kind === 'Vpn' && erPrefixes.has(r.prefix)) vpnCoexistenceBackups.add(id)
         rawBgpRoutes.push({
@@ -1679,9 +1684,10 @@ function compileSingleSubnetEffectiveRoutes(
           nextHopType: 'VirtualNetworkGateway',
           nextHopResourceId: gw.id,
           nextHopName: `${gw.name} (${controlVnet.name})`,
-          originLabel: `BGP · ${scopeLabel} ${gw.kind} Gateway (${gw.name})`,
+          originLabel: `BGP · ${scopeLabel} ${gw.kind} Gateway (${gw.name})${erConnection ? ` via ${erConnection.name}` : ''}`,
           asPath: r.asPath,
           weight: r.weight,
+          connectionId: erConnection?.id,
           active: true,
         })
       }
@@ -1693,7 +1699,7 @@ function compileSingleSubnetEffectiveRoutes(
   // Remote Gateways / ARS via VNet Peering (`useRemoteGateways` on this VNet + `allowGatewayTransit` on peer)
   // Azure prohibits `useRemoteGateways=true` if this VNet already has a local Gateway or Route Server.
   const localHasGatewayOrArs =
-    vnet.gateways.some((g) => g.enabled) || Boolean(vnet.routeServer?.enabled)
+    vnet.gateways.length > 0 || Boolean(vnet.routeServer?.enabled)
   if (!localHasGatewayOrArs) {
     for (const peerVnet of topology.vnets) {
       if (peerVnet.id === vnet.id) continue
@@ -1835,10 +1841,12 @@ function compileSingleSubnetEffectiveRoutes(
     const topRanked = group.filter((r) => sourceRank(r) === minRank && !vpnCoexistenceBackups.has(r.id))
     const minAsPath = Math.min(...topRanked.map((r) => r.asPath.length || 999))
     const shortest = topRanked.filter((r) => (r.asPath.length || 999) === minAsPath)
-    // ARS installs all equal-cost NVA next hops; retain other sources' existing tie handling.
+    // Keep eligible ER circuits distinct even when they share one gateway next hop.
     const winners = shortest[0]?.source === 'RouteServer' && shortest[0].nextHopType === 'VirtualAppliance'
       ? shortest.filter((r) => r.source === 'RouteServer' && r.nextHopType === 'VirtualAppliance')
-      : shortest.slice(0, 1)
+      : shortest[0]?.connectionId
+        ? shortest.filter((r) => r.connectionId && r.nextHopResourceId === shortest[0].nextHopResourceId)
+        : shortest.slice(0, 1)
     const winnerIds = new Set(winners.map((r) => r.id))
     const winner = group.find((r) => winnerIds.has(r.id))!
     for (const r of group) {
@@ -2110,7 +2118,7 @@ function traceAzNetFlowCore(
   simulation: AzSimulationResult,
   source: AzEndpointRef,
   destinationIp: string,
-  options?: { sourceAddress?: string; sourceApplianceId?: string
+  options?: { sourceAddress?: string; sourceApplianceId?: string; applicationProxyId?: string
     vpnTranslation?: (connectionId: string, direction: 'ingress' | 'egress', destinationAddress: string) =>
       { destinationAddress: string; detail: string; blocked?: string } },
 ): AzFlowTrace {
@@ -2349,6 +2357,29 @@ function traceAzNetFlowCore(
     const stepCursor = cursor as Cursor
     if (stepCursor.kind !== 'site' || stepCursor.siteId !== vpnSiteDelivery?.siteId) {
       targetInfo = locateDestinationIp(topology, destinationIp, 'vnetId' in stepCursor ? stepCursor.vnetId : undefined)
+    }
+    if (stepCursor.kind === 'appliance' && options?.applicationProxyId === stepCursor.applianceId) {
+      const owner = topology.vnets.find((entry) => entry.id === stepCursor.vnetId)!
+      const appliance = owner.appliances.find((entry) => entry.id === stepCursor.applianceId)!
+      if (appliance.kind === 'azure-firewall' && appliance.enableIpForwarding) {
+        const reason = 'Original Firewall reached through native forwarding. Client routing stops at the application proxy; no onward backend delivery is inferred.'
+        pushHop({ nodeKind: 'appliance', nodeId: appliance.id, nodeName: appliance.name, vnetId: owner.id,
+          subnetId: appliance.subnetId, action: 'inspect-firewall', detail: reason })
+        traversedApplianceIds.push(appliance.id)
+        return { source, destinationIp, destinationLabel: targetInfo.label, status: 'proxy-intercepted',
+          hops, traversedApplianceIds, traversedEdgeIds, traversedVnetIds, summaryReason: reason }
+      }
+    }
+    if (targetInfo.ambiguousVnetIds && stepCursor.kind === 'appliance' && options?.sourceApplianceId === stepCursor.applianceId) {
+      const appliance = topology.vnets.find((vnet) => vnet.id === stepCursor.vnetId)?.appliances.find((entry) => entry.id === stepCursor.applianceId)
+      const table = appliance && simulation.subnetTables[appliance.subnetId]
+      const route = table && lookupSubnetEffectiveRoute(table, destinationIp)
+      const candidates = new Set(table?.routes.filter((entry) => entry.nextHopType === 'VNetPeering'
+        && entry.nextHopResourceId && targetInfo.ambiguousVnetIds!.includes(entry.nextHopResourceId)
+        && cidr(entry.prefix) && contains(entry.prefix, ipNum)).map((entry) => entry.nextHopResourceId))
+      if (route?.nextHopType === 'VNetPeering' && route.nextHopResourceId && candidates.size === 1 && candidates.has(route.nextHopResourceId)) {
+        targetInfo = locateDestinationIp(topology, destinationIp, route.nextHopResourceId)
+      }
     }
     if (targetInfo.ambiguousVnetIds && stepCursor.kind !== 'subnet') {
       const reason = `${targetInfo.label}. This shared-transit destination is ambiguous; no network owner is inferred from topology order.`
@@ -2708,7 +2739,7 @@ function traceAzNetFlowCore(
         // If appliance is in another VNet, it MUST be directly peered (1-hop rule) and pass peering gates
         if (found.vnet.id !== vnet.id) {
           const involvesVnra = stepCursor.viaVnra || found.appliance.kind === 'vnra'
-          const check = validatePeeringTransition(vnet, found.vnet, true, involvesVnra)
+          const check = validatePeeringTransition(vnet, found.vnet, originVnetId !== vnet.id, involvesVnra)
           if (!check.ok) {
             pushHop({
               nodeKind: 'subnet',
@@ -3073,7 +3104,7 @@ function traceAzNetFlowCore(
       if (!explicitSubnetPolicy && conditionalStatic?.nextHopKind !== 'appliance' && targetInfo.vnet && targetInfo.subnet) {
         const directRel = getActivePeeringBetween(topology, vnet.id, targetInfo.vnet.id)
         if (directRel) {
-          const check = validatePeeringTransition(vnet, targetInfo.vnet, true, app.kind === 'vnra')
+          const check = validatePeeringTransition(vnet, targetInfo.vnet, options?.sourceApplianceId !== app.id, app.kind === 'vnra')
           if (!check.ok) {
             pushHop({
               nodeKind: 'appliance',
@@ -3473,6 +3504,7 @@ function traceAzNetFlowCore(
           )
           if (erLink) {
             const loc = topology.erLocations.find((l) => l.id === erLink.locationId)
+            const equalCost = gwRibMatches.some((route) => route.prefix === selectedGatewayRoute?.prefix && route.connectionId !== erLink.id)
             pushHop({
               nodeKind: 'vnet-gateway',
               nodeId: gw.id,
@@ -3480,7 +3512,8 @@ function traceAzNetFlowCore(
               nodeName: gw.name,
               action: 'gateway-transit',
               edgeId: erLink.id,
-              detail: `${gw.name} transmits over ExpressRoute connection "${erLink.name}" to ${loc?.name ?? erLink.locationId}`,
+              detail: `${gw.name} transmits over ExpressRoute connection "${erLink.name}" to ${loc?.name ?? erLink.locationId}${equalCost
+                ? `. ${ER_ECMP_LIMIT}` : ''}`,
             })
             cursor = { kind: 'er-location', locationId: erLink.locationId, fromTargetId: gw.id }
             continue

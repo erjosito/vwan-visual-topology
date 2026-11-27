@@ -322,6 +322,7 @@ export function parseAzNetTopology(input: unknown): AzNetTopology {
   const peeringErrors = validateSubnetPeeringScopes(topology)
   if (peeringErrors.length) fail('Subnet peering', peeringErrors.join(' '))
   for (const l of topology.erLinks) {
+    if (l.weight !== undefined && (!Number.isInteger(l.weight) || l.weight < 0 || l.weight > 32000)) fail(l.id, 'ER routing weight must be an integer from 0 to 32000')
     if (l.advertisedPrefixes?.some((prefix) => !cidr(prefix))) fail(l.id, 'Invalid advertised IPv4 prefix')
     if (l.advertisedPrefixes && l.targetKind !== 'site') fail(l.id, 'ER advertised-prefix selection requires a site link')
     ref(l.locationId, topology.erLocations, 'ER location')

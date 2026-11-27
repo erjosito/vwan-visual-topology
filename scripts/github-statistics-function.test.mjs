@@ -83,6 +83,25 @@ test('missing credentials and failed collection never create a blob; storage fai
   })), /Private endpoint unavailable/)
 })
 
+test('optional cloud aggregates persist alongside web history; configured cloud failures prevent any snapshot', async () => {
+  const cloud = { status: 'available', days: [{ date: '2026-11-15', requests: 10, throttled: 2, serverErrors: null }] }
+  const result = await collectAndPersist({
+    ...options({ async uploadData(data) {
+      assert.deepEqual(JSON.parse(data.toString()).cloud, cloud)
+      assert.deepEqual(JSON.parse(data.toString()).web, { status: 'available', days: [] })
+      assert.ok(!data.toString().includes('do-not-persist-this-token'))
+      return { etag: 'cloud-receipt' }
+    } }),
+    collectWebMetrics: async () => ({ status: 'available', days: [] }),
+    collectCloudMetrics: async () => cloud,
+  })
+  assert.deepEqual(result.cloud, { status: 'available', days: 1 })
+  await assert.rejects(collectAndPersist({
+    ...options({ async uploadData() { assert.fail('Partial snapshot must not be uploaded') } }),
+    collectCloudMetrics: async () => { throw new Error('Cloud monitoring denied') },
+  }), /Cloud monitoring denied/)
+})
+
 test('summary refresh runs only after persistence and failures remain retryable without losing the raw snapshot', async () => {
   let persisted = false
   const stored = options({ async uploadData() { persisted = true; return { etag: 'raw-etag' } } })
