@@ -1,4 +1,4 @@
-# Azure Network Simulator (AzNetSim) — User Guide & Worked Examples
+# Azure Network Simulator (AzNetSim): User Guide & Worked Examples
 
 **Language / 言語:** **English** | [日本語](./README.ja.md)  
 **Live Application:** [https://aznet-simulator.com](https://aznet-simulator.com)
@@ -21,23 +21,27 @@ The worked examples below focus on **Virtual WAN**, one part of AzNetSim. For cl
 6. [Example 4: 3-Hub All-Features Enterprise Showcase (with Asymmetric Routing)](#6-example-4-3-hub-all-features-enterprise-showcase-with-asymmetric-routing)
 7. [Inspecting Effective Routes, Path Explorer & Automated Diagnostics](#7-inspecting-effective-routes-path-explorer--automated-diagnostics)
 8. [Azure Bicep Export & Observed Snapshot Comparison](#8-azure-bicep-export--observed-snapshot-comparison)
+9. [Current Workspace and Modeling Workflows](#9-current-workspace-and-modeling-workflows)
+10. [Local MCP Setup](#10-local-mcp-setup)
 
 ---
 
 ## 1. Step-by-Step Instructions
 
-The new interface is the default; **Use legacy UI** retains access to the old
-presentation without changing the design. **Settings** holds theme, language,
-canvas background and connection styles. **Help & feedback** holds **Docs** and
-**Feedback**, keeping assistance separate from display preferences. Desktop Docs
-opens the bundled offline guide; desktop feedback remains disabled. Zoom,
-fit/reset view and layout controls stay beside the canvas for frequent use.
-**Routing checks** groups **Check routing** and **Advanced checks**; results and
-warnings remain visible in the workspace.
+The compact interface is the default, with one primary row: **Tools**, **Learn**,
+**Explore**, **Checks**, **File**, **Azure**, **Settings** and **Help**. Account
+and belt controls have separate targets. **Settings** holds theme, language,
+canvas styles and **Use legacy UI**. **Help** opens **Docs** and **Feedback**;
+desktop Docs opens the bundled offline guide and feedback stays disabled.
+**Checks** groups **Check routing** and **Advanced checks**. Zoom, view and
+layout controls stay beside the canvas; tabs and save status remain distinct.
 
 On compact windows, **Workspace actions** shows or hides the tools row.
-Hiding that row also hides its tools panel and returns the panel's space to the
-canvas; reopening the row restores the panel if it was open.
+Secondary commands adapt to the available width. Empty-canvas **Add a resource**,
+**Open a design** and **Load an example** shortcuts can be dismissed and disappear
+when resources are added. Selected-resource configuration, route inspection,
+trace and connection shortcuts can be minimized without losing selection.
+**All actions** opens the searchable Tools drawer; right-click remains available.
 
 In the mixed-network inspector, on-premises advertised prefixes, site ASNs and
 VNet address-space lists **save on blur** (click outside the field or press Tab).
@@ -46,9 +50,8 @@ site's list withdraws its advertised prefixes. Names still update immediately.
 Legacy Virtual WAN configuration dialogs use **Save changes** instead.
 
 On the web, **Help > Windows app** opens the [Microsoft Store listing](https://apps.microsoft.com/detail/9P76BP1MXWZ2), and
-**Help > MCP server** opens the local MCP setup guide. Both links are also
-visible on an empty canvas, open in a new tab, and leave the current design
-unchanged.
+**Help > MCP server** opens local MCP setup. These links are in Help, not on the
+empty canvas, and leave the current design unchanged.
 
 1. **Open a workspace**: New sessions start with an empty mixed-network design; **Workspace** opens saved designs or creates a new one. There is no architecture-mode selector. Classic VNets and Virtual WAN hubs can coexist. Legacy Virtual WAN files and samples open in their compatible native editor without lossy conversion.
 2. **Add Topology Objects**: Use the contextual workspace controls or right-click blank canvas to add Virtual WAN hubs, spoke/hub VNets, on-premises branch/datacenter sites, and ExpressRoute peering locations.
@@ -64,7 +67,10 @@ unchanged.
 
 ## 2. Downloadable Sample JSON Topologies
 
-Every screenshot in this guide was captured directly from the sample JSON files below. You can either download the `.json` file and load it via **Import JSON**, or click **Open in Simulator** to load it immediately at `vwan-simulator.com`:
+Screenshots illustrate the sample scenarios and may show older controls; they are
+not verified captures of the current compact UI. Download a `.json` file and open
+it through **Load**, or choose **Open in Simulator** at `aznet-simulator.com`.
+Save current work before replacing it:
 
 | Example | Scenario | Sample JSON File | One-Click Launch |
 | :--- | :--- | :--- | :--- |
@@ -139,7 +145,9 @@ Right-click any hub, site, or ExpressRoute location and select **BGP table**, **
 ![Effective Routes Modal](./images/05-effective-routes-modal.png)
 
 ### Automated Routing Check (Asymmetric Path Detection)
-Click **Check routing** in the toolbar and then **Review routing issues** to see the automated diagnosis of the asymmetric path between Azure spokes and **Amsterdam Core DC**:
+Use **Checks > Check routing**, then **Review routing issues** to inspect modeled
+asymmetry between Azure spokes and **Amsterdam Core DC**. Review scope and
+completion: interrupted and unassessed runs do not establish a clean result.
 
 ![Routing Diagnostics Asymmetric Finding](./images/06-routing-diagnostics-asymmetric.png)
 
@@ -172,13 +180,87 @@ Right-click any node and select **Open path explorer** to trace specific source-
 
 ## 8. Azure Bicep Export & Observed Snapshot Comparison
 
-Click **Azure files** in the top bar to:
-- **Download a deployable Azure Bicep template (`.bicep`)** of your modelled topology.
+Open **Azure**, then the applicable **Azure files** or **Azure & Bicep** panel to:
+- **Download a scoped Azure Bicep starter (`.bicep`)**. Review prerequisites, supported resources and omissions before deployment; it is not a complete production design. The VWAN attachment starter does not modify existing VNets.
 - **Download the read-only PowerShell Azure CLI collector script ([`scripts/collect-azure-vwan.ps1`](https://github.com/erjosito/vwan-visual-topology-feedback/blob/main/scripts/collect-azure-vwan.ps1))** to collect a live Virtual WAN topology and effective route tables from Azure:
   ```powershell
   Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/erjosito/vwan-visual-topology-feedback/main/scripts/collect-azure-vwan.ps1' -OutFile ./collect-azure-vwan.ps1
   ./collect-azure-vwan.ps1 -VirtualWanId '/subscriptions/SUB/resourceGroups/RG/providers/Microsoft.Network/virtualWans/WAN' -IncludeEffectiveRoutes -OutputFile ./vwan-observation.json
   ```
-- **Import and compare observed Azure routes** against simulated routes side by side.
+- **Import and compare recorded Azure routes/fields** against modeled evidence. Missing, denied, stale and unsupported observations remain explicit, not continuous live monitoring.
+
+Windows can deliberately use its local read-only Azure CLI broker when required
+tools are already installed. No subscription credentials go to the canvas
+renderer. **Report a discrepancy** exports a reviewed local issue ZIP with
+topology/evidence and reproduction context, not an automatic upload. Addresses,
+resource IDs, notes and original collector metadata are not anonymized.
+See [Azure files and discrepancy replay](./azure-files.md).
 
 ![Azure Files Drawer](./images/08-azure-files-export-import.png)
+
+## 9. Current Workspace and Modeling Workflows
+
+The [bilingual documentation site](https://aznet-simulator.com/docs/) also ships
+with Electron. These stable sections contain the same user-facing workflows:
+
+| Subject | Guide |
+| --- | --- |
+| Save, Save As, tab ownership and unavailable profile recovery | [Save and recovery](https://aznet-simulator.com/docs/#save-recovery) |
+| Private library, GUID-preserving batch backups and revocable web links | [Cloud backup and sharing](https://aznet-simulator.com/docs/#cloud-backup-sharing) |
+| Draft-preserving optional VWAN sections and mixed inspector commits | [Configuration](https://aznet-simulator.com/docs/#optional-editors) |
+| Gateway transit, dual ExpressRoute, isolated overlap and VPN NAT | [Hybrid routing](https://aznet-simulator.com/docs/#routing-configuration) |
+| Routes, BGP neighbors, scoped checks, warning attention and flow exports | [Inspection and checks](https://aznet-simulator.com/docs/#diagnostics-and-trace) |
+| NSGs, NAT, Standard LB, approved Private Link and private proxies | [Packet/application scope](https://aznet-simulator.com/docs/#packet-application-scope) |
+| Isolated practice, revised editions, evidence and curriculum credit | [Learning](https://aznet-simulator.com/docs/#learning) |
+
+**Save is not recovery:** first Save asks for a destination; repeated Save uses
+the last confirmed one, and Save As changes it only after success. Open save
+status to distinguish local profile recovery, a confirmed file and matching
+cloud content. Unconfirmed downloads and edits made during an earlier upload
+are not confirmed saves. If recovery is unavailable or owned by another window,
+use **Save a file** or configured **Save to cloud** and save each changed tab
+before closing. Apply configuration drafts first; close supports Save/Discard/Cancel.
+
+**Cloud is explicit:** personal-account cloud saves need configured support.
+Topology edits do not automatically upload. Library backups retain original
+cloud-save GUIDs and native resource IDs. Import previews skip identical content,
+keep conflicts by default and require individual reviewed overwrite choices.
+Batch import is not transactional. Backups exclude sharing permissions, learning
+history and local file capabilities, but do not redact secrets embedded in JSON.
+Web shared links expose the latest saved version for 30 days, not unsaved edits
+or a pinned snapshot; owner revocation cannot recall downloaded copies. Electron
+shares local JSON, not cloud links. See [cloud account details](./cloud-accounts.md).
+
+**Configuration is preserved when hidden:** optional VWAN sections retain mounted
+inputs and drafts, summarize configured values and do not hide surrounding
+warnings. Isolated overlapping VNets do not imply connectivity; direct overlapping
+peerings are rejected and shared-transit ambiguity can remain unassessed. A local
+gateway conflicts with remote gateway transit even when disabled. Azure-local
+ExpressRoute weight does not select the reverse site path.
+
+**Packet/application models are bounded:** original NIC/subnet policies and return
+paths are separate from effective routes. Native v2 composed private SNAT supports
+up to four declared NVA interfaces, with later rules matching translated tuples
+and inverse mappings only after independently reaching each translator. Approved
+Private Link Service connections bind a consumer endpoint to one provider NAT
+configuration and a Standard internal NIC-backed LB, not general VNet transit.
+Private Application Gateway TCP and Standard/Premium Firewall explicit or
+intercepted application proxies model separate client/upstream connections using
+original declarations. HTTP Host and non-inspected HTTPS SNI have different
+destination semantics. These contracts do not promise UI editors for every field.
+Generic HTTP delivery, Front Door, live DNS, TLS inspection, arbitrary extra-router
+composition, capacity and application availability remain unavailable/unassessed.
+Use the [current application contract](../src/application-capabilities.ts) and
+installed MCP discovery rather than inferring guarantees from service names.
+
+## 10. Local MCP Setup
+
+Follow the [bilingual MCP setup section](https://aznet-simulator.com/docs/#mcp-server)
+(also bundled offline) for Node 22+, portable `mcp-v<version>` releases, source
+builds, stdio client configuration and updates. Read `get_capabilities` and
+`get_schema` for installed operations/native examples, validate admission first,
+then evaluate explicit supported assertions and read bounded evidence.
+The server does not deploy Azure or edit the app canvas. Your AI client can send
+inputs/results to its provider; local MCP does not make hosted Copilot offline.
+The [platform MCP contract](../PLATFORM.md#local-mcp--copilot-skill) is a secondary
+technical reference, not a replacement for user setup instructions.

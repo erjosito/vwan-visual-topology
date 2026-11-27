@@ -28,8 +28,10 @@ Saving preserves the native topology format. Loading replaces the active design
 through normal workspace admission; it does not deploy Azure resources. Export
 any design you want to keep before loading another.
 
-The header separates **Saved locally** (this browser or desktop profile, not a
-JSON backup) from the current design's cloud relationship. **Matches last confirmed
+The header summarizes **Not saved**, **Locally saved** and **Cloud saved**.
+Open the document save-status details to distinguish profile recovery from a
+confirmed file and the current design's cloud relationship. Recovery in this
+browser or desktop profile is not a JSON backup. **Matches last confirmed
 cloud save** compares the design with the last acknowledged upload or load, not
 continuous cloud synchronization. Later edits remain visibly unuploaded, including
 edits made while an older snapshot uploads. A failed operation does not confirm
