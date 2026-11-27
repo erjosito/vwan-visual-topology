@@ -463,6 +463,11 @@ Site-origin paths evaluate received Azure advertisements and on-premises BGP tog
 
 This is **not** an Azure control-plane emulator or a guarantee of effective routes in a deployed network. Validate important designs against Azure effective routes and packet tests.
 
+The table below focuses on the legacy Virtual WAN routing provider. Mixed/native
+v2 gateway, packet and application contracts have distinct scope; see
+[the current user guide](https://aznet-simulator.com/docs/#packet-application-scope)
+and installed MCP discovery rather than extending these routing-only statements.
+
 | Area | Model |
 |---|---|
 | Virtual WAN | One Standard VWAN; full-mesh inter-hub connectivity. WAN-wide branch-to-branch control gates branch exports, not hub learning or VNet connectivity. Explicit table-local association/propagation with backward-compatible Default defaults; unsupported contexts remain unassessed. |
@@ -472,8 +477,8 @@ This is **not** an Azure control-plane emulator or a guarantee of effective rout
 | SD-WAN | Independent NVA source, **not** a VPN gateway. After the documented ER/VPN comparison, NVA candidates compete on AS path. Undocumented/vendor tie-breaks are not predicted and a warning is shown. |
 | VPN static | Non-BGP site prefixes are imported as VPN routes with an empty local AS path. They can propagate inter-hub, but **do not** get hub-table static-route precedence. Gateway redistribution and static/BGP coexistence are approximations. Arbitrary static hub-table overrides are not modeled. |
 | Private routing intent | Hub policy table contains RFC1918 aggregates plus configured private prefixes to Azure Firewall. Firewall table contains selected exact routes and an Internet fallback when no default is learned; that fallback does not install a hub default. Unknown RFC1918 destinations without a private forwarding route remain unreachable. Non-RFC1918 destinations require explicit private prefixes on each secured hub. |
-| Internet routing intent | Hub default route to Azure Firewall, with direct Internet egress from the firewall. Forced tunneling and per-connection default-route advertisement switches are not modeled. |
-| Firewalls | Native route probes model forwarding, not rules. Packet probes optionally model declared single-router network-rule SNAT/exclusions and classic private handoff to Standard NAT Gateway. No allow/deny, DNAT, application-rule proxy, threat inspection, or health simulation. |
+| Internet routing intent | Hub default route to Azure Firewall. Default advertisement is opt-in per supported connection/spoke/ER attachment; it does not create an absent hub default. Forced tunneling is not generally assessed. Packet egress requires its own declarations. |
+| Firewalls | Native route probes model forwarding, not policy permission. Supported packet declarations separately assess bounded SNAT/exclusions and ingress/DNAT. Native v2 private Firewall explicit/intercepted application proxies require original policy and DNS-bound workload declarations. General threat inspection, live sessions and health are not certified. |
 | Spoke BGP NVA | Explicit hosting spoke, NIC peer IP, 2-byte ASN and advertisements. Inherits host association/propagation; Default association and uniform branch propagation are required. Identical dual hub sessions are assumed. Branch exchange follows the WAN setting; live sessions/UDRs/physical failover are not verified. |
 | Route maps | Hub/site-owned, reusable policies assigned per endpoint and connection, including hosting-VNet maps for NVA advertisements/system routes. Prefix and AS-path matching, permit/drop, summarize/prepend and continue/terminate. Independent site-peer policies; hub and site policies compose in advertisement order. No Azure-side SD-WAN, inter-hub/P2S, community conditions, advanced attribute modifications or NAT. |
 | Prepend ASNs | Hub wizard saves require valid public 2-byte ASNs and reject Azure-reserved, private, documentation, AS_TRANS and 4-byte ASNs. Legacy documentation ASNs `64496-64511` remain importable **for simulation only**. Site maps and on-premises peer policies can use private/32-bit ASNs. |
