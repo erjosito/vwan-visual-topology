@@ -119,7 +119,7 @@ for (const language of ['en', 'ja']) for (const theme of ['light', 'dark']) {
     await help.screenshot({ path: info.outputPath(`platform-links-${language}-${theme}.png`) })
     for (const [label, target] of [
       [text('Windows app', 'Windows アプリ'), 'https://apps.microsoft.com/detail/9P76BP1MXWZ2'],
-      [text('MCP server', 'MCP サーバー'), 'https://github.com/erjosito/vwan-visual-topology/blob/main/PLATFORM.md#local-mcp--copilot-skill'],
+      [text('MCP server', 'MCP サーバー'), new URL(`/docs/index.html${language === 'ja' ? '?lang=ja' : ''}#mcp-server`, page.url()).href],
     ]) {
       if (!await help.getByRole('link', { name: label, exact: true }).isVisible()) await help.locator('summary').press('Enter')
       const link = help.getByRole('link', { name: label, exact: true })
@@ -129,6 +129,11 @@ for (const language of ['en', 'ja']) for (const theme of ['light', 'dark']) {
       await link.press('Enter')
       const opened = await popup
       await expect(opened).toHaveURL(target)
+      if (target.includes('#mcp-server')) {
+        await expect(opened.locator('html')).toHaveAttribute('lang', language)
+        await expect(opened.locator(`#mcp-server > [data-i18n-lang="${language}"]`).first()).toBeVisible()
+        await expect(opened.locator(`#mcp-server > [data-i18n-lang="${language}"]`).first()).toContainText('Node')
+      }
       await opened.close()
       await expect(help.locator('summary')).toBeFocused()
     }
