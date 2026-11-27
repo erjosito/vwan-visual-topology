@@ -5,8 +5,8 @@ live tunnel is created by importing a file.
 
 ## Reporting a simulator / Azure discrepancy
 
-On web or Windows, open **Azure files** (VWAN) or **Azure & Bicep**
-(Hub-and-Spoke / Full Hybrid), then expand **Report a discrepancy**.
+On web or Windows, open **Azure** in the compact toolbar, then **Azure files**
+(VWAN) or **Azure & Bicep** (mixed networks), and expand **Report a discrepancy**.
 Load your Azure capture and compare it first when possible. Windows local reads
 and the downloadable PowerShell collectors supply the same evidence; no new
 Azure collection or credentials are required to create a bundle.

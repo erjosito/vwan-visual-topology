@@ -335,6 +335,13 @@
       <ul data-i18n-lang="en">
         <li><a href="#overview">1. Overview &amp; Key Concepts</a></li>
         <li><a href="#instructions">2. Step-by-Step Instructions</a></li>
+        <li><a href="#save-recovery">Save, Save As &amp; Recovery</a></li>
+        <li><a href="#cloud-backup-sharing">Cloud Library, Backups &amp; Sharing</a></li>
+        <li><a href="#optional-editors">Configuration &amp; Optional Sections</a></li>
+        <li><a href="#routing-configuration">Hybrid Routing Configuration</a></li>
+        <li><a href="#packet-application-scope">Packet &amp; Application Scope</a></li>
+        <li><a href="#learning">Learning &amp; Practice</a></li>
+        <li><a href="#mcp-server">Local MCP Server Setup</a></li>
         <li><a href="#samples-catalog">3. Sample JSON Files</a></li>
         <li><a href="#example-1">4. Example 1: Hub Routing Preferences</a></li>
         <li><a href="#example-2">5. Example 2: Secured Hub &amp; Routing Intent</a></li>
@@ -346,6 +353,13 @@
       <ul data-i18n-lang="ja">
         <li><a href="#overview">1. 概要と主な概念</a></li>
         <li><a href="#instructions">2. 基本的な使い方（ステップバイステップ）</a></li>
+        <li><a href="#save-recovery">保存と復元</a></li>
+        <li><a href="#cloud-backup-sharing">クラウド、バックアップ、共有</a></li>
+        <li><a href="#optional-editors">構成と省略可能なセクション</a></li>
+        <li><a href="#routing-configuration">ハイブリッド ルーティング</a></li>
+        <li><a href="#packet-application-scope">パケットとアプリケーションの対応範囲</a></li>
+        <li><a href="#learning">学習と練習</a></li>
+        <li><a href="#mcp-server">ローカル MCP の設定</a></li>
         <li><a href="#samples-catalog">3. サンプル JSON ファイル一覧</a></li>
         <li><a href="#example-1">4. サンプル 1: ハブのルーティングの優先順位</a></li>
         <li><a href="#example-2">5. サンプル 2: セキュリティで保護された仮想ハブとルーティング インテント</a></li>
@@ -371,7 +385,7 @@
             </div>
             <div class="feature-box">
               <h4>Bounded Packet-Flow Planning</h4>
-              <p>Explore modeled forward/return paths and supported NSG, NAT, ingress, and Standard Load Balancer declarations. Unsupported or incomplete cases remain explicit; application delivery and DNS execution are not implemented.</p>
+              <p>Explore modeled forward/return paths and supported NSG, NAT, ingress, Standard Load Balancer, Private Link and private proxy declarations. See <a href="#packet-application-scope">packet and application scope</a>; generic application delivery and live DNS are not implemented.</p>
             </div>
             <div class="feature-box">
               <h4>Hub Routing Preferences</h4>
@@ -387,7 +401,7 @@
             </div>
             <div class="feature-box">
               <h4>Automated Routing Diagnostics</h4>
-              <p>Detect forward/reverse path asymmetry, blackholes, firewall bypasses, and single-link dependencies across all prefix pairs with one click.</p>
+              <p>Investigate modeled reachability, asymmetry, blackholes, firewall bypasses and dependencies. Review scope, completion and unassessed results rather than treating a bounded run as an exhaustive audit.</p>
             </div>
           </div>
         </div>
@@ -404,7 +418,7 @@
             </div>
             <div class="feature-box">
               <h4>対応範囲を明示したパケット フロー計画</h4>
-              <p>往路・復路と、対応する NSG、NAT、受信経路、Standard Load Balancer の宣言をモデル化します。未対応・不完全なケースは明示し、アプリケーション配信と DNS の実行は未実装です。</p>
+              <p>往路・復路と、対応する NSG、NAT、受信経路、Standard Load Balancer、Private Link、プライベート プロキシの宣言をモデル化します。<a href="#packet-application-scope">対応範囲</a>を確認してください。汎用的なアプリケーション配信や実際の DNS 問い合わせは未実装です。</p>
             </div>
             <div class="feature-box">
               <h4>ハブのルーティングの優先順位</h4>
@@ -420,7 +434,7 @@
             </div>
             <div class="feature-box">
               <h4>自動ルーティング診断</h4>
-              <p>ワンクリックですべてのプレフィックス ペア間の往路・復路の非対称ルーティング、ブラックホール、ファイアウォール バイパス、単一障害点（SPOF）を検出します。</p>
+              <p>モデル化した到達性、非対称ルーティング、ブラックホール、ファイアウォール バイパス、依存関係を調べます。範囲、完了状態、未評価の結果を確認し、制限付きの実行を網羅的な監査と解釈しないでください。</p>
             </div>
           </div>
         </div>
@@ -429,6 +443,8 @@
       <section class="card" id="instructions">
         <div data-i18n-lang="en">
           <h2>2. Step-by-Step Instructions</h2>
+          <p>The compact UI uses one primary row: <strong>Tools</strong>, <strong>Learn</strong>, <strong>Explore</strong>, <strong>Checks</strong>, <strong>File</strong>, <strong>Azure</strong>, <strong>Settings</strong> and <strong>Help</strong>. Account and belt controls have their own targets. On smaller windows, <strong>Workspace actions</strong> reveals secondary commands; tabs and save status remain separate. Settings includes theme, language, canvas styles and <strong>Use legacy UI</strong>. Help opens Docs and Feedback, plus Windows app and MCP setup links on the web. Desktop Docs opens this bundled offline guide; feedback and cloud sharing are unavailable there.</p>
+          <p>The empty canvas has dismissible <strong>Add a resource</strong>, <strong>Open a design</strong> and <strong>Load an example</strong> shortcuts, not Windows/MCP promotional links. Selection shortcuts expose applicable configuration, route inspection, tracing and connections. Minimize them without losing selection; <strong>All actions</strong> opens the searchable Tools drawer. Right-click remains available.</p>
           <h3>Building or Editing a Topology</h3>
           <ol>
             <li><strong>Open a workspace</strong>: Start with an empty mixed-network design or open saved work through <strong>Workspace</strong>. There is no architecture-mode selector. Classic VNets and Virtual WAN hubs coexist; legacy Virtual WAN files and samples retain their compatible native editor.</li>
@@ -443,11 +459,13 @@
               </ul>
             </li>
             <li><strong>Clear highlights &amp; warning icons</strong>: Whenever path highlights or diagnostic warning/error icons are shown on the canvas, click <strong>Clear highlights &amp; icons</strong> in the bottom-left corner of the canvas to reset the view.</li>
-            <li><strong>Share URL or Import/Export JSON</strong>: Use <code>Share Link</code> (<code>#s=...</code> permalink) or <code>Export JSON</code> in the top bar to save a portable topology, or <code>Import JSON</code> to load any of the attached sample files below.</li>
+            <li><strong>Save or load a design</strong>: Use <strong>Load</strong>, <strong>Save</strong> and <strong>Save As</strong> through File/document actions. See <a href="#save-recovery">save and recovery</a> and <a href="#cloud-backup-sharing">cloud backup and sharing</a>. Old <code>#s=...</code> links remain read-only snapshots; new full-topology links are not generated.</li>
           </ol>
         </div>
         <div data-i18n-lang="ja">
           <h2>2. 基本的な使い方（ステップバイステップ）</h2>
+          <p>コンパクト UI の主な操作は 1 行です。<strong>Tools（ツール）</strong>、<strong>Learn（学習）</strong>、<strong>Explore（探索）</strong>、<strong>Checks（診断）</strong>、<strong>File（ファイル）</strong>、<strong>Azure</strong>、<strong>Settings（設定）</strong>、<strong>Help（ヘルプ）</strong>を使用します。アカウントと帯は独立した操作です。狭いウィンドウでは<strong>ワークスペースの操作</strong>から補助コマンドを表示します。タブと保存状態は別に表示します。設定にはテーマ、言語、キャンバスのスタイル、従来の UI 切り替えがあります。ヘルプはドキュメントとフィードバック、Web 版では Windows アプリと MCP 設定を開きます。デスクトップ版は同梱オフライン ガイドを開き、フィードバックとクラウド共有は利用できません。</p>
+          <p>空のキャンバスには非表示にできるリソース追加、設計を開く、サンプル読み込みの操作があり、Windows/MCP の宣伝リンクはありません。選択時の構成、ルート確認、パス追跡、接続操作は選択を保持して最小化できます。すべての操作は検索可能なツール ドロワーを開きます。右クリックも利用できます。</p>
           <h3>トポロジの作成と編集</h3>
           <ol>
             <li><strong>ワークスペースを開く</strong>: 空の混在ネットワークから始めるか、<strong>ワークスペース (Workspace)</strong> で保存済み設計を開きます。モードの選択は不要で、クラシック VNet と Virtual WAN ハブを同じ設計に配置できます。従来の Virtual WAN ファイルとサンプルは互換性のあるエディターで開きます。</li>
@@ -462,15 +480,188 @@
               </ul>
             </li>
             <li><strong>強調表示と警告アイコンのクリア</strong>: キャンバス上にパス強調表示やルーティング診断の警告アイコンが表示されている場合は、キャンバス左下の <strong>強調表示とアイコンをクリア (Clear highlights &amp; icons)</strong> をクリックすると一括で消去できます。</li>
-            <li><strong>URL 共有および JSON のインポート / エクスポート</strong>: 上部バーの <code>Share Link</code>（<code>#s=...</code> パーマリンク）または <code>JSON をエクスポート (Export JSON)</code> でトポロジを保存し、<code>JSON をインポート (Import JSON)</code> で保存済みファイルや以下のサンプル JSON を読み込めます。</li>
+            <li><strong>設計の保存と読み込み</strong>: ファイル／ドキュメント操作の<strong>読み込み (Load)</strong>、<strong>保存 (Save)</strong>、<strong>名前を付けて保存 (Save As)</strong>を使用します。<a href="#save-recovery">保存と復元</a>、<a href="#cloud-backup-sharing">バックアップと共有</a>を確認してください。既存の <code>#s=...</code> は読み取り専用スナップショットとして利用でき、新しいトポロジ全体を含む URL は生成しません。</li>
           </ol>
+        </div>
+      </section>
+
+      <section class="card" id="save-recovery">
+        <div data-i18n-lang="en">
+          <h2>Save, Save As &amp; Recovery</h2>
+          <p>Each tab owns its topology, undo/redo, configuration drafts and destination. <strong>Load</strong> opens a file or cloud-library choice. First <strong>Save</strong> asks for a file or configured cloud destination; later Save reuses the last confirmed destination. <strong>Save As</strong> changes that destination only after confirmed success. Ctrl+S saves; Ctrl+Shift+S opens Save As. Cancellation, denied permission and revision conflicts retain the previous destination.</p>
+          <p><strong>Not saved</strong>, <strong>Locally saved</strong> and <strong>Cloud saved</strong> are summaries. Open save-status details to distinguish profile recovery from a confirmed file or matching cloud revision. Recovery is local to this website origin or desktop profile, <strong>not a portable JSON backup</strong>. A browser download can be unconfirmed: verify its actual location. New edits made while an earlier snapshot saves remain unsaved. A recovered filename does not restore file-overwrite permission.</p>
+          <p>If recovery is unavailable or another window owns profile storage, the workspace notice offers <strong>Save a file</strong> and <strong>Save to cloud</strong> for the active tab. Cloud saving requires configuration and sign-in. Confirmed file/cloud saves are unaffected; save every changed tab before closing. Apply pending configuration before saving and closing. Close offers Save, Discard or Cancel, not silent draft loss. Practice has separate ownership. <a href="https://github.com/erjosito/vwan-visual-topology/blob/main/docs/document-lifecycle.md">Technical lifecycle details</a>.</p>
+        </div>
+        <div data-i18n-lang="ja">
+          <h2>保存、名前を付けて保存、復元</h2>
+          <p>各タブはトポロジ、元に戻す／やり直し、構成の下書き、保存先を個別に保持します。読み込みはファイルまたはクラウドを選択します。初回の<strong>保存 (Save)</strong>では保存先を指定し、以後は最後に確認済みの保存先を使用します。<strong>名前を付けて保存 (Save As)</strong>は成功確認後に保存先を変更します。Ctrl+S は保存、Ctrl+Shift+S は名前を付けて保存です。キャンセル、権限拒否、競合では以前の保存先を保持します。</p>
+          <p><strong>未保存</strong>、<strong>ローカルに保存済み</strong>、<strong>クラウドに保存済み</strong>は要約です。詳細で復元用コピーと確認済みファイル／クラウド リビジョンを区別してください。復元用コピーはオリジン／プロファイルに属し、<strong>持ち運び可能な JSON バックアップではありません</strong>。ブラウザーのダウンロード先と完了を確認してください。保存中に追加した変更は未保存です。復元されたファイル名だけでは上書き権限は復元しません。</p>
+          <p>復元用コピーが利用できない場合や別ウィンドウが所有する場合、通知から現在のタブを<strong>ファイルに保存</strong>または<strong>クラウドに保存</strong>できます。クラウドには構成とサインインが必要です。確認済み保存は影響を受けません。閉じる前に各タブを保存し、構成の下書きを適用してください。閉じる際は保存、破棄、キャンセルを選び、自動的に下書きを破棄しません。練習は別の所有権です。<a href="https://github.com/erjosito/vwan-visual-topology/blob/main/docs/document-lifecycle.md">技術的な詳細（英語）</a>。</p>
+        </div>
+      </section>
+
+      <section class="card" id="cloud-backup-sharing">
+        <div data-i18n-lang="en">
+          <h2>Cloud Library, Backups &amp; Sharing</h2>
+          <p>Cloud accounts are optional, available only in configured builds, and support personal Microsoft accounts, not work/school accounts. Open <strong>Cloud account</strong> for the private library. Topologies upload only through explicit confirmed saves/overwrites, not continuous synchronization. A linked update retains the cloud-save ID and checks the reviewed revision; a new copy creates another record. Later local edits remain unuploaded. Signed-in learning history synchronizes separately and automatically.</p>
+          <p><strong>Library backup and import</strong> prepares selected saves or the whole library, then offers <strong>Download backup</strong>. Verify the download. For import, review the preview and destination account before <strong>Confirm batch import</strong>. Missing saves retain original cloud-save GUIDs; identical GUID/content pairs are skipped. Changed content with the same GUID defaults to <strong>Keep existing</strong>; individually choose <strong>Overwrite reviewed cloud version</strong> only after review. Imports are not transactional: inspect failures, unconfirmed uploads and cancellation results, then refresh/review before retrying. The active design, tabs and practice are unchanged.</p>
+          <p>Backups retain native resource IDs, names, descriptions and retained fields, but not credentials, server revisions, sharing permissions/links, file capabilities, recovery or learning history. Embedded secrets are <strong>not redacted</strong>. Limits are 50 entries, 32 MiB total and 4 MiB per topology; split larger libraries into selected batches. <a href="https://github.com/erjosito/vwan-visual-topology/blob/main/docs/cloud-accounts.md#back-up-and-restore-your-cloud-library">Backup details</a>.</p>
+          <p>Web <strong>Share saved version</strong> and <strong>Enable a 30-day link</strong> separately authorize an anyone-with-the-link, read-only view of the <em>latest cloud-saved version</em>, not unsaved edits or a pinned snapshot. Later cloud updates/renames, including reviewed backup overwrites, appear on recipient refresh. <strong>Manage shared links</strong> revokes future access; sign-out does not revoke and downloaded copies cannot be recalled. Opening a share does not replace the recipient's design. Old <code>#s=...</code> snapshots cannot expire or be revoked. Electron does not create/manage/resolve cloud links; share local JSON files instead.</p>
+          <p>Review configured values before upload/sharing: addresses, names, resource GUIDs, labels, notes and retained fields are disclosed, not anonymized. Private saving does not enable sharing. Cloud storage is not cloud simulation or guaranteed disaster recovery. <a href="https://github.com/erjosito/vwan-visual-topology/blob/main/docs/cloud-accounts.md#read-only-sharing">Sharing policy</a> and <a href="https://github.com/erjosito/vwan-visual-topology/blob/main/PRIVACY.md">privacy</a>.</p>
+        </div>
+        <div data-i18n-lang="ja">
+          <h2>クラウド ライブラリ、バックアップ、共有</h2>
+          <p>クラウドは任意で、構成済みビルドの個人用 Microsoft アカウントに対応します。職場／学校アカウントは対象外です。クラウド アカウントから非公開ライブラリを開きます。トポロジは明示的な保存／上書きと確認後だけアップロードし、継続同期しません。リンク済み更新は ID と確認したリビジョンを保持し、新しいコピーは別レコードです。その後の編集は自動アップロードしません。サインイン中の学習履歴は別途自動同期します。</p>
+          <p>ライブラリのバックアップとインポートで選択した保存または全体を準備してダウンロードし、完了を確認します。インポートはプレビューと保存先アカウントを確認してから確定します。存在しない保存は元のクラウド保存 GUID で作成し、GUID と内容が一致する保存はスキップします。同じ GUID で内容が異なる場合は<strong>既存の保存を保持</strong>が既定です。確認後に個別に上書きを選択してください。処理はトランザクションではありません。失敗、未確認アップロード、キャンセル結果を確認し、再試行前に更新して再確認します。現在の設計、タブ、練習は変更しません。</p>
+          <p>バックアップはリソース ID、名前、説明、保持フィールドを保存しますが、資格情報、サーバー リビジョン、共有リンク／権限、ファイル権限、復元用コピー、学習履歴は含みません。設計内の秘密情報は<strong>削除しません</strong>。上限は 50 件、合計 32 MiB、トポロジごとに 4 MiB です。大きいライブラリは選択バッチに分けます。<a href="https://github.com/erjosito/vwan-visual-topology/blob/main/docs/cloud-accounts.md#back-up-and-restore-your-cloud-library">バックアップの詳細（英語）</a>。</p>
+          <p>Web の保存済みバージョン共有は別途確認して 30 日間のリンクを有効化します。リンクを持つ人は<strong>最後にクラウド保存したバージョン</strong>を読み取り専用で閲覧します。未保存編集や固定スナップショットではありません。更新、名前変更、確認済みバックアップ上書きは閲覧者の再読み込み時に反映します。共有リンク管理で将来のアクセスを失効できますが、サインアウトでは失効せず取得済みコピーは回収できません。閲覧者の設計は置換しません。既存の <code>#s=...</code> には期限や失効機能がありません。Electron はクラウド共有リンクに対応しません。ローカル JSON を共有してください。</p>
+          <p>アップロード／共有前に構成値を確認してください。アドレス、名前、GUID、ラベル、メモ、保持フィールドは匿名化せず開示します。非公開保存だけでは共有を有効にしません。クラウド保存はクラウド上のシミュレーションや災害復旧の保証ではありません。<a href="https://github.com/erjosito/vwan-visual-topology/blob/main/docs/cloud-accounts.md#read-only-sharing">共有ポリシー（英語）</a>と<a href="https://github.com/erjosito/vwan-visual-topology/blob/main/PRIVACY.md">プライバシー（英語）</a>。</p>
+        </div>
+      </section>
+
+      <section class="card" id="optional-editors">
+        <div data-i18n-lang="en">
+          <h2>Configuration &amp; Optional Sections</h2>
+          <p>Select a resource and use Configure, its inspector or right-click configuration. VWAN names, regions, prefixes and hub attachments stay directly accessible. Optional labels, spoke routing/NVA settings and hub routing intent use collapsible sections in the compact UI. Configured values start expanded and stay summarized when collapsed. Collapsing hides controls, <strong>not configuration</strong>: inputs and unsaved drafts remain mounted. Community limitations and hub warnings stay outside the sections. Legacy UI keeps fields expanded.</p>
+          <p>Mixed-inspector site prefix lists, ASNs and VNet address-space lists commit on blur (click outside or Tab). Commas/spaces remain editable; clearing a site's list withdraws advertisements. Names update immediately. VWAN dialogs require <strong>Save changes</strong>. Hiding a section does not apply/discard a draft; resource switching or closing can require a decision. <strong>VNet detail</strong> exposes original subnet-owned route-table, NSG, NAT, workload and supported service controls. Labels are annotations, not route policy. Clone VNet creates a disconnected structural copy with fresh IDs and replacement address spaces, excluding devices and policies.</p>
+        </div>
+        <div data-i18n-lang="ja">
+          <h2>構成と省略可能なセクション</h2>
+          <p>リソースの構成、インスペクター、右クリックを使用します。VWAN の名前、リージョン、プレフィックス、ハブ接続は直接編集できます。任意ラベル、スポークのルーティング／NVA、ハブ インテントはコンパクト UI では折りたたみ可能です。構成済み値は最初から展開し、閉じても要約を表示します。折りたたみは<strong>構成を無効化せず</strong>、入力と下書きを保持します。コミュニティの制限や警告は外側に残ります。従来の表示ではすべて展開します。</p>
+          <p>混在インスペクターのサイト プレフィックス、ASN、VNet アドレス空間は外をクリックするか Tab で適用します。カンマ／空白は入力中に保持し、サイト一覧を空にすると広告を撤回します。名前は即座に更新します。VWAN ダイアログは変更を保存が必要です。非表示にするだけでは下書きを適用／破棄しません。切り替えや閉じる際に確認する場合があります。VNet の詳細には元のサブネットのルート テーブル、NSG、NAT、ワークロード、対応サービスの操作があります。ラベルは注釈でポリシーではありません。VNet 複製は新しい ID と置換アドレスを持つ未接続の構造コピーで、デバイスやポリシーは含みません。</p>
+        </div>
+      </section>
+
+      <section class="card" id="routing-configuration">
+        <div data-i18n-lang="en">
+          <h2>Hybrid Routing Configuration</h2>
+          <p>Distinguish route visibility from permission. Peering address-space routes remain visible with VNet access disabled, but forwarding can fail. Gateway-side <code>allowGatewayTransit</code> and spoke-side <code>useRemoteGateways</code> are paired settings. A VNet cannot use remote gateway transit with a local gateway; disabling that local gateway does not remove the configuration conflict. Route Server/NVA exchange has separate eligibility and does not imply gateway transit.</p>
+          <p>For dual ExpressRoute private peering, inspect Azure connection weight separately from site AS paths. Azure-local weight does not choose the reverse site path; customer ingress retains private ASNs and prepends. Longest-prefix selection precedes same-prefix preference. Inspect both directions. Standalone ER/VPN coexistence, gateway SKU/mode checks, ARS exchange and fallback have <a href="https://github.com/erjosito/vwan-visual-topology/blob/main/docs/gateway-coexistence.md">bounded support</a>.</p>
+          <p>Isolated VNets can reuse address spaces without becoming connected or sharing endpoint ownership. Direct overlapping VNet peerings are rejected; common-transit ambiguity is diagnosed or unassessed. A selected remote workload ID cannot override a local route. This is distinct from <a href="https://github.com/erjosito/vwan-visual-topology/blob/main/docs/VPN-OVERLAP-NAT.md">VPN overlap NAT</a>: explicit connection-owned IngressSNAT/EgressSNAT maps original/translated prefixes. Static rules permit both initiation directions; dynamic rules permit internal initiation and conditional replies only.</p>
+          <p>VNet BGP communities differ from VWAN route-map community actions. Captured regional values are preserved, not inferred from region names; custom VNet communities do not automatically tag VWAN/VPN/NVA advertisements. Secondary reference: <a href="https://github.com/erjosito/vwan-visual-topology/blob/main/ROUTING-LOGIC.md">routing logic</a>.</p>
+        </div>
+        <div data-i18n-lang="ja">
+          <h2>ハイブリッド ルーティングの構成</h2>
+          <p>ルート可視性と許可を区別します。VNet アクセス無効でもピアリング ルートは表示されますが転送は失敗する場合があります。ゲートウェイ側 <code>allowGatewayTransit</code> とスポーク側 <code>useRemoteGateways</code> は対です。ローカル ゲートウェイがある VNet はリモート トランジットを使用できず、ローカルを無効にしても構成競合は解消しません。Route Server／NVA 交換の条件は別で、ゲートウェイ トランジットを意味しません。</p>
+          <p>デュアル ExpressRoute では Azure 接続の重みとサイト AS パスを別々に確認します。Azure 内の重みは復路のサイト選択を決めず、顧客入口のプライベート ASN とプリペンドを保持します。同一プレフィックス優先順位より先に最長一致が適用されます。両方向を確認してください。ER／VPN 共存、SKU／モード、ARS 交換、フォールバックには<a href="https://github.com/erjosito/vwan-visual-topology/blob/main/docs/gateway-coexistence.md">制限（英語）</a>があります。</p>
+          <p>独立 VNet はアドレスを再利用できますが、それだけで接続や所有権を共有しません。直接重複するピアリングは拒否し、共通トランジットの曖昧性は診断または未評価です。リモート ワークロード ID でローカル ルートを上書きしません。これは接続ごとの IngressSNAT／EgressSNAT を明示する<a href="https://github.com/erjosito/vwan-visual-topology/blob/main/docs/VPN-OVERLAP-NAT.md">VPN 重複 NAT（英語）</a>とは別です。静的ルールは両方向開始、動的ルールは内部開始と条件付き応答のみです。</p>
+          <p>VNet BGP コミュニティと VWAN ルート マップ操作は別です。取得済みリージョン値を保持しますが、リージョン名から推測しません。カスタム VNet 値は VWAN／VPN／NVA 広告へ自動付与しません。<a href="https://github.com/erjosito/vwan-visual-topology/blob/main/ROUTING-LOGIC.md">ルーティング ロジック（英語）</a>。</p>
+        </div>
+      </section>
+
+      <section class="card" id="packet-application-scope">
+        <div data-i18n-lang="en">
+          <h2>Packet &amp; Application Scope</h2>
+          <p>Routes alone do not establish permission, NAT, DNS or availability. Packet requests use original workload/NIC/IP-configuration identities. Inspect before/after tuples, both subnet/NIC NSG layers and independent returns. NSG allow creates neither a route nor NAT; deny does not remove effective routes. A <strong>conditional response</strong> is not a new reverse initiation or live session.</p>
+          <ul>
+            <li><strong>Explicit egress/ingress:</strong> owned NAT Gateway, instance public IP, declared Firewall/NVA SNAT/DNAT and regional Standard LB. UDRs take precedence; NAT Gateway cannot publish ingress. LB frontends, NIC pools and probe health are original declarations, not live readiness. Generic HA ports, Floating IP and proprietary hashing are not inferred.</li>
+            <li><strong>Composed private NVA SNAT:</strong> native v2 workload-to-workload TCP/UDP through up to four original NVA interfaces with explicit guest rules. Later rules see translated tuples; inverse mappings require independently reaching each original translator. Managed hubs, gateways, VPN NAT, HA-port steering and arbitrary multi-router composition are outside this slice.</li>
+            <li><strong>Approved Private Link Service:</strong> native v2 original consumer Private Endpoint bound to a provider Standard internal NIC-backed LB, one NAT configuration and ordinary TCP/UDP rules. Approval, policy and both return sides are required. Not VNet transit, generic PaaS delivery, Proxy Protocol v2 or intermediate-router composition.</li>
+            <li><strong>Private Application Gateway TCP:</strong> native v2 Standard_v2/WAF_v2 private passthrough, one declared instance and original healthy workload backend. Client/proxy and proxy/backend are separate connections with separate returns. No HTTP/WAF inspection, TLS termination, public frontend, autoscale, extra routers or Private Link composition.</li>
+            <li><strong>Firewall explicit/application proxy:</strong> original native v2 Standard/Premium policy and declared DNS-bound private workload. Explicit HTTP/HTTPS CONNECT or natively intercepted HTTP/non-inspected HTTPS. Network rules precede application rules. HTTP Host can retarget through a declared binding; HTTPS SNI retains the original destination. No live DNS, TLS inspection, inherited policy, IDPS, public upstream or extra-router/Private Link composition.</li>
+          </ul>
+          <p>Application declarations/requests are a bounded platform contract, not a promise of an editor for every field. Use installed MCP schema/examples for application evaluation. Retained unknown JSON fields do not implement new semantics. Missing allocation, approval, policy or capture completeness remains failed or unassessed as appropriate. Translated ports/instance addresses may be illustrative. Generic HTTP delivery, Front Door and Traffic Manager/DNS execution remain unavailable. No live health, authentication, capacity, convergence or end-to-end availability is certified. Secondary references: <a href="https://github.com/erjosito/vwan-visual-topology/blob/main/src/application-capabilities.ts">application contract</a> and <a href="https://github.com/erjosito/vwan-visual-topology/blob/main/PLATFORM.md">platform boundaries</a>.</p>
+        </div>
+        <div data-i18n-lang="ja">
+          <h2>パケットとアプリケーションの対応範囲</h2>
+          <p>ルートだけでは許可、NAT、DNS、可用性は成立しません。要求は元のワークロード／NIC／IP 構成 ID を使用します。変換前後タプル、サブネット／NIC NSG、独立復路を確認します。NSG 許可はルート／NAT を作らず、拒否でもルートは残ります。<strong>条件付き応答</strong>は新しい逆方向開始や実測セッションではありません。</p>
+          <ul>
+            <li><strong>明示的送受信:</strong> NAT Gateway、インスタンス パブリック IP、宣言済み Firewall／NVA SNAT／DNAT、Standard LB。UDR が優先し NAT Gateway は受信公開しません。LB、NIC プール、正常性は宣言で実測ではありません。汎用 HA ports、Floating IP、実際のハッシュは推測しません。</li>
+            <li><strong>複数 NVA SNAT:</strong> v2 ワークロード間 TCP／UDP、最大 4 個の元の NVA と明示的ゲスト ルール。後続は変換後タプルを参照し、逆変換には各元インターフェイスへ独立到達が必要です。管理ハブ、ゲートウェイ、VPN NAT、HA ports、任意複数ルーターは対象外です。</li>
+            <li><strong>承認済み Private Link Service:</strong> 元の v2 Private Endpoint、プロバイダー Standard 内部 NIC ベース LB、1 NAT 構成、通常 TCP／UDP。承認、ポリシー、両側復路が必要です。VNet トランジット、汎用 PaaS 配信、Proxy Protocol v2、中間ルーターは対象外です。</li>
+            <li><strong>プライベート Application Gateway TCP:</strong> v2 Standard_v2／WAF_v2、1 宣言インスタンスと正常な元ワークロード。クライアント側／バックエンド側は別接続で復路も別です。HTTP／WAF 検査、TLS 終端、パブリック、自動スケール、追加ルーター、Private Link 合成は対象外です。</li>
+            <li><strong>Firewall プロキシ:</strong> 元の v2 Standard／Premium ポリシーと宣言済み DNS に対応するプライベート ワークロード。明示 HTTP／HTTPS CONNECT またはネイティブ捕捉 HTTP／非検査 HTTPS。ネットワーク ルールが先です。HTTP Host は宣言先へ変更できますが HTTPS SNI は元宛先を保持します。実 DNS、TLS 検査、継承ポリシー、IDPS、パブリック上流、追加ルーター／Private Link 合成は対象外です。</li>
+          </ul>
+          <p>アプリケーション宣言／要求は限定契約で、全フィールドの画面エディターを保証しません。MCP スキーマ／例を使用します。未知 JSON の保持だけでは新機能は成立しません。割り当て、承認、ポリシー、キャプチャが不完全なら失敗または未評価です。変換ポート／インスタンス値は例示の場合があります。汎用 HTTP、Front Door、Traffic Manager／DNS 実行は未対応です。実正常性、認証、容量、収束、全体可用性は保証しません。<a href="https://github.com/erjosito/vwan-visual-topology/blob/main/src/application-capabilities.ts">アプリケーション契約（英語）</a>と<a href="https://github.com/erjosito/vwan-visual-topology/blob/main/PLATFORM.md">制限（英語）</a>。</p>
+        </div>
+      </section>
+
+      <section class="card" id="learning">
+        <div data-i18n-lang="en">
+          <h2>Learning &amp; Practice</h2>
+          <p><strong>Learn</strong> opens the EN/JA sidebar. Routing foundations progresses through peering, Firewall/UDRs, Virtual WAN, VPN/BGP, ExpressRoute resilience and NVA/multi-hub investigations. Confirm a starter, predict, inspect evidence, configure native controls and explain the result. <strong>Show me where</strong> locates controls without doing the task. Current evidence and explicit Next unlock progression; unsupported checks never pass.</p>
+          <p>Practice canvases/history/assessment are isolated from normal designs. Existing learners opt into revised editions; archived credit does not grant new-edition credit. Progress belongs to the website origin or desktop profile, with optional signed-in history sync. Planned tracks have no start actions or points. Belts record curriculum completion, not professional certification, real failover or all Azure networking.</p>
+        </div>
+        <div data-i18n-lang="ja">
+          <h2>学習と練習</h2>
+          <p>Learn は英語／日本語サイドバーを開きます。ルーティング基礎ではピアリング、Firewall／UDR、Virtual WAN、VPN／BGP、ExpressRoute 冗長性、NVA／複数ハブを学びます。スターター確認、予測、証拠確認、ネイティブ構成、結果説明を行います。場所を示すガイドは課題を実行しません。現在の証拠と明示的な次への操作で進み、未対応チェックは合格しません。</p>
+          <p>練習のキャンバス／履歴／評価は設計から独立しています。既存学習者は改訂版への参加を選び、旧版実績で新版単位を付与しません。進捗はオリジン／プロファイルに属し任意で同期します。計画中トラックには開始操作やポイントがありません。帯は修了を表し専門資格、実フェールオーバー、Azure 全体習熟を保証しません。</p>
+        </div>
+      </section>
+
+      <section class="card" id="mcp-server">
+        <div data-i18n-lang="en">
+          <h2>Local MCP Server Setup</h2>
+          <p>Use <strong>Node 22+</strong> and an MCP-compatible AI client. The local stdio server evaluates declared topology JSON; it is not a hosted URL, Azure deployment tool or an open-canvas connection. Web, Windows and MCP releases are independent.</p>
+          <h3>Portable release package</h3>
+          <p>Download the archive from a published <strong>Local MCP server</strong> release (<code>mcp-v&lt;version&gt;</code>) in <a href="https://github.com/erjosito/vwan-visual-topology/releases?q=mcp-v">GitHub releases</a>. Choose <code>Azure-Network-Simulator-MCP-&lt;version&gt;.zip</code>, not the Windows installer or a promotion receipt. Extract into a new directory and open a terminal there:</p>
+          <pre><code>npm ci --omit=dev --ignore-scripts
+node .\mcp.cjs</code></pre>
+          <p>The second command starts stdio and waits for MCP protocol input, not a web page. Normally your client launches it instead; do not type ordinary chat text into the server terminal.</p>
+          <h3>Trusted source checkout alternative</h3>
+          <pre><code>git clone https://github.com/erjosito/vwan-visual-topology.git
+cd vwan-visual-topology
+npm ci
+npm run build:platform
+npm run mcp</code></pre>
+          <p>The source server is <code>platform-dist/mcp.cjs</code>; <code>.github/mcp.json</code> declares it. A web/Electron build is not required.</p>
+          <h3>Client configuration</h3>
+          <p>Merge this entry into your client's MCP configuration, adapting the surrounding property name if required. Use an absolute server path; for source builds substitute the absolute path to <code>platform-dist/mcp.cjs</code>.</p>
+        </div>
+        <div data-i18n-lang="ja">
+          <h2>ローカル MCP サーバーの設定</h2>
+          <p><strong>Node 22 以上</strong>と MCP 対応 AI クライアントが必要です。ローカル stdio サーバーは宣言 JSON を評価し、ホスト URL、Azure デプロイ、キャンバス接続ではありません。Web、Windows、MCP は独立リリースです。</p>
+          <h3>配布パッケージ</h3>
+          <p><a href="https://github.com/erjosito/vwan-visual-topology/releases?q=mcp-v">GitHub リリース</a>の公開済み Local MCP server（<code>mcp-v&lt;version&gt;</code>）から <code>Azure-Network-Simulator-MCP-&lt;version&gt;.zip</code> を取得します。Windows インストーラーや公開記録でなく MCP パッケージを選び、新規フォルダーへ展開してターミナルを開きます。</p>
+          <pre><code>npm ci --omit=dev --ignore-scripts
+node .\mcp.cjs</code></pre>
+          <p>2 番目は stdio を開始し MCP プロトコルを待ちます。Web ページではありません。通常はクライアントが起動します。普通の会話をターミナルへ入力しないでください。</p>
+          <h3>信頼できるソースから構築する場合</h3>
+          <pre><code>git clone https://github.com/erjosito/vwan-visual-topology.git
+cd vwan-visual-topology
+npm ci
+npm run build:platform
+npm run mcp</code></pre>
+          <p>サーバーは <code>platform-dist/mcp.cjs</code>、定義は <code>.github/mcp.json</code> です。Web／Electron ビルドは不要です。</p>
+          <h3>クライアント設定</h3>
+          <p>次を MCP 設定に追加し、必要なら外側のプロパティ名を変更します。絶対パスを使用し、ソース構築では <code>platform-dist/mcp.cjs</code> の絶対パスへ置換します。</p>
+        </div>
+        <pre><code>{
+  "mcpServers": {
+    "azure-network-simulator": {
+      "command": "node",
+      "args": ["C:\\Tools\\AzNetSim-MCP\\mcp.cjs"]
+    }
+  }
+}</code></pre>
+        <div data-i18n-lang="en">
+          <p>Node must be on the client's PATH, or <code>command</code> must be its absolute executable path. Enable/trust the server through the client; configuration grants no blanket permissions. If startup fails, check Node version, the extracted path and dependency restore. To update, extract a new package separately, restore dependencies, change the path and restart client/server. Do not mix versions; website/Windows updates do not update a running MCP process.</p>
+          <h3>First evaluation and privacy</h3>
+          <ol>
+            <li>Read <code>get_capabilities</code> and <code>get_schema</code> for the intended topology/provider. Use installed native examples and discovered operations, not a copied feature list or invented fields.</li>
+            <li>Call <code>start_simulation</code> with <code>operation: "validate"</code>, then read <code>get_job</code>. Correct admission errors first.</li>
+            <li>Evaluate explicit supported flow/exact-route assertions. Retrieve job/evidence chunks, distinguish pass/fail/unassessed and assemble all JSON chunks before parsing. Optional rendering is discovered through capabilities and uses separate bounded jobs/artifacts.</li>
+          </ol>
+          <p>The server does not read/write arbitrary files, run shell commands, collect/deploy Azure or mutate the UI. Your client may separately have those powers. Inputs/results can reach your AI provider: local MCP does <strong>not</strong> make hosted Copilot offline. Review inventory, addresses, names, retained fields and evidence against your data policy. Results model steady-state configuration, not live delivery, convergence, DNS or application availability.</p>
+          <p>Secondary online references: <a href="https://github.com/erjosito/vwan-visual-topology/blob/main/PLATFORM.md#local-mcp--copilot-skill">MCP contract</a>, <a href="https://github.com/erjosito/vwan-visual-topology/blob/main/docs/releasing.md">packaging</a> and <a href="https://github.com/erjosito/vwan-visual-topology/blob/main/PRIVACY.md">privacy</a>. External links need connectivity and desktop Docs blocks external navigation; open online references separately in your browser. This setup text and relative guide assets remain bundled offline.</p>
+        </div>
+        <div data-i18n-lang="ja">
+          <p>Node がクライアント PATH に必要です。なければ command に実行ファイルの絶対パスを指定します。クライアントで有効化／信頼しますが無制限権限ではありません。失敗時は Node、展開パス、依存関係を確認します。更新は別フォルダーへ展開、復元、パス変更、再起動します。バージョンを混在させず、Web／Windows 更新だけで MCP を更新したと考えないでください。</p>
+          <h3>最初の評価とプライバシー</h3>
+          <ol>
+            <li>目的のトポロジ／プロバイダーについて <code>get_capabilities</code> と <code>get_schema</code> を取得し、インストール済み例と操作を使用します。</li>
+            <li><code>start_simulation</code> を <code>operation: "validate"</code> で呼び <code>get_job</code> を確認し、入力エラーを先に修正します。</li>
+            <li>対応するフロー／正確なルート条件を明示して評価し、証拠チャンクを取得して合格／失敗／未評価を区別します。JSON は全チャンク連結後に解析します。任意描画は機能情報で確認し別の制限付きジョブ／成果物を使用します。</li>
+          </ol>
+          <p>サーバーは任意ファイル読み書き、シェル、Azure 収集／デプロイ、UI 変更を行いません。クライアントは別途その権限を持つ場合があります。入力／結果は AI プロバイダーへ送られる可能性があり、ローカル MCP はホスト Copilot を<strong>オフライン化しません</strong>。情報、アドレス、名前、保持フィールド、証拠をデータ ポリシーに照らして確認します。結果は定常モデルで実配信、収束、DNS、アプリケーション可用性ではありません。</p>
+          <p>オンライン資料（英語）: <a href="https://github.com/erjosito/vwan-visual-topology/blob/main/PLATFORM.md#local-mcp--copilot-skill">MCP 契約</a>、<a href="https://github.com/erjosito/vwan-visual-topology/blob/main/docs/releasing.md">配布</a>、<a href="https://github.com/erjosito/vwan-visual-topology/blob/main/PRIVACY.md">プライバシー</a>。外部リンクには接続が必要で、デスクトップ Docs は外部移動を制限します。オンライン資料は別途ブラウザーで開いてください。この設定説明と相対パスのアセットはオフラインでも同梱しています。</p>
         </div>
       </section>
 
       <section class="card" id="samples-catalog">
         <div data-i18n-lang="en">
           <h2>3. Sample Topology JSON Files</h2>
-          <p>You can download any sample JSON file below and import it via <strong>Import JSON</strong>, or click <strong>Open in Simulator</strong> to launch it directly in your browser:</p>
+          <p>Download a sample JSON and open it through <strong>Load</strong>, or choose <strong>Open in Simulator</strong>. Save current work before replacing it. Screenshots illustrate sample scenarios and may show older controls; they are not verified captures of the current compact UI.</p>
           <table>
             <thead>
               <tr>
@@ -510,7 +701,7 @@
         </div>
         <div data-i18n-lang="ja">
           <h2>3. サンプル JSON ファイル一覧</h2>
-          <p>以下のサンプル JSON ファイルをダウンロードして <strong>JSON をインポート (Import JSON)</strong> から読み込むか、<strong>シミュレーターで開く</strong> をクリックしてブラウザーで直接開くことができます。</p>
+          <p>以下の JSON をダウンロードして<strong>読み込み (Load)</strong>から開くか、シミュレーターで開くを使用します。置換前に現在の設計を保存してください。画像はシナリオ説明用で古い操作を含む場合があります。現在のコンパクト UI の確認済みキャプチャではありません。</p>
           <table>
             <thead>
               <tr>
@@ -709,6 +900,9 @@
       <section class="card" id="diagnostics-and-trace">
         <div data-i18n-lang="en">
           <h2>8. Effective Routes, Path Explorer &amp; Automated Routing Diagnostics</h2>
+          <p>Use selection <strong>Inspect routes</strong>, right-click inspection or <strong>Explore</strong> for the applicable resource. Mixed designs expose subnet-effective routes and original-resource BGP neighbors; candidates, advertised routes and selected forwarding are distinct views. Neighbor evidence is modeled, not live BGP session state. Use <strong>Checks</strong> for <strong>Check routing</strong> and <strong>Advanced checks</strong>, and inspect scope/completion before drawing conclusions. Interrupted or unassessed runs are not clean results.</p>
+          <p><strong>Acknowledge warning</strong> removes eligible attention decoration, not severity, routes, grading or evidence. Acknowledged warnings remain readable; <strong>Restore attention</strong> reverses the decision. Decisions belong to the saved design, and changed structural evidence can require review again. Errors, connectivity failures and model-limit/unassessed results cannot be acknowledged. Clearing canvas highlights only changes presentation.</p>
+          <p>Path Explorer supports independent forward/return explanations. <strong>Export flow diagram</strong> exports an illustrative PNG, animated SVG or GIF from the logical scene, not live traffic or a UI screenshot. Supported packet/application assertions require their own declared configuration; route success alone does not assess them.</p>
           <h3>Inspecting BGP, Learned, and Advertised Routes</h3>
           <p>
             Right-click any Virtual Hub, Site, or ExpressRoute Location and choose <strong>BGP table</strong>, <strong>Learned routes</strong>, or <strong>Advertised routes</strong>. Clicking any prefix row highlights its winning path on the canvas and explains why it won over competing candidates.
@@ -716,6 +910,9 @@
         </div>
         <div data-i18n-lang="ja">
           <h2>8. 有効なルート、パス エクスプローラー、自動ルーティング診断</h2>
+          <p>選択時のルート確認、右クリック、Explore を使用します。混在設計ではサブネット有効ルートや元リソースの BGP 隣接を確認し、候補、広告、転送選択を区別します。隣接情報は実測セッションではありません。Checks からルーティング診断／詳細診断を実行し、範囲と完了を確認します。中断や未評価は問題なしを意味しません。</p>
+          <p>警告の確認済み操作は注意表示のみを消し、重大度、ルート、採点、証拠は変更しません。確認済み警告は読め、注意表示を復元できます。判断は設計に保存し、構造的証拠の変化で再確認する場合があります。エラー、接続失敗、モデル制限／未評価は確認済みにできません。キャンバス強調表示クリアは表示だけを変更します。</p>
+          <p>パス エクスプローラーは往路／復路を個別説明します。フロー図は論理シーンから PNG、アニメーション SVG、GIF を出力し、実際の通信や UI キャプチャではありません。パケット／アプリケーション評価には独自の宣言構成が必要で、ルート成功だけでは成立しません。</p>
           <h3>BGP テーブル、学習したルート、アドバタイズしたルートの確認</h3>
           <p>
             任意の仮想ハブ、サイト、または ExpressRoute ピアリングの場所を右クリックし、<strong>BGP テーブル (BGP table)</strong>、<strong>学習したルート (Learned routes)</strong>、または <strong>アドバタイズしたルート (Advertised routes)</strong> を選択します。任意のプレフィックス行をクリックすると、採用された優先経路がキャンバス上で強調表示され、他の候補ルートより優先された理由が表示されます。
@@ -733,13 +930,13 @@
         <div data-i18n-lang="en">
           <h3>Automated Routing Check &amp; Asymmetric Path Detection</h3>
           <p>
-            Click <strong>Check routing</strong> in the workspace toolbar to run an automated pairwise reachability and symmetry audit across all owned prefixes. Only root-cause failures are surfaced on the canvas (cascading downstream symptoms are automatically deduplicated), and you can click <strong>Review routing issues</strong> to inspect each finding or click <strong>Clear highlights &amp; icons</strong> in the bottom-left corner to remove all warning icons.
+            Use <strong>Checks &gt; Check routing</strong> for a modeled reachability and symmetry investigation. Review the selected pair/prefix scope and bounded completion; related symptoms may be grouped. <strong>Review routing issues</strong> opens findings, while <strong>Clear highlights &amp; icons</strong> clears canvas decorations without changing evidence.
           </p>
         </div>
         <div data-i18n-lang="ja">
           <h3>自動ルーティング診断と非対称パスの検出</h3>
           <p>
-            ワークスペース ツールバーの <strong>ルーティングを診断 (Check routing)</strong> をクリックすると、すべての所有プレフィックス間の到達性と対称性が自動的に診断されます。連鎖的な派生エラーは自動的に除外され、根本原因のみがキャンバス上に警告アイコンとして表示されます。<strong>ルーティングの問題を確認 (Review routing issues)</strong> から往路・復路をアニメーション表示でき、左下の <strong>強調表示とアイコンをクリア (Clear highlights &amp; icons)</strong> でいつでもアイコンを消去できます。
+            Checks の<strong>ルーティングを診断 (Check routing)</strong>でモデル化した到達性と対称性を調べます。対象ペア／プレフィックスと制限付き実行の完了を確認し、関連症状はグループ化される場合があります。ルーティングの問題を確認から証拠を開き、強調表示とアイコンをクリアは証拠を変えず表示だけを消します。
           </p>
         </div>
         <figure>
@@ -776,30 +973,32 @@
       <section class="card" id="azure-import-export">
         <div data-i18n-lang="en">
           <h2>9. Azure Bicep Export &amp; Live Snapshot Comparison</h2>
+          <p>On Windows, deliberate local read-only Azure collection uses already-installed CLI tools through a separate broker; credentials do not enter the canvas renderer. <strong>Report a discrepancy</strong> exports a reviewed local ZIP with topology, evidence and reproduction context. Nothing uploads automatically. Resource IDs, addresses, notes and original collector metadata are not anonymized; inspect the ZIP before sharing. <a href="https://github.com/erjosito/vwan-visual-topology/blob/main/docs/azure-files.md">Collection and discrepancy replay details</a>.</p>
           <p>
-            Click <strong>Azure files</strong> in the top navigation bar to bridge your modelled topology with real Azure environments:
+            Open <strong>Azure</strong>, then the applicable <strong>Azure files</strong> or <strong>Azure &amp; Bicep</strong> panel. Export, read-only collection and comparison are separate operations, not automatic deployment:
           </p>
           <ul>
-            <li><strong>Export Azure Bicep template (<code>.bicep</code>)</strong>: Generate a deployable Bicep template for your Virtual WAN, Virtual Hubs, Secured Hub Firewalls &amp; Routing Intent, and VNet Connections.</li>
+            <li><strong>Export Azure Bicep (<code>.bicep</code>)</strong>: Generate a scoped starter for supported resources. Review prerequisites, deployment locations and omissions; exported topology is not a complete production deployment. The Virtual WAN attachment starter does not modify existing VNets.</li>
             <li><strong>Download Read-Only Azure CLI Collector Script (<a href="https://github.com/erjosito/vwan-visual-topology-feedback/blob/main/scripts/collect-azure-vwan.ps1" style="color:var(--accent)"><code>scripts/collect-azure-vwan.ps1</code></a>)</strong>: Capture an existing Azure Virtual WAN's topology and effective routes into a portable JSON bundle from PowerShell 7 or Azure Cloud Shell without giving the web app any Azure credentials:
               <pre style="margin-top:8px;padding:10px 12px;background:#0f172a;color:#f8fafc;border-radius:8px;overflow-x:auto;font-size:0.85rem">Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/erjosito/vwan-visual-topology-feedback/main/scripts/collect-azure-vwan.ps1' -OutFile ./collect-azure-vwan.ps1
 ./collect-azure-vwan.ps1 -VirtualWanId '/subscriptions/SUB/resourceGroups/RG/providers/Microsoft.Network/virtualWans/WAN' -IncludeEffectiveRoutes -OutputFile ./vwan-observation.json</pre>
             </li>
-            <li><strong>Compare Observed vs. Simulated Routes</strong>: Import an Azure capture bundle to compare live Azure effective route tables against the simulator's predicted routes side by side.</li>
+            <li><strong>Compare Observed vs. Simulated Routes</strong>: Import a capture bundle to compare recorded Azure routes/fields with modeled evidence. Missing, denied, stale or unsupported observations remain explicit; comparison is not a continuous live monitor.</li>
           </ul>
         </div>
         <div data-i18n-lang="ja">
           <h2>9. Azure Bicep エクスポートと実環境スナップショット比較</h2>
+          <p>Windows は既にインストール済み CLI を別の読み取り専用ブローカーで使用し、資格情報はレンダラーに渡しません。不一致報告はトポロジ、証拠、再現情報をローカル ZIP へ出力し自動アップロードしません。ID、アドレス、メモ、元メタデータは匿名化しません。共有前に確認してください。<a href="https://github.com/erjosito/vwan-visual-topology/blob/main/docs/azure-files.md">収集と再現の詳細（英語）</a>。</p>
           <p>
-            上部ナビゲーション バーの <strong>Azure ファイル (Azure files)</strong> をクリックすると、モデル化したトポロジと実際の Azure 環境を連携できます。
+            Azure から適用可能な Azure files または Azure &amp; Bicep パネルを開きます。エクスポート、読み取り専用収集、比較は別操作で、自動デプロイではありません。
           </p>
           <ul>
-            <li><strong>Azure Bicep テンプレート (<code>.bicep</code>) のエクスポート</strong>: Virtual WAN、仮想ハブ、Secured Hub の Azure Firewall とルーティング インテント、および VNet 接続を含むデプロイ可能な Bicep テンプレートを生成します。</li>
+            <li><strong>Azure Bicep (<code>.bicep</code>) のエクスポート</strong>: 対応リソースの限定スターターを生成します。前提条件、配置、未出力項目を確認してください。完全な本番デプロイではありません。VWAN 接続スターターは既存 VNet を変更しません。</li>
             <li><strong>読み取り専用 Azure CLI 収集スクリプト (<a href="https://github.com/erjosito/vwan-visual-topology-feedback/blob/main/scripts/collect-azure-vwan.ps1" style="color:var(--accent)"><code>scripts/collect-azure-vwan.ps1</code></a>) のダウンロード</strong>: Web アプリに Azure の資格情報を渡すことなく、PowerShell 7 または Azure Cloud Shell から既存の Azure Virtual WAN トポロジと有効なルート テーブルを JSON バンドルとして取得できます。
               <pre style="margin-top:8px;padding:10px 12px;background:#0f172a;color:#f8fafc;border-radius:8px;overflow-x:auto;font-size:0.85rem">Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/erjosito/vwan-visual-topology-feedback/main/scripts/collect-azure-vwan.ps1' -OutFile ./collect-azure-vwan.ps1
 ./collect-azure-vwan.ps1 -VirtualWanId '/subscriptions/SUB/resourceGroups/RG/providers/Microsoft.Network/virtualWans/WAN' -IncludeEffectiveRoutes -OutputFile ./vwan-observation.json</pre>
             </li>
-            <li><strong>実測ルートとシミュレートされたルートの比較</strong>: 取得した Azure キャプチャ JSON をインポートし、実際の Azure 有効なルート テーブルとシミュレーターの計算結果を並べて比較できます。</li>
+            <li><strong>実測とモデルの比較</strong>: 記録したキャプチャのルート／フィールドとモデル証拠を比較します。不足、拒否、古い観測、未対応は明示し、継続的なライブ監視ではありません。</li>
           </ul>
         </div>
         <figure>

@@ -276,13 +276,31 @@ test('Japanese parser errors and offline feedback remain accessible on mobile', 
 })
 
 test('Interactive documentation supports English and Japanese and syncs with simulator language preference', async ({ page }) => {
-  await page.goto('/docs/index.html?lang=ja')
+  await page.goto('/docs/index.html?lang=ja#mcp-server')
   await expect(page.locator('html')).toHaveAttribute('lang', 'ja')
   await expect(page).toHaveTitle('Azure ネットワーク シミュレーター (AzNetSim) — ドキュメントと実践サンプル')
   await expect(page.getByRole('heading', { name: 'Azure ネットワーク シミュレーター (AzNetSim) — ドキュメント', exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: '1. 概要と主な概念', exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: '1. Overview & Key Concepts', exact: true })).toBeHidden()
   expect(await page.evaluate((key) => localStorage.getItem(key), languageKey)).toBe('ja')
+  const documentationSections = ['save-recovery', 'cloud-backup-sharing', 'optional-editors',
+    'routing-configuration', 'packet-application-scope', 'learning', 'mcp-server', 'diagnostics-and-trace']
+  for (const id of documentationSections) {
+    await expect(page.locator(`#${id} > [data-i18n-lang="ja"] > h2`)).toBeVisible()
+    await expect(page.locator(`#${id} > [data-i18n-lang="en"] > h2`)).toBeHidden()
+    await expect(page.locator(`#doc-toc [data-i18n-lang="ja"] a[href="#${id}"]`)).toBeVisible()
+  }
+  await expect(page.locator('#mcp-server')).toContainText('Node 22')
+  expect(await page.evaluate(() => [...document.querySelectorAll('a[href^="#"]')]
+    .map(link => link.getAttribute('href')!.slice(1)).filter(id => !document.getElementById(id)))).toEqual([])
+  expect(await page.evaluate(() => {
+    const ids = [...document.querySelectorAll('[id]')].map(element => element.id)
+    return ids.filter((id, index) => ids.indexOf(id) !== index)
+  })).toEqual([])
+  for (const asset of await page.locator('img[src], script[src]').evaluateAll(elements =>
+    elements.map(element => element.getAttribute('src')!))) {
+    expect((await page.request.get(new URL(asset, page.url()).href)).status(), asset).toBe(200)
+  }
 
   await page.locator('header [data-language-selector]').selectOption('en')
   await expect(page.locator('html')).toHaveAttribute('lang', 'en')
@@ -291,6 +309,17 @@ test('Interactive documentation supports English and Japanese and syncs with sim
   await expect(page.getByRole('heading', { name: '1. Overview & Key Concepts', exact: true })).toBeVisible()
   await expect(page.getByRole('heading', { name: '1. 概要と主な概念', exact: true })).toBeHidden()
   expect(await page.evaluate((key) => localStorage.getItem(key), languageKey)).toBe('en')
+  expect(new URL(page.url()).hash).toBe('#mcp-server')
+  for (const id of documentationSections) {
+    await expect(page.locator(`#${id} > [data-i18n-lang="en"] > h2`)).toBeVisible()
+    await expect(page.locator(`#${id} > [data-i18n-lang="ja"] > h2`)).toBeHidden()
+  }
+  const mcpConfig = JSON.parse(await page.locator('#mcp-server > pre > code').innerText())
+  expect(mcpConfig.mcpServers['azure-network-simulator']).toEqual({
+    command: 'node', args: ['C:\\Tools\\AzNetSim-MCP\\mcp.cjs'],
+  })
+  await expect(page.locator('#mcp-server')).toContainText('get_capabilities')
+  await expect(page.locator('#mcp-server')).toContainText('get_schema')
   await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', 'https://aznet-simulator.com/og-image.png')
   await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /VNets.*hub-and-spoke.*Virtual WAN.*hybrid/)
   await expect(page.getByRole('link', { name: 'classic hub-and-spoke', exact: true })).toHaveAttribute('href', '/?sample=hub-spoke-firewall-udr')
